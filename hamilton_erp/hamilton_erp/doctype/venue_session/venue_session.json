@@ -1,0 +1,279 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "venue_asset",
+  "sales_invoice",
+  "admission_item",
+  "status",
+  "col_break_1",
+  "session_start",
+  "session_end",
+  "operator_checkin",
+  "operator_vacate",
+  "vacate_method",
+  "section_forward_compat",
+  "member_id",
+  "full_name",
+  "col_break_fwd",
+  "date_of_birth",
+  "membership_status",
+  "identity_method",
+  "section_arrears",
+  "arrears_amount",
+  "arrears_flag",
+  "arrears_sku",
+  "col_break_arrears",
+  "scanner_data",
+  "eligibility_snapshot",
+  "block_status",
+  "section_payment_future",
+  "terminal_transaction_id",
+  "payment_provider",
+  "col_break_payment",
+  "integration_status",
+  "payment_gateway_reference"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SESS-.YYYY.MM.-.####",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "venue_asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Venue Asset",
+   "options": "Venue Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "sales_invoice",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Sales Invoice",
+   "options": "Sales Invoice"
+  },
+  {
+   "fieldname": "admission_item",
+   "fieldtype": "Link",
+   "label": "Admission Item",
+   "options": "Item"
+  },
+  {
+   "default": "Active",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Active\nCompleted",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "session_start",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Session Start",
+   "reqd": 1
+  },
+  {
+   "fieldname": "session_end",
+   "fieldtype": "Datetime",
+   "label": "Session End"
+  },
+  {
+   "fieldname": "operator_checkin",
+   "fieldtype": "Link",
+   "label": "Checked In By",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "operator_vacate",
+   "fieldtype": "Link",
+   "label": "Vacated By",
+   "options": "User"
+  },
+  {
+   "fieldname": "vacate_method",
+   "fieldtype": "Select",
+   "label": "Vacate Method",
+   "options": "\nKey Return\nDiscovery on Rounds"
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_forward_compat",
+   "fieldtype": "Section Break",
+   "label": "Forward Compatibility — Identity (V5.4)"
+  },
+  {
+   "fieldname": "member_id",
+   "fieldtype": "Data",
+   "label": "Member ID",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "fieldname": "full_name",
+   "fieldtype": "Data",
+   "label": "Full Name",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "fieldname": "col_break_fwd",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "date_of_birth",
+   "fieldtype": "Date",
+   "label": "Date of Birth",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "fieldname": "membership_status",
+   "fieldtype": "Data",
+   "label": "Membership Status",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "default": "not_applicable",
+   "fieldname": "identity_method",
+   "fieldtype": "Select",
+   "label": "Identity Method",
+   "options": "not_applicable\nscan\nmanual_entry",
+   "description": "Defaults to not_applicable at Hamilton. Set by scanner integration in V5.4."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_arrears",
+   "fieldtype": "Section Break",
+   "label": "Forward Compatibility — Arrears (V5.4)"
+  },
+  {
+   "fieldname": "arrears_amount",
+   "fieldtype": "Currency",
+   "label": "Arrears Amount",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "default": "0",
+   "fieldname": "arrears_flag",
+   "fieldtype": "Check",
+   "label": "Arrears Flag",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "fieldname": "arrears_sku",
+   "fieldtype": "Data",
+   "label": "Arrears SKU",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "fieldname": "col_break_arrears",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "scanner_data",
+   "fieldtype": "Text",
+   "label": "Scanner Data",
+   "description": "Null at Hamilton — raw scan payload captured by scanner in V5.4."
+  },
+  {
+   "fieldname": "eligibility_snapshot",
+   "fieldtype": "Text",
+   "label": "Eligibility Snapshot",
+   "description": "Null at Hamilton — JSON snapshot of eligibility at check-in time in V5.4."
+  },
+  {
+   "fieldname": "block_status",
+   "fieldtype": "Data",
+   "label": "Block Status",
+   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+  },
+  {
+   "collapsible": 1,
+   "fieldname": "section_payment_future",
+   "fieldtype": "Section Break",
+   "label": "Forward Compatibility — Payment Integration (Future)"
+  },
+  {
+   "fieldname": "terminal_transaction_id",
+   "fieldtype": "Data",
+   "label": "Terminal Transaction ID",
+   "description": "Null until Stripe integration is activated."
+  },
+  {
+   "fieldname": "payment_provider",
+   "fieldtype": "Data",
+   "label": "Payment Provider",
+   "description": "Null until Stripe integration is activated."
+  },
+  {
+   "fieldname": "col_break_payment",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "integration_status",
+   "fieldtype": "Data",
+   "label": "Integration Status",
+   "description": "Null until Stripe integration is activated."
+  },
+  {
+   "fieldname": "payment_gateway_reference",
+   "fieldtype": "Data",
+   "label": "Payment Gateway Reference",
+   "description": "Null until Stripe integration is activated."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Venue Session",
+ "naming_rule": "By Naming Series",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Operator",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "session_start",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

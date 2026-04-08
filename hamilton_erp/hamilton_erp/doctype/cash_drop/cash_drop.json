@@ -1,0 +1,158 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "operator",
+  "shift_record",
+  "shift_date",
+  "col_break_1",
+  "shift_identifier",
+  "drop_type",
+  "drop_number",
+  "section_amount",
+  "declared_amount",
+  "timestamp",
+  "col_break_2",
+  "reconciled",
+  "reconciliation"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "DROP-.YYYY.MM.-.####",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "operator",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shift_record",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Shift Record",
+   "options": "Shift Record"
+  },
+  {
+   "fieldname": "shift_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Shift Date",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shift_identifier",
+   "fieldtype": "Data",
+   "label": "Shift Identifier",
+   "reqd": 1,
+   "description": "e.g., Morning, Evening, Night"
+  },
+  {
+   "fieldname": "drop_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Drop Type",
+   "options": "Mid-Shift\nEnd-of-Shift",
+   "reqd": 1
+  },
+  {
+   "fieldname": "drop_number",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "Drop Number",
+   "reqd": 1,
+   "description": "Sequential number within the shift (Drop 1, Drop 2, etc.)"
+  },
+  {
+   "fieldname": "section_amount",
+   "fieldtype": "Section Break",
+   "label": "Amount"
+  },
+  {
+   "fieldname": "declared_amount",
+   "fieldtype": "Currency",
+   "label": "Declared Amount",
+   "reqd": 1,
+   "description": "Amount the operator declared when making the drop. Never shown alongside expected totals."
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_2",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "reconciled",
+   "fieldtype": "Check",
+   "label": "Reconciled",
+   "read_only": 1
+  },
+  {
+   "fieldname": "reconciliation",
+   "fieldtype": "Link",
+   "label": "Reconciliation Record",
+   "options": "Cash Reconciliation",
+   "read_only": 1
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Cash Drop",
+ "naming_rule": "By Naming Series",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Operator",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

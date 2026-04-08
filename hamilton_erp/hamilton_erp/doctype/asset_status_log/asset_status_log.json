@@ -1,0 +1,115 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "venue_asset",
+  "operator",
+  "timestamp",
+  "col_break_1",
+  "previous_status",
+  "new_status",
+  "reason"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "ASL-.YYYY.MM.-.####",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "venue_asset",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Venue Asset",
+   "options": "Venue Asset",
+   "reqd": 1
+  },
+  {
+   "fieldname": "operator",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "previous_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Previous Status",
+   "read_only": 1
+  },
+  {
+   "fieldname": "new_status",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "New Status",
+   "reqd": 1
+  },
+  {
+   "fieldname": "reason",
+   "fieldtype": "Text",
+   "label": "Reason",
+   "description": "Required when transitioning to or from Out of Service."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "in_create": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Asset Status Log",
+ "naming_rule": "By Naming Series",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Operator",
+   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "track_changes": 0
+}

@@ -1,0 +1,22 @@
+[
+ {
+  "creation": "2026-04-08 00:00:00.000000",
+  "desk_access": 1,
+  "doctype": "Role",
+  "modified": "2026-04-08 00:00:00.000000",
+  "modified_by": "Administrator",
+  "name": "Hamilton Operator",
+  "owner": "Administrator",
+  "role_name": "Hamilton Operator"
+ },
+ {
+  "creation": "2026-04-08 00:00:00.000000",
+  "desk_access": 1,
+  "doctype": "Role",
+  "modified": "2026-04-08 00:00:00.000000",
+  "modified_by": "Administrator",
+  "name": "Hamilton Manager",
+  "owner": "Administrator",
+  "role_name": "Hamilton Manager"
+ }
+]

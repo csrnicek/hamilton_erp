@@ -1,0 +1,159 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "operator",
+  "shift_date",
+  "status",
+  "col_break_1",
+  "shift_start",
+  "shift_end",
+  "section_float",
+  "float_expected",
+  "float_actual",
+  "col_break_float",
+  "float_variance",
+  "section_board",
+  "board_confirmed",
+  "board_corrections"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "SR-.YYYY.MM.-.####",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "operator",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Operator",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shift_date",
+   "fieldtype": "Date",
+   "in_list_view": 1,
+   "label": "Shift Date",
+   "reqd": 1
+  },
+  {
+   "default": "Open",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Open\nClosed",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shift_start",
+   "fieldtype": "Datetime",
+   "label": "Shift Start",
+   "reqd": 1
+  },
+  {
+   "fieldname": "shift_end",
+   "fieldtype": "Datetime",
+   "label": "Shift End"
+  },
+  {
+   "fieldname": "section_float",
+   "fieldtype": "Section Break",
+   "label": "Float Verification"
+  },
+  {
+   "fieldname": "float_expected",
+   "fieldtype": "Currency",
+   "label": "Float Expected",
+   "reqd": 1,
+   "description": "The configured fixed float amount for this location."
+  },
+  {
+   "fieldname": "float_actual",
+   "fieldtype": "Currency",
+   "label": "Float Actual (Counted by Operator)"
+  },
+  {
+   "fieldname": "col_break_float",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "float_variance",
+   "fieldtype": "Currency",
+   "label": "Float Variance",
+   "read_only": 1,
+   "description": "float_actual − float_expected. Calculated automatically."
+  },
+  {
+   "fieldname": "section_board",
+   "fieldtype": "Section Break",
+   "label": "Asset Board Confirmation"
+  },
+  {
+   "default": "0",
+   "fieldname": "board_confirmed",
+   "fieldtype": "Check",
+   "label": "Board Confirmed",
+   "description": "Operator confirmed the asset board matches physical reality at shift start."
+  },
+  {
+   "fieldname": "board_corrections",
+   "fieldtype": "Text",
+   "label": "Board Corrections",
+   "description": "Description of any corrections made to the asset board at shift start."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Shift Record",
+ "naming_rule": "By Naming Series",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Operator",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "shift_start",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

@@ -1,0 +1,8 @@
+[pre_model_sync]
+# Patches here run BEFORE DocType schema changes are applied.
+# Use only when old schema is needed to migrate data.
+
+
+[post_model_sync]
+# Patches here run AFTER DocType schema changes are applied.
+# Prefer this section for all data patches — no frappe.reload_doc() needed.

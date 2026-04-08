@@ -1,0 +1,128 @@
+{
+ "actions": [],
+ "autoname": "naming_series:",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "naming_series",
+  "cash_drop",
+  "manager",
+  "timestamp",
+  "section_blind_entry",
+  "actual_count",
+  "section_reveal",
+  "operator_declared",
+  "system_expected",
+  "col_break_reveal",
+  "variance_flag",
+  "notes"
+ ],
+ "fields": [
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Series",
+   "options": "RECON-.YYYY.MM.-.####",
+   "reqd": 1
+  },
+  {
+   "bold": 1,
+   "fieldname": "cash_drop",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Cash Drop",
+   "options": "Cash Drop",
+   "reqd": 1
+  },
+  {
+   "fieldname": "manager",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Manager",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "label": "Timestamp"
+  },
+  {
+   "fieldname": "section_blind_entry",
+   "fieldtype": "Section Break",
+   "label": "Manager Blind Count"
+  },
+  {
+   "fieldname": "actual_count",
+   "fieldtype": "Currency",
+   "label": "Actual Count (Manager)",
+   "reqd": 1,
+   "description": "The amount the manager physically counted from the envelope — entered blind before any expected totals are shown."
+  },
+  {
+   "fieldname": "section_reveal",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation Result (revealed after submission)"
+  },
+  {
+   "fieldname": "operator_declared",
+   "fieldtype": "Currency",
+   "label": "Operator Declared",
+   "read_only": 1,
+   "description": "Copied from the Cash Drop record. Only populated after manager submits their count."
+  },
+  {
+   "fieldname": "system_expected",
+   "fieldtype": "Currency",
+   "label": "System Expected",
+   "read_only": 1,
+   "description": "Calculated from POS transactions for the drop period. Only revealed after manager submits their count. NEVER expose to operator-role users."
+  },
+  {
+   "fieldname": "col_break_reveal",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "variance_flag",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Variance Flag",
+   "options": "\nClean\nPossible Theft or Error\nOperator Mis-declared",
+   "read_only": 1
+  },
+  {
+   "fieldname": "notes",
+   "fieldtype": "Text",
+   "label": "Notes"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Cash Reconciliation",
+ "naming_rule": "By Naming Series",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "timestamp",
+ "sort_order": "DESC",
+ "track_changes": 1
+}

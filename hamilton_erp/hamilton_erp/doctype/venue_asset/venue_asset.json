@@ -1,0 +1,124 @@
+{
+ "actions": [],
+ "autoname": "field:asset_name",
+ "creation": "2026-04-08 00:00:00.000000",
+ "docstatus": 0,
+ "doctype": "DocType",
+ "document_type": "Document",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "asset_name",
+  "asset_category",
+  "asset_tier",
+  "status",
+  "col_break_1",
+  "display_order",
+  "expected_stay_duration",
+  "location",
+  "current_session"
+ ],
+ "fields": [
+  {
+   "bold": 1,
+   "fieldname": "asset_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Asset Name",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
+   "fieldname": "asset_category",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Asset Category",
+   "options": "Room\nLocker",
+   "reqd": 1
+  },
+  {
+   "fieldname": "asset_tier",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Asset Tier",
+   "options": "\nStandard\nDeluxe",
+   "description": "Required for Rooms; leave blank for Lockers."
+  },
+  {
+   "default": "Available",
+   "fieldname": "status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Status",
+   "options": "Available\nOccupied\nDirty\nOut of Service",
+   "reqd": 1
+  },
+  {
+   "fieldname": "col_break_1",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "display_order",
+   "fieldtype": "Int",
+   "label": "Display Order",
+   "description": "Controls tile order on the asset board. Lower numbers appear first."
+  },
+  {
+   "fieldname": "expected_stay_duration",
+   "fieldtype": "Int",
+   "label": "Expected Stay Duration (minutes)",
+   "description": "Overtime overlay appears on the asset board when a session exceeds this duration."
+  },
+  {
+   "fieldname": "location",
+   "fieldtype": "Link",
+   "label": "Location (Company)",
+   "options": "Company"
+  },
+  {
+   "fieldname": "current_session",
+   "fieldtype": "Link",
+   "label": "Current Session",
+   "options": "Venue Session",
+   "read_only": 1,
+   "description": "Populated automatically when a session is active. Do not set manually."
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "links": [],
+ "modified": "2026-04-08 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Venue Asset",
+ "naming_rule": "By fieldname",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "export": 0,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Operator",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "sort_field": "display_order",
+ "sort_order": "ASC",
+ "track_changes": 1
+}
