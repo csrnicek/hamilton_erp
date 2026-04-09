@@ -161,6 +161,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. All financial amounts live on the Sales Invoice which is already linked to Venue Session via the sales_invoice field. Reports query the Sales Invoice. Duplicating amounts on Venue Session risks data becoming out of sync if the invoice is amended or refunded.
 **Rationale:** One number, one place, always accurate. The Sales Invoice is the accounting record of truth.
 
+## DEC-034 — Do Not Duplicate Financial Amounts on Venue Session
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested storing checkin_rate_gross, checkin_rate_net, and tax_amount directly on Venue Session for easier reporting.
+**Decision:** Not added. All financial amounts live on the Sales Invoice which is already linked to Venue Session via the sales_invoice field. Reports query the Sales Invoice. Duplicating amounts on Venue Session risks data becoming out of sync if the invoice is amended or refunded.
+**Rationale:** One number, one place, always accurate. The Sales Invoice is the accounting record of truth.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
