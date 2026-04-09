@@ -106,10 +106,10 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Field | Reviewer | Status | Action |
 |---|---|---|---|
 | float_amount, stay_duration, printer settings | All | ✅ Current state | None |
-| grace_minutes | ChatGPT | ❌ | Add — for overtime calculation |
-| assignment_timeout_minutes | ChatGPT | ❌ | Needed for recovery workflow |
+| grace_minutes | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
+| assignment_timeout_minutes | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
 | oos_reason_master / default values | ChatGPT | ❌ | Low priority — decide |
-| printer_label_template_name | ChatGPT | ❌ | Add — which label template to use |
+| printer_label_template_name | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
 
 ### Custom Fields on Standard DocTypes
 | Field | Reviewer | Status | Action |
