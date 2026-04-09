@@ -140,6 +140,13 @@ Records architectural and implementation decisions made during development. This
 Analysis is powered by the existing Asset Status Log — every transition is already logged with operator and timestamp. Reports can query: "All rooms in Dirty state for >X minutes during Operator Y's shift" to identify performance issues.
 **Rationale:** Operational visibility (how long is this room dirty?) and management accountability (is this operator cleaning rooms during their shift?). The Asset Status Log provides the historical data; the two fields on Venue Asset provide the live board display.
 
+## DEC-032 — No POS Profile Link on Venue Session
+
+**Date:** 2026-04-09
+**Context:** Gemini suggested adding a POS Profile link to Venue Session to track which POS station created each session.
+**Decision:** Not added. Hamilton is always single-terminal. POS Profile is already captured on Shift Record which is sufficient. No need to duplicate it on Venue Session.
+**Rationale:** Adding a field Hamilton will never use adds schema noise. If a second terminal is ever added, this can be revisited.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
