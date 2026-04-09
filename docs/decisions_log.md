@@ -275,6 +275,21 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Not added. The existing hamilton_is_admission field already identifies which items are admission items. The Under 25 custom POS button applies 50% to all items where hamilton_is_admission = 1. No additional flag needed.
 **Rationale:** hamilton_is_admission is sufficient. Adding a duplicate eligibility flag creates maintenance overhead with no benefit.
 
+## DEC-048 — Under 25 Discount Rules: Admission Only, One Per Transaction
+
+**Date:** 2026-04-09
+**Context:** Clarifying exactly what the Under 25 discount applies to and how abuse is prevented.
+**Decision:** Two explicit rules:
+
+**Rule 1 — Admission items only:**
+The Under 25 discount applies ONLY to items where `hamilton_is_admission = 1` (rooms and lockers). Retail items (drinks, snacks, towels, etc.) are always full price regardless of guest age. The custom "Apply Under 25" POS button must only discount admission line items in the cart.
+
+**Rule 2 — One admission per transaction:**
+A POS cart can contain a maximum of ONE admission item (enforced by spec §4.3 and server-side validation). This prevents a single Under 25 transaction being used to admit multiple people at 50% off. If an operator attempts to add a second admission item, the system blocks it.
+
+**Rationale:** Rule 1 confirmed by Chris — guest buys a Coke and a locker, only the locker is discounted. Rule 2 confirmed by Chris — prevents abuse where one 23-year-old's discount is used to admit multiple guests.
+**Rationale:** Both rules must be enforced server-side, not just in the UI.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
