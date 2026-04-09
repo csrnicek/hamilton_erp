@@ -58,7 +58,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | member_id should be Link to Customer, not Data | Gemini | ❌ | Fix field type |
 | POS Profile link on Venue Session | Gemini | ✅ DEC-032 | Not needed — single terminal always |
 | session_number (auto-increment display ID) | ChatGPT | ✅ DEC-033 | Added to schema |
-| checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ❌ | Decision needed |
+| checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ✅ DEC-034 | Not added — data lives on Sales Invoice |
 | payment_status_snapshot | ChatGPT | ❌ | Decision needed |
 | refund_status | ChatGPT | ❌ | Decision needed |
 | created_from_pos_invoice vs sales_invoice clarity | ChatGPT | ❌ | CRITICAL — POS Invoice vs Sales Invoice |
