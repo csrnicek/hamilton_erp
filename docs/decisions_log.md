@@ -175,6 +175,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. Same reasoning as DEC-034 — payment data lives on the linked Sales Invoice. Duplicating it risks sync issues on refunds or amendments.
 **Rationale:** Sales Invoice is the single source of truth for all payment data.
 
+## DEC-036 — No refund_status Field on Venue Session
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested adding a refund_status field to Venue Session.
+**Decision:** Not added. When a refund happens via POS Return, the session ends and the asset is released — this is already visible from the session status and the linked Sales Invoice. A separate refund_status field would duplicate information already captured elsewhere.
+**Rationale:** Session status + Sales Invoice together tell the complete story. No duplication needed.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
