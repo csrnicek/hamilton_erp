@@ -57,7 +57,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Forward compat fields (member_id, etc.) | All | ✅ Current state | None |
 | member_id should be Link to Customer, not Data | Gemini | ❌ | Fix field type |
 | POS Profile link on Venue Session | Gemini | ✅ DEC-032 | Not needed — single terminal always |
-| session_number (auto-increment display ID) | ChatGPT | ❌ | Decision needed |
+| session_number (auto-increment display ID) | ChatGPT | ⚠️ | In progress — awaiting Chris confirmation |
 | checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ❌ | Decision needed |
 | payment_status_snapshot | ChatGPT | ❌ | Decision needed |
 | refund_status | ChatGPT | ❌ | Decision needed |
