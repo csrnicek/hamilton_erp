@@ -14,17 +14,17 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Point | Reviewer | Status | Action |
 |---|---|---|---|
 | Standard POS + custom extensions correct | All | ✅ DEC-001 | None |
-| v16 POS is Vue.js SPA — need loosely coupled extensions | Gemini | ❌ | Add to coding_standards |
-| v16 POS uses pos_controller events (changed from v15) | Grok | ❌ | Add to coding_standards |
+| v16 POS is Vue.js SPA — need loosely coupled extensions | Gemini | ✅ | Added to coding_standards.md §2.9 |
+| v16 POS uses pos_controller events (changed from v15) | Grok | ✅ | Added to coding_standards.md §2.10 |
 | Payment before assignment correct | All | ✅ DEC-002 | None |
-| Edge case: all Deluxe rooms Dirty after guest pays Deluxe | Gemini/ChatGPT | ❌ | Define "tier unavailable" workflow |
-| Edge case: split tender (cash+card) — which triggers assignment? | Grok/ChatGPT | ❌ | Need decision |
-| Edge case: refund after assignment must auto-release asset | Grok/ChatGPT | ❌ | Need decision |
+| Edge case: all Deluxe rooms Dirty after guest pays Deluxe | Gemini/ChatGPT | ✅ DEC-028 | Operator checks board before ringing — no system change needed |
+| Edge case: split tender (cash+card) — which triggers assignment? | Grok/ChatGPT | ✅ DEC-029 | Full payment confirmed → assignment triggers regardless of mix |
+| Edge case: refund after assignment must auto-release asset | Grok/ChatGPT | ✅ DEC-051 | POS Return hook auto-releases asset Occupied→Dirty |
 | Edge case: network failure after payment, before assignment | Grok | ⚠️ DEC-020 partial | Needs explicit recovery steps |
 | One DocType for rooms/lockers correct | All | ✅ DEC-003 | None |
-| Use POS Profile user assignment per operator | ChatGPT | ❌ | Add to config |
-| Frappe Version + Activity Log instead of custom Asset Status Log | Grok | ❌ | Decision needed |
-| Use frappe.printing + print_format instead of raw backend API | Grok | ❌ | Add to Phase 3 considerations |
+| Use POS Profile user assignment per operator | ChatGPT | ✅ | Add to Phase 2 ERPNext config — developer task |
+| Frappe Version + Activity Log instead of custom Asset Status Log | Grok | ✅ | Keep custom Asset Status Log — richer operational data needed |
+| Use frappe.printing + print_format instead of raw backend API | Grok | ✅ | Added to Phase 3 label printer considerations |
 
 ---
 
@@ -43,7 +43,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | last_vacated_at (Datetime) | ChatGPT | ✅ DEC-031 | Added to schema |
 | Naming: VA-.#### | Grok | ✅ Current state | None |
 | Indexes on status, display_order, category, tier | Grok | ✅ Current state | None |
-| naming_series on every DocType | Grok | ❌ | Add to Phase 0 checklist |
+| naming_series on every DocType | Grok | ✅ | Added to build_phases.md Phase 0 |
 
 ### Venue Session
 | Field | Reviewer | Status | Action |
@@ -55,13 +55,13 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | under_25_applied (Check) | Grok/ChatGPT | ✅ Current state | None |
 | comp_flag (Check) | ChatGPT | ✅ Current state | None |
 | Forward compat fields (member_id, etc.) | All | ✅ Current state | None |
-| member_id should be Link to Customer, not Data | Gemini | ❌ | Fix field type |
+| member_id should be Link to Customer, not Data | Gemini | ✅ | Fixed in current_state.md Bucket 1 |
 | POS Profile link on Venue Session | Gemini | ✅ DEC-032 | Not needed — single terminal always |
 | session_number (auto-increment display ID) | ChatGPT | ✅ DEC-033 | Added to schema |
 | checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ✅ DEC-034 | Not added — data lives on Sales Invoice |
 | payment_status_snapshot | ChatGPT | ✅ DEC-035 | Not added — lives on Sales Invoice |
 | refund_status | ChatGPT | ✅ DEC-036 | Not added — session status + Sales Invoice covers it |
-| created_from_pos_invoice vs sales_invoice clarity | ChatGPT | ❌ | CRITICAL — POS Invoice vs Sales Invoice |
+| created_from_pos_invoice vs sales_invoice clarity | ChatGPT | ✅ DEC-025 | Resolved — Sales Invoice in POS mode |
 
 ### Cash Drop
 | Field | Reviewer | Status | Action |
@@ -83,9 +83,9 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Field | Reviewer | Status | Action |
 |---|---|---|---|
 | venue_asset, status fields, reason, operator | All | ✅ Current state | None |
-| venue_session link | ChatGPT | ❌ | Useful for traceability — add |
-| source_doctype / source_name | ChatGPT | ❌ | Decision needed |
-| autoname: autoincrement | Grok | ❌ | Add to schema |
+| venue_session link | ChatGPT | ✅ | Added to Asset Status Log in Bucket 1 |
+| source_doctype / source_name | ChatGPT | ✅ | Skip — venue_session + venue_asset links already provide traceability |
+| autoname: autoincrement | Grok | ✅ | Added to Asset Status Log in Bucket 1 |
 
 ### Shift Record
 | Field | Reviewer | Status | Action |
@@ -93,8 +93,8 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | pos_profile, pos_opening_entry, pos_closing_entry | Grok/ChatGPT | ✅ Current state | None |
 | board_corrections as child table | ChatGPT/Grok | ✅ DEC-024 | None |
 | opening_float_declared_by | ChatGPT | ✅ DEC-043 | Skipped — operator field covers it, single-operator venue |
-| closing_state | ChatGPT | ❌ | Partial — we have status Open/Closed |
-| reconciliation_status | ChatGPT | ❌ | Decision needed |
+| closing_state | ChatGPT | ✅ | Covered by status Open/Closed on Shift Record |
+| reconciliation_status | ChatGPT | ✅ DEC-044 | Added to Shift Record |
 
 ### Comp Admission Log
 | Field | Reviewer | Status | Action |
@@ -108,7 +108,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | float_amount, stay_duration, printer settings | All | ✅ Current state | None |
 | grace_minutes | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
 | assignment_timeout_minutes | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
-| oos_reason_master / default values | ChatGPT | ❌ | Low priority — decide |
+| oos_reason_master / default values | ChatGPT | ✅ | Skip — free text reason field is sufficient for Hamilton |
 | printer_label_template_name | ChatGPT | ✅ DEC-046 | Added to Hamilton Settings |
 
 ### Custom Fields on Standard DocTypes
@@ -117,7 +117,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | hamilton_is_admission, hamilton_asset_category/tier, hamilton_is_comp | All | ✅ | None |
 | hamilton_shift_record on Sales Invoice | Grok/ChatGPT | ✅ Current state | None |
 | hamilton_pricing_rule_override on Item | Grok | ✅ DEC-047 | Skipped — hamilton_is_admission already sufficient |
-| hamilton_requires_asset_assignment on Item | ChatGPT | ❌ | Same as hamilton_is_admission — DUPLICATE, skip |
+| hamilton_requires_asset_assignment on Item | ChatGPT | ✅ DEC-047 | Duplicate of hamilton_is_admission — skipped |
 
 ---
 
@@ -128,7 +128,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Non-stacking needs custom code | All | ✅ DEC-017 | None |
 | Under 25 needs custom POS button | All | ✅ DEC-017 | None |
 | Locker Special supported in v16 with day/time | Grok | ✅ DEC-014 | None |
-| Priority setting for Locker Special vs Under 25 | Gemini | ❌ | Add to ERPNext config notes |
+| Priority setting for Locker Special vs Under 25 | Gemini | ✅ | Added to ERPNext config — Locker Special priority higher than Under 25 |
 | HST-inclusive uses Company-level Tax Template | Grok/ChatGPT | ✅ DEC-018 | None |
 
 ---
@@ -138,12 +138,12 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Point | Reviewer | Status | Action |
 |---|---|---|---|
 | Multi-layer permissions needed | All | ✅ DEC-021 | None |
-| Float carryover: does $200 stay or get dropped? | Gemini/ChatGPT | ❌ | CRITICAL — need decision from Chris |
+| Float carryover: does $200 stay or get dropped? | Gemini/ChatGPT | ✅ DEC-027 | Float stays in till, operator sets aside before final drop |
 | system_expected calculation method | Grok/ChatGPT | ✅ DEC-049 | Cash sales in drop period only. Float confirmed separately at start/end of shift. |
-| system_expected freezing — when exactly? | ChatGPT | ❌ | Add to reconciliation spec |
-| Refunds after drop affect reconciliation | Grok/ChatGPT | ❌ | Add to reconciliation spec |
+| system_expected freezing — when exactly? | ChatGPT | ✅ DEC-049 | Frozen at time of drop submission — all invoices up to that timestamp |
+| Refunds after drop affect reconciliation | Grok/ChatGPT | ✅ DEC-051 | Refund reduces cash total for that period in reconciliation |
 | Comp admissions must NOT affect cash totals | Grok | ✅ DEC-052 | Already handled — $0 comp invoices contribute $0 to cash formula |
-| Variance workflow — what happens after flag? | ChatGPT | ❌ | Add to manager workflow spec |
+| Variance workflow — what happens after flag? | ChatGPT | ✅ DEC-040 | Deferred to Phase 3 |
 
 ---
 
@@ -152,8 +152,8 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Point | Reviewer | Status | Action |
 |---|---|---|---|
 | Three roles: Operator, Manager, Admin | ChatGPT/Gemini | ✅ DEC-022 | None |
-| Hamilton Auditor role | Gemini | ❌ | Decided not needed for Hamilton — skip |
-| API bypass: whitelist checks must verify role server-side | Gemini/ChatGPT | ❌ | Add to coding_standards |
+| Hamilton Auditor role | Gemini | ✅ | Not needed — Hamilton Admin role covers it (DEC-022) |
+| API bypass: whitelist checks must verify role server-side | Gemini/ChatGPT | ✅ | Already in coding_standards.md §6.2 |
 | Reports/pages/field masking | All | ✅ DEC-021 | None |
 
 ---
@@ -163,10 +163,10 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Point | Reviewer | Status | Action |
 |---|---|---|---|
 | V5.4 null fields sufficient | Grok/Gemini | ✅ DEC-007 | None |
-| member_id as Link to Customer, not Data | Gemini | ❌ | Fix in schema |
+| member_id as Link to Customer, not Data | Gemini | ✅ | Fixed in current_state.md Bucket 1 |
 | Customer link on Venue Session | Both | ✅ Current state | None |
 | Philadelphia: additive only | Grok | ✅ | None |
-| Asset Board UI should be card-based for future member photo | Gemini | ❌ | Add to Phase 1 design notes |
+| Asset Board UI should be card-based for future member photo | Gemini | ✅ | Added to Phase 1 design notes |
 
 ---
 
@@ -176,21 +176,21 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | Concurrency #1 risk | All | ✅ DEC-019 | None |
 | Hybrid locking: Redis + MariaDB + version | Grok | ✅ DEC-019 | None |
-| FOR NO KEY UPDATE (not FOR UPDATE) in v16 | Grok | ❌ | Add explicitly to coding_standards |
-| naming_series and autoname required on every DocType | Grok | ❌ | Add to Phase 0 checklist |
-| Hamilton Desk/Workspace as Phase 0 deliverable | Gemini | ❌ | Add to Phase 0 deliverables |
+| FOR NO KEY UPDATE (not FOR UPDATE) in v16 | Grok | ✅ | Added to coding_standards.md §2.11 |
+| naming_series and autoname required on every DocType | Grok | ✅ | Added to build_phases.md Phase 0 |
+| Hamilton Desk/Workspace as Phase 0 deliverable | Gemini | ✅ | Added to build_phases.md Phase 0 |
 | Daily cleanup job for orphaned sessions | All | ✅ DEC-020 | None |
-| Frontend retry on concurrency failure | Grok | ❌ | Add to coding_standards |
-| POS Invoice vs Sales Invoice — which does Hamilton use? | ChatGPT/Grok | ❌ | CRITICAL decision needed |
-| calculate_system_expected method on Shift Record | Grok | ❌ | Add to Phase 3 spec |
+| Frontend retry on concurrency failure | Grok | ✅ | Added to coding_standards.md §13.5 |
+| POS Invoice vs Sales Invoice — which does Hamilton use? | ChatGPT/Grok | ✅ DEC-025 | Sales Invoice in POS mode |
+| calculate_system_expected method on Shift Record | Grok | ✅ DEC-049 | Method defined — sum cash invoices in drop period |
 | Bulk Mark All Clean | Gemini | ✅ DEC-023 | None |
 | board_corrections as child table | ChatGPT/Grok | ✅ DEC-024 | None |
-| Label printer cloud-to-local risk (QZ Tray) | Gemini | ❌ | Add to Phase 3 risk notes |
-| Asset board card-based design for future Philadelphia | Gemini | ❌ | Add to Phase 1 design notes |
-| Whitelisted methods required on Venue Asset | Grok | ❌ | Add to Phase 0 checklist |
-| Lock TTL = 15 seconds, UUID token, Lua atomic release | Grok | ❌ | Add to coding_standards |
-| Consistent lock ordering for multiple asset ops | Grok | ❌ | Add to coding_standards |
-| MariaDB READ COMMITTED isolation consideration | Grok | ❌ | Add to coding_standards |
+| Label printer cloud-to-local risk (QZ Tray) | Gemini | ✅ | Added to Phase 3 risks — evaluate QZ Tray if cloud→local printing is unreliable |
+| Asset board card-based design for future Philadelphia | Gemini | ✅ | Added to Phase 1 design notes — card-based tiles support future member photo |
+| Whitelisted methods required on Venue Asset | Grok | ✅ | Added to build_phases.md Phase 0 |
+| Lock TTL = 15 seconds, UUID token, Lua atomic release | Grok | ✅ | Added to coding_standards.md §13.2 |
+| Consistent lock ordering for multiple asset ops | Grok | ✅ | Added to coding_standards.md §13.4 |
+| MariaDB READ COMMITTED isolation consideration | Grok | ✅ | Added to coding_standards.md §13.6 |
 
 ---
 
