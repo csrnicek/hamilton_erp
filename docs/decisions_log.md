@@ -182,3 +182,25 @@ Records architectural and implementation decisions made during development. This
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
+
+## DEC-016 — Comp Admission Reason Categories and "Other" Handling
+
+**Date:** 2026-04-09
+**Context:** Comp admission reasons were listed as TBD in the spec.
+**Decision:** Four reason categories:
+1. Loyalty Card
+2. Promo
+3. Manager Decision
+4. Other — requires mandatory free-text explanation (operator must type reason before submit allowed)
+
+**Other field rules:**
+- Appears only when "Other" is selected
+- Free-text input, limited to ~500 characters (a few sentences)
+- Field is mandatory — form cannot submit without it
+- Logged in full in the Comp Admission Log
+
+**Rationale:** The first three categories are self-explanatory and need no further detail. "Other" is an exception case — requiring a typed explanation creates an audit trail and discourages casual abuse of the comp system.
+
+---
+
+*Add new decisions below this line. Use the next sequential number.*
