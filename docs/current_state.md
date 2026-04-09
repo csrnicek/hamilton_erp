@@ -3,7 +3,7 @@
 Living tracker of what has been built, what is in progress, and what is blocked.
 
 **Last updated:** 2026-04-09
-**Current phase:** Pre–Phase 0 (Ready to start coding)
+**Current phase:** Pre–Phase 0 — Schema finalized. Ready to start coding.
 
 ---
 
@@ -20,21 +20,18 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 ## Session Notes
 
 ### 2026-04-09 (this session)
-- Established GitHub as single source of truth (DEC-012)
-- Removed all files from Claude Project knowledge base
-- Added Project Instructions to auto-read from GitHub each session
-- Recovered asset inventory, stay durations, float, and label printer decisions from previous chat
-- Confirmed local path: `/Users/chrissrnicek/hamilton_erp`
-- Confirmed all pricing, specials, and discount rules
-- All blockers except retail item list, promo details, and dev environment are now resolved
-- **Next session:** Start Phase 0 app scaffold
+- Three-AI review completed (ChatGPT, Gemini, Grok)
+- Grok provided complete Venue Asset DocType JSON + controller code + locking patterns
+- Recorded DEC-017 through DEC-024 from review findings
+- DocType schemas updated with agreed additions
+- New roles defined: Operator / Manager / Admin
+- Concurrency locking approach confirmed: hybrid Redis + MariaDB + version field
+- **Phase 0 is ready to start — Venue Asset DocType + state machine first**
 
-### 2026-04-08
-- Created all 5 project `.md` files
-- Recorded DEC-001 through DEC-011
-- Deep-dive research on Frappe/ERPNext best practices
-- Hosting decision: Frappe Cloud, Hetzner Ashburn Virginia, ~$40/mo
-- Resolved asset inventory, stay durations, float, label printer
+### Previous sessions
+- All pricing confirmed, blockers 1–9 resolved except retail item list
+- GitHub as single source of truth established (DEC-012)
+- Asset inventory, stay durations, float, label printer all confirmed
 
 ---
 
@@ -42,7 +39,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0: Foundation | Not started | Ready to begin |
+| Phase 0: Foundation | **Ready to start** | All schemas finalized |
 | Phase 1: Asset Board & Sessions | Not started | — |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
@@ -55,97 +52,204 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Item | Status | Notes |
 |---|---|---|
-| ERPNext v16 development environment | Not set up | Docker or native bench |
+| ERPNext v16 development environment | ✅ Decided | Frappe Cloud |
 | GitHub repository | ✅ Done | https://github.com/csrnicek/hamilton_erp (private) |
 | Local repo path | ✅ Done | `/Users/chrissrnicek/hamilton_erp` |
-| Developer Mode enabled on site | Pending | After site creation |
-| Project knowledge files | ✅ Done | All in `/docs/` on GitHub |
 | Hosting platform | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, ~$40/mo |
+| Three-AI architecture review | ✅ Done | ChatGPT + Gemini + Grok — see review_synthesis.md |
 
 ---
 
 ## Hamilton Asset Inventory (CONFIRMED)
 
-| Asset Type | Count | Display Name | Tier Name | Stay Duration | Regular Price |
-|---|---|---|---|---|---|
-| Locker | 33 | Lckr | Locker | 6 hours | $29.00 |
-| Room | 11 | Sing STD | Single Standard | 6 hours | $36.00 |
-| Room | 10 | Sing DLX | Deluxe Single | 6 hours | $41.00 |
-| Room | 2 | Glory | Glory Hole | 6 hours | $45.00 |
-| Room | 3 | Dbl DLX | Double Deluxe | 6 hours | $47.00 |
-| **Total** | **59** | | | | |
-
-All prices are **HST-inclusive** (13% Ontario HST back-calculated from inclusive price).
-
-**Float:** $200 (configurable per venue)
-**Label Printer:** Brother QL-820NWB, network WiFi, IP configurable
-
----
-
-## Pricing Rules (CONFIRMED)
-
-All prices, assets, and specials are configurable — never hardcoded. They live in:
-- **Item Prices** → ERPNext Item Price records (change without code)
-- **Venue Assets** → Venue Asset DocType records (add/remove assets without code)
-- **Pricing Rules** → ERPNext Pricing Rules (add/change specials without code)
-- **Hamilton Settings** → Custom settings DocType (float, stay duration, printer IP)
-
-### Locker Special — $17.00
-| Days | Hours |
-|---|---|
-| Monday – Friday | 9:00 AM – 11:00 AM |
-| Sunday – Thursday | 4:00 PM – 7:00 PM |
-
-Configured as an ERPNext Pricing Rule with day/time validity.
-Applies to Locker item only. Price drops to $17 flat (not a % discount).
-
-### Under 25 Discount — 50% off
-- Applies to **all asset types** (Lckr, Sing STD, Sing DLX, Glory, Dbl DLX)
-- Operator manually applies after confirming guest age by ID
-- Applied at any time, any day
-- **Does NOT stack with Locker Special** — if Locker Special is active, operator must choose one or the other
-- Configured as an ERPNext Pricing Rule, manually triggered by operator
-
----
-
-## Custom DocTypes
-
-| DocType | Schema Defined | Controller Built | Tests Written | Notes |
+| Asset Type | Count | Display Name | Price | Stay Duration |
 |---|---|---|---|---|
-| Venue Asset | — | — | — | |
-| Venue Session | — | — | — | Must include all V5.4 forward-compat fields |
-| Cash Drop | — | — | — | |
-| Cash Reconciliation | — | — | — | |
-| Asset Status Log | — | — | — | |
-| Shift Record | — | — | — | |
-| Comp Admission Log | — | — | — | |
-| Hamilton Settings | — | — | — | Float amount, stay duration, printer IP |
+| Locker | 33 | Lckr | $29.00 | 6 hours |
+| Single Standard | 11 | Sing STD | $36.00 | 6 hours |
+| Deluxe Single | 10 | Sing DLX | $41.00 | 6 hours |
+| Glory Hole | 2 | Glory | $45.00 | 6 hours |
+| Double Deluxe | 3 | Dbl DLX | $47.00 | 6 hours |
+
+All prices HST-inclusive. Float: $200. Label printer: Brother QL-820NWB.
+
+**Pricing Rules:**
+- Locker Special: $17 flat — Mon–Fri 9–11am, Sun–Thu 4–7pm
+- Under 25: 50% off all assets, operator manually applies, no stacking with Locker Special
+
+---
+
+## Custom DocTypes (FINAL SCHEMAS)
+
+### Venue Asset
+| Field | Type | Notes |
+|---|---|---|
+| asset_name | Data | e.g. "Room 7", "Locker 22" |
+| asset_category | Select | Room / Locker |
+| asset_tier | Select | Locker / Single Standard / Deluxe Single / Glory Hole / Double Deluxe |
+| status | Select | Available / Occupied / Dirty / Out of Service |
+| current_session | Link → Venue Session | |
+| expected_stay_duration | Int | Minutes (default 360 = 6hrs) |
+| display_order | Int | For board layout |
+| company | Link → Company | Required for ERPNext multi-company |
+| is_active | Check | Default 1 |
+| hamilton_last_status_change | Datetime | Read-only, set automatically |
+| version | Int | Hidden, default 0 — optimistic locking |
+| reason | Text | Mandatory for Out of Service |
+
+Indexes on: `status`, `display_order`, `asset_category`, `asset_tier`
+Naming: `VA-.####`
+
+### Venue Session
+| Field | Type | Notes |
+|---|---|---|
+| venue_asset | Link → Venue Asset | |
+| sales_invoice | Link → Sales Invoice | |
+| admission_item | Link → Item | |
+| session_start | Datetime | |
+| session_end | Datetime | |
+| status | Select | Active / Completed |
+| assignment_status | Select | Pending / Assigned / Failed (default Pending) |
+| operator_checkin | Link → User | |
+| operator_vacate | Link → User | |
+| vacate_method | Select | Key Return / Discovery on Rounds |
+| shift_record | Link → Shift Record | |
+| customer | Link → Customer | Default Walk-in (forward compat) |
+| pricing_rule_applied | Data | Audit which rule fired |
+| under_25_applied | Check | Audit trail |
+| comp_flag | Check | |
+| *Forward compat fields (all null at Hamilton):* | | |
+| identity_method | Data | Default "not_applicable" |
+| member_id | Data | |
+| full_name | Data | |
+| date_of_birth | Date | |
+| membership_status | Data | |
+| arrears_amount | Currency | |
+| arrears_flag | Check | |
+| arrears_sku | Data | |
+| scanner_data | Text | |
+| eligibility_snapshot | Text | |
+| block_status | Data | |
+
+### Cash Drop
+| Field | Type | Notes |
+|---|---|---|
+| operator | Link → User | |
+| shift_date | Date | |
+| shift_identifier | Data | e.g. "Evening" |
+| shift_record | Link → Shift Record | |
+| drop_type | Select | Mid-Shift / End-of-Shift |
+| drop_number | Int | Sequential per shift |
+| declared_amount | Currency | |
+| timestamp | Datetime | |
+| reconciled | Check | |
+| reconciliation | Link → Cash Reconciliation | |
+| pos_closing_entry | Link → POS Closing Entry | Background-created |
+
+### Cash Reconciliation
+| Field | Type | Notes |
+|---|---|---|
+| cash_drop | Link → Cash Drop | |
+| manager | Link → User | |
+| actual_count | Currency | Manager's blind count |
+| system_expected | Currency | Revealed only after submission |
+| operator_declared | Currency | From Cash Drop |
+| variance_flag | Select | Clean / Possible Theft or Error / Operator Mis-declared |
+| notes | Text | |
+| timestamp | Datetime | |
+
+### Asset Status Log
+| Field | Type | Notes |
+|---|---|---|
+| venue_asset | Link → Venue Asset | |
+| previous_status | Data | |
+| new_status | Data | |
+| reason | Text | |
+| operator | Link → User | |
+| timestamp | Datetime | |
+
+### Shift Record
+| Field | Type | Notes |
+|---|---|---|
+| operator | Link → User | |
+| shift_date | Date | |
+| shift_start | Datetime | |
+| shift_end | Datetime | |
+| float_expected | Currency | |
+| float_actual | Currency | |
+| float_variance | Currency | |
+| board_confirmed | Check | |
+| board_corrections | Child Table | Hamilton Board Correction |
+| pos_profile | Link → POS Profile | |
+| pos_opening_entry | Link → POS Opening Entry | |
+| pos_closing_entry | Link → POS Closing Entry | |
+| status | Select | Open / Closed |
+
+### Comp Admission Log
+| Field | Type | Notes |
+|---|---|---|
+| venue_session | Link → Venue Session | |
+| sales_invoice | Link → Sales Invoice | |
+| admission_item | Link → Item | |
+| comp_value | Currency | What the comp was worth |
+| reason_category | Select | Loyalty Card / Promo / Manager Decision / Other |
+| reason_note | Text | Mandatory if Other, max 500 chars |
+| operator | Link → User | |
+| timestamp | Datetime | |
+
+### Hamilton Settings (Single DocType)
+| Field | Type | Notes |
+|---|---|---|
+| float_amount | Currency | Default $200 |
+| default_stay_duration_minutes | Int | Default 360 |
+| printer_ip_address | Data | Brother QL-820NWB IP |
+| printer_model | Data | |
+
+### Hamilton Board Correction (Child DocType for Shift Record)
+| Field | Type | Notes |
+|---|---|---|
+| venue_asset | Link → Venue Asset | |
+| old_status | Data | |
+| new_status | Data | |
+| reason | Text | |
+| operator | Link → User | |
+| timestamp | Datetime | |
 
 ---
 
 ## Custom Fields on Standard DocTypes
 
-| Standard DocType | Custom Field | Status | Notes |
+| DocType | Field | Type | Notes |
 |---|---|---|---|
-| Item | `hamilton_is_admission` | — | Check field |
-| Item | `hamilton_asset_category` | — | Select: Room / Locker |
-| Item | `hamilton_asset_tier` | — | Select: Locker / Single Standard / Deluxe Single / Glory Hole / Double Deluxe |
-| Item | `hamilton_is_comp` | — | Check field |
-| Sales Invoice | `hamilton_venue_session` | — | Link to Venue Session |
-| Sales Invoice | `hamilton_comp_reason` | — | Text |
+| Item | hamilton_is_admission | Check | Triggers asset assignment after POS |
+| Item | hamilton_asset_category | Select | Room / Locker |
+| Item | hamilton_asset_tier | Select | Tier name |
+| Item | hamilton_is_comp | Check | Triggers comp reason prompt |
+| Sales Invoice | hamilton_venue_session | Link → Venue Session | |
+| Sales Invoice | hamilton_comp_reason | Text | |
+| Sales Invoice | hamilton_shift_record | Link → Shift Record | Ties invoice to shift |
+
+---
+
+## Roles (CONFIRMED — 3 roles)
+
+| Role | Access |
+|---|---|
+| Hamilton Operator | POS, asset board, cash drops, shift start/close. No reconciliation, no settings, no POS Closing Entry. |
+| Hamilton Manager | Reconciliation screen, view-only Cash Drop, shift reports. No settings. |
+| Hamilton Admin | Hamilton Settings, asset master, items/pricing, role management. Not operational. |
 
 ---
 
 ## Custom Pages
 
-| Page | Status | Notes |
+| Page | Status | Phase |
 |---|---|---|
-| Asset Board | — | Primary custom UI |
-| Asset Assignment Prompt | — | Post-POS overlay |
-| Cash Drop Screen | — | Blind — no expected totals ever |
-| Shift Start | — | Float verify + board confirm |
-| Shift Close | — | Final drop + POS Closing auto-creation |
-| Manager Reconciliation | — | Blind entry then reveal |
+| Asset Board | Not started | 1 |
+| Asset Assignment Prompt | Not started | 2 |
+| Cash Drop Screen | Not started | 3 |
+| Shift Start | Not started | 3 |
+| Shift Close | Not started | 3 |
+| Manager Reconciliation | Not started | 3 |
 
 ---
 
@@ -153,34 +257,62 @@ Applies to Locker item only. Price drops to $17 flat (not a % discount).
 
 | Configuration | Status | Notes |
 |---|---|---|
-| POS Profile (Hamilton) | — | — |
-| Items — Admission types | — | Lckr $29, Sing STD $36, Sing DLX $41, Glory $45, Dbl DLX $47 + comp variants |
-| Items — Retail | — | 25+ items — list pending |
-| Item Tax Template — HST Taxable | — | 13% Ontario HST, tax-inclusive |
-| Item Tax Template — HST Exempt | — | 0% |
-| Pricing Rule — Locker Special | — | $17, Mon–Fri 9–11am, Sun–Thu 4–7pm |
-| Pricing Rule — Under 25 | — | 50% off all assets, manual, no stack with Locker Special |
-| Mode of Payment — Card | — | No integration; operator confirms manually |
-| Mode of Payment — Cash | — | Standard |
-| Default Customer — Walk-in | — | Standard POS anonymous customer |
-| Role Permissions — POS Closing blocked | — | Hamilton Operator cannot access POS Closing Entry |
+| POS Profile (Hamilton) | Not started | — |
+| Items — Admission types | Not started | 5 tiers + comp variants |
+| Items — Retail | Not started | List pending |
+| HST Tax Template | Not started | Company-level, "Included in Print Rate" (DEC-018) |
+| Pricing Rule — Locker Special | Not started | $17, Mon–Fri 9–11am, Sun–Thu 4–7pm |
+| Pricing Rule — Under 25 | Not started | 50% off, custom trigger button |
+| Non-stacking validation | Not started | Custom server-side validate hook |
+| Mode of Payment — Card/Cash | Not started | — |
+| Role Permissions | Not started | DocType + Reports + Pages + field masking |
+| Hamilton Desk/Workspace | Not started | Phase 0 |
 
 ---
 
-## Blockers and Open Questions
+## Blockers
 
-| # | Question / Blocker | Status | Resolution |
+| # | Blocker | Status |
+|---|---|---|
+| 1 | GitHub repo | ✅ https://github.com/csrnicek/hamilton_erp |
+| 2 | Room/locker counts | ✅ 59 assets, 5 tiers |
+| 3 | Stay durations | ✅ 6 hours all |
+| 4 | Float amount | ✅ $200, configurable |
+| 5 | Label printer | ✅ Brother QL-820NWB |
+| 6 | Asset pricing | ✅ See above |
+| 7 | Pricing rules | ✅ Locker Special + Under 25 defined |
+| 8 | Retail item list | ⏳ Chris to provide |
+| 9 | Comp reasons | ✅ Loyalty Card / Promo / Manager Decision / Other |
+| 10 | Dev environment | ✅ Frappe Cloud |
+
+---
+
+## QA Test Cases
+
+| Test | Description | Status | Phase |
 |---|---|---|---|
-| 1 | GitHub repo URL | ✅ Resolved | https://github.com/csrnicek/hamilton_erp |
-| 2 | Room count and tier names | ✅ Resolved | 5 tiers, 59 total assets |
-| 3 | Expected stay durations | ✅ Resolved | 6 hours all asset types |
-| 4 | Fixed float amount | ✅ Resolved | $200, configurable |
-| 5 | Label printer model | ✅ Resolved | Brother QL-820NWB, network print |
-| 6 | Asset pricing | ✅ Resolved | See pricing table above |
-| 7 | Pricing rules | ✅ Resolved | Locker Special + Under 25 — see above |
-| 8 | Retail item list | ⏳ Open | Chris to provide 25+ items with prices and tax status |
-| 9 | Comp admission reason categories | ✅ Resolved | Loyalty Card / Promo / Manager Decision / Other (Other = mandatory free-text, 500 char max) |
-| 10 | Dev environment setup | ⏳ Open | Docker or native bench |
+| H1 | Standard Room Check-in | — | 2 |
+| H2 | Standard Locker Check-in | — | 2 |
+| H3 | Check-in with Retail Items | — | 2 |
+| H4 | Cancel Mid-Transaction | — | 2 |
+| H5 | Comp Admission | — | 2 |
+| H6 | Standalone Retail Sale | — | 2 |
+| H7 | Tax Handling | — | 2 |
+| H8 | Line-Item Refund | — | 4 |
+| H9 | Full Transaction Refund | — | 4 |
+| H10 | Vacate and Turnover | — | 1 |
+| H11 | Out of Service | — | 1 |
+| H12 | Occupied Asset Rejection | — | 1 |
+| H13 | Mid-Shift Cash Drop | — | 3 |
+| H14 | End-of-Shift Close-out | — | 3 |
+| H15 | Manager Reconciliation (Clean) | — | 3 |
+| H16 | Manager Reconciliation (Variance) | — | 3 |
+| H17 | Operator Cannot Access POS Closing | — | 3 |
+| H18 | Shift Start Float Variance | — | 3 |
+| H19 | Shift Start Board Correction | — | 3 |
+| H20 | Auto-Applied Promotion | — | 2 |
+| H21 | No Promotion Active | — | 2 |
+| H22 | Record Structure Integrity | — | 4 |
 
 ---
 
