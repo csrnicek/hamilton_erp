@@ -193,6 +193,8 @@ Naming: `VA-.####`
 | pos_profile | Link → POS Profile | |
 | pos_opening_entry | Link → POS Opening Entry | |
 | pos_closing_entry | Link → POS Closing Entry | |
+| operator_declared_card_total | Currency | Operator reads terminal batch report and enters at shift close |
+| system_expected_card_total | Currency | Auto-calculated from card-mode Sales Invoices for the shift |
 | status | Select | Open / Closed |
 
 ### Comp Admission Log
