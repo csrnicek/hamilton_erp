@@ -191,7 +191,9 @@ Naming: `VA-.####`
 | shift_end | Datetime | |
 | float_expected | Currency | |
 | float_actual | Currency | |
-| float_variance | Currency | |
+| float_variance | Currency | Variance at shift START (float_actual - float_expected) |
+| closing_float_actual | Currency | Float counted by operator at shift END before handoff |
+| closing_float_variance | Currency | Variance at shift END (closing_float_actual - float_expected) |
 | board_confirmed | Check | |
 | board_corrections | Child Table | Hamilton Board Correction |
 | pos_profile | Link → POS Profile | |
