@@ -204,3 +204,91 @@ Records architectural and implementation decisions made during development. This
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
+
+## DEC-017 — Non-Stacking Rule and Under 25 Trigger Both Require Custom Code
+
+**Date:** 2026-04-09
+**Context:** Three-AI review confirmed standard ERPNext Pricing Rules cannot enforce mutual exclusion or manual operator triggers.
+**Decision:**
+- Non-stacking (Under 25 cannot combine with Locker Special): requires custom server-side `validate` hook on Sales Invoice that detects both rules active and throws a plain-language error.
+- Under 25 manual trigger: requires a custom POS button "Apply Under 25" — standard Pricing Rules auto-apply and cannot be conditionally triggered by operator after ID check.
+**Rationale:** ERPNext Pricing Rule Priority controls order of application, not mutual exclusion. All three AI reviewers confirmed this. Custom validation is the only reliable approach.
+
+---
+
+## DEC-018 — HST-Inclusive Pricing Uses Company-Level Tax Template
+
+**Date:** 2026-04-09
+**Context:** Grok and ChatGPT flagged that Item Tax Template does not have "Include Tax in Rate" checkbox in v16 (open issue #51510 as of April 2026).
+**Decision:** HST-inclusive pricing configured at Company level via Sales Taxes and Charges Template with "Included in Print Rate" flag set to 13% HST. Item Tax Template used only for item-level exemption overrides (0% for exempt retail items). Some custom JS may be needed for exact back-calculation on mixed admission + retail carts.
+**Rationale:** Standard ERPNext v16 limitation. Company-level template is the correct workaround confirmed by two reviewers.
+
+---
+
+## DEC-019 — Hybrid Locking: Redis Advisory + MariaDB Row Lock + Version Field
+
+**Date:** 2026-04-09
+**Context:** All three AI reviewers identified asset assignment concurrency as the #1 production risk. Grok provided complete working implementation.
+**Decision:** Three-layer locking on all Venue Asset status changes:
+1. Redis advisory lock (fast pre-check, 15s TTL, UUID token, atomic Lua release)
+2. MariaDB `FOR NO KEY UPDATE` row lock inside the Redis lock (strong DB integrity)
+3. Optimistic `version` field on Venue Asset (catches any bypasses)
+Lock sections must be minimal — validate + save only, no I/O inside lock.
+Use `FOR NO KEY UPDATE` not `FOR UPDATE` in v16 (avoids blocking FK checks).
+**Rationale:** Hamilton has 59 assets and multiple operators. Two operators assigning same asset simultaneously is a realistic scenario. Once asset status data becomes inconsistent in production it is expensive to fix. All three reviewers confirmed this is the #1 risk.
+
+---
+
+## DEC-020 — Paid-But-Unassigned Recovery State
+
+**Date:** 2026-04-09
+**Context:** All three reviewers flagged: if payment succeeds but asset assignment fails (network drop, operator closes tab), there is no defined recovery state.
+**Decision:** Add `assignment_status` field (Select: Pending / Assigned / Failed, default Pending) to Venue Session. Venue Session is created at payment time with status Pending, then updated to Assigned when asset is confirmed. Add daily scheduled cleanup job that identifies sessions stuck in Pending for >15 minutes and flags them for operator review.
+**Rationale:** Without a recovery state, paid admissions with no assigned asset create ghost sessions with no cleanup path.
+
+---
+
+## DEC-021 — Blind Cash Control Requires Multi-Layer Permissions
+
+**Date:** 2026-04-09
+**Context:** All three reviewers flagged that blocking POS Closing Entry alone is insufficient — operators can still see expected cash totals via Sales Register reports, list views, and API responses.
+**Decision:** Blind cash control requires all of:
+- Role Permission: Deny Create/Write on POS Closing Entry for Hamilton Operator
+- Role Permission: Deny access to Sales Register report and any cash-total reports
+- Frappe v16 field-level masking on sensitive cash fields visible to Operator role
+- All whitelisted methods on Cash Drop page verify role server-side (never trust client)
+**Rationale:** Defense in depth. A single permission setting is too brittle for a system specifically designed to prevent operators from seeing expected totals.
+
+---
+
+## DEC-022 — Three Roles: Operator, Manager, Admin
+
+**Date:** 2026-04-09
+**Context:** ChatGPT and Gemini flagged that two roles (Operator + Manager) is insufficient. Manager was defined as "reconciliation only" which is too narrow for real operations.
+**Decision:** Three roles:
+- **Hamilton Operator:** Day-to-day operations. POS, asset board, cash drops, shift start/close. No reconciliation, no settings, no POS Closing Entry.
+- **Hamilton Manager:** Reconciliation screen, view-only on Cash Drop records, shift reports. Cannot change system settings or pricing.
+- **Hamilton Admin:** System configuration. Hamilton Settings, asset master data, Item/pricing setup, role management. Not an operational role.
+**Rationale:** Separates operational work (Operator), financial oversight (Manager), and system configuration (Admin) into clean boundaries.
+
+---
+
+## DEC-023 — Bulk "Mark All Clean" Action on Asset Board
+
+**Date:** 2026-04-09
+**Context:** Gemini flagged that manually clicking 59 assets clean every morning is operationally unworkable.
+**Decision:** Add a "Mark All Clean" bulk action to the asset board that transitions all Dirty assets to Available in one tap. Requires operator confirmation. Logs each transition in Asset Status Log individually (not as a batch). Added to Phase 1 scope.
+**Rationale:** Operational necessity. Morning shift would revolt at clicking 59 tiles individually.
+
+---
+
+## DEC-024 — board_corrections Changed to Child Table
+
+**Date:** 2026-04-09
+**Context:** ChatGPT and Grok flagged that free-text board_corrections on Shift Record is too loose for audit purposes.
+**Decision:** Replace `board_corrections` (Text) on Shift Record with a child table `Hamilton Board Correction` containing: venue_asset (Link), old_status (Data), new_status (Data), reason (Text), operator (Link to User), timestamp (Datetime).
+**Rationale:** Structured corrections are queryable, reportable, and attributable. Free text cannot be used for audit or investigation.
+
+---
+
+*Add new decisions below this line. Use the next sequential number.*
