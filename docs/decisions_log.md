@@ -230,6 +230,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 - `resolution_status` (Select: Open / Resolved / Dismissed / Escalated) — outcome of the investigation
 **Rationale:** Per DEC-007, deferred ≠ absent from schema. Adding now takes 30 seconds. Adding later requires a migration script on live data. Zero cost now, real cost later.
 
+## DEC-042 — Direct Shift Record Link on Cash Reconciliation
+
+**Date:** 2026-04-09
+**Context:** Cash Reconciliation already reaches Shift Record via Cash Drop (two hops). ChatGPT suggested a direct link.
+**Decision:** Add `shift_record` (Link → Shift Record) directly on Cash Reconciliation. Auto-populated when reconciliation is created. Developer implementation decision — no operational impact.
+**Rationale:** Faster report queries. Zero schema cost now. Would require a migration patch if added later.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
