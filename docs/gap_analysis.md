@@ -77,7 +77,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | cash_drop, manager, amounts, variance_flag | All | ✅ Current state | None |
 | variance_amount (explicit Currency field) | ChatGPT | ✅ DEC-039 | Added to Cash Reconciliation schema |
 | resolved_by, resolution_status | ChatGPT | ✅ DEC-041 | Added to schema now, workflow deferred to Phase 3 |
-| direct shift_record link | ChatGPT | ❌ | Can reach via cash_drop — decide if direct needed |
+| direct shift_record link | ChatGPT | ⚠️ | Pending Chris confirmation — recommend add now |
 
 ### Asset Status Log
 | Field | Reviewer | Status | Action |
