@@ -38,9 +38,9 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | hamilton_last_status_change (Datetime) | Grok/ChatGPT | ✅ Current state | None |
 | version (Int, hidden) | Grok/ChatGPT | ✅ Current state | None |
 | reason (Text) | All | ✅ Current state | None |
-| asset_code — immutable unique identifier | ChatGPT | ❌ | Decision needed |
-| last_cleaned_at (Datetime) | ChatGPT | ❌ | Decision needed |
-| last_vacated_at (Datetime) | ChatGPT | ❌ | Decision needed |
+| asset_code — immutable unique identifier | ChatGPT | ✅ DEC-030 | Added to schema |
+| last_cleaned_at (Datetime) | ChatGPT | ✅ DEC-031 | Added to schema |
+| last_vacated_at (Datetime) | ChatGPT | ✅ DEC-031 | Added to schema |
 | Naming: VA-.#### | Grok | ✅ Current state | None |
 | Indexes on status, display_order, category, tier | Grok | ✅ Current state | None |
 | naming_series on every DocType | Grok | ❌ | Add to Phase 0 checklist |
@@ -56,7 +56,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | comp_flag (Check) | ChatGPT | ✅ Current state | None |
 | Forward compat fields (member_id, etc.) | All | ✅ Current state | None |
 | member_id should be Link to Customer, not Data | Gemini | ❌ | Fix field type |
-| POS Profile link on Venue Session | Gemini | ❌ | Decision needed |
+| POS Profile link on Venue Session | Gemini | ✅ DEC-032 | Not needed — single terminal always |
 | session_number (auto-increment display ID) | ChatGPT | ❌ | Decision needed |
 | checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ❌ | Decision needed |
 | payment_status_snapshot | ChatGPT | ❌ | Decision needed |
