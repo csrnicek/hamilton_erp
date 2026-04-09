@@ -322,6 +322,13 @@ New fields added to Shift Record: `closing_float_actual` (Currency), `closing_fl
 Implementation: doc_events hook on Sales Invoice `on_cancel` or POS Return `on_submit` that checks for a linked hamilton_venue_session and triggers the release.
 **Rationale:** Without this, a refunded guest could theoretically still occupy a room in the system while physically gone, and the room would never be cleaned or re-assigned.
 
+## DEC-052 — Comp Admissions Do Not Affect Cash Totals
+
+**Date:** 2026-04-09
+**Context:** Comp admissions ($0 transactions) must not inflate or distort the cash reconciliation totals.
+**Decision:** No special handling required. Comp admissions create a Sales Invoice with $0 cash payment. The system_expected formula (sum of cash-mode payments) naturally results in $0 contribution from comp invoices. Comps are invisible to cash reconciliation by design.
+**Rationale:** The formula already handles this correctly. A $0 payment adds $0 to the expected total. No additional code needed.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
