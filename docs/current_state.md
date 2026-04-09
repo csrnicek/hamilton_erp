@@ -99,6 +99,8 @@ All prices HST-inclusive. Float: $300 (configurable per venue). Label printer: B
 | company | Link → Company | Required for ERPNext multi-company |
 | is_active | Check | Default 1 |
 | hamilton_last_status_change | Datetime | Read-only, set automatically |
+| last_vacated_at | Datetime | Set when Occupied → Dirty. Drives "Dirty since X" display on board. |
+| last_cleaned_at | Datetime | Set when Dirty → Available. Shows how recently room was turned over. |
 | version | Int | Hidden, default 0 — optimistic locking |
 | reason | Text | Mandatory for Out of Service |
 
