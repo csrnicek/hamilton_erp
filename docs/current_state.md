@@ -3,7 +3,7 @@
 Living tracker of what has been built, what is in progress, and what is blocked.
 
 **Last updated:** 2026-04-09
-**Current phase:** Pre–Phase 0 — Schema finalized. Ready to start coding.
+**Current phase:** Phase 0 — Complete. Pending Frappe Cloud live test (E5).
 
 ---
 
@@ -19,19 +19,29 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 ## Session Notes
 
-### 2026-04-09 (this session)
+### 2026-04-09 (Phase 0 coding session)
+- **Phase 0 coding complete — pending Frappe Cloud live test (E5)**
+- 9 custom DocTypes built and verified (111 total fields)
+- 7 custom field fixtures on Item + Sales Invoice correct
+- 3 roles (Hamilton Operator, Hamilton Manager, Hamilton Admin) in role.json, hooks.py, and install.py
+- POS Closing Entry blocked for Hamilton Operator (DEC-005)
+- Hamilton Workspace with 8 DocTypes in 3 role-based sections (Operations / Oversight / Administration)
+- 39 Python files compile clean, 12 JSON files parse clean
+- Redundant Custom DocPerm functions removed from install.py — permissions defined in DocType JSONs
+- All work committed and pushed to GitHub
+
+### 2026-04-09 (earlier — design session)
 - Three-AI review completed (ChatGPT, Gemini, Grok)
 - Grok provided complete Venue Asset DocType JSON + controller code + locking patterns
 - Recorded DEC-017 through DEC-024 from review findings
 - DocType schemas updated with agreed additions
 - New roles defined: Operator / Manager / Admin
 - Concurrency locking approach confirmed: hybrid Redis + MariaDB + version field
-- **Phase 0 is ready to start — Venue Asset DocType + state machine first
 - All 4 critical decisions resolved: DEC-025 through DEC-029
 - Float corrected to $300 (was $200)
 - POS Invoice vs Sales Invoice resolved: use Sales Invoice mode
 - Float carryover: operator sets aside, drops revenue only
-- Split tender: cash portion only counts toward reconciliation**
+- Split tender: cash portion only counts toward reconciliation
 
 ### Previous sessions
 - All pricing confirmed, blockers 1–9 resolved except retail item list
@@ -44,7 +54,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0: Foundation | **Ready to start** | All schemas finalized |
+| Phase 0: Foundation | **Complete — pending Frappe Cloud live test (E5)** | 9 DocTypes, 3 roles, workspace, fixtures |
 | Phase 1: Asset Board & Sessions | Not started | — |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
