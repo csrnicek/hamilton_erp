@@ -251,6 +251,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Add `reconciliation_status` (Select: Pending / Partially Reconciled / Fully Reconciled) to Shift Record. Auto-updated by the system each time a Cash Reconciliation is submitted for a drop in that shift.
 **Rationale:** Operational visibility — manager can scan the shift list and immediately see which shifts still have unreconciled envelopes. Easier to add now than later.
 
+## DEC-045 — Skip approved_by on Comp Admission Log
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested adding approved_by to track who authorised a comp admission.
+**Decision:** Not added. The reason is already fully captured by existing fields: reason_category (Loyalty Card / Promo / Manager Decision / Other) and reason_note (mandatory free text for Other). At Hamilton, the operator on shift IS the authoriser. No separate approval field needed.
+**Rationale:** Redundant at a single-operator venue. Existing reason fields already explain why the admission was free.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
