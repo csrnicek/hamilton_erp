@@ -292,3 +292,52 @@ Use `FOR NO KEY UPDATE` not `FOR UPDATE` in v16 (avoids blocking FK checks).
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
+
+## DEC-025 — POS Uses Sales Invoice Mode (Not POS Invoice)
+
+**Date:** 2026-04-09
+**Context:** ERPNext v16 POS can create either POS Invoices (deferred, consolidated at shift close) or Sales Invoices (immediate, real-time accounting). ChatGPT and Grok flagged this as an unresolved question.
+**Decision:** Hamilton uses "Sales Invoice in POS" mode. The POS Profile setting "Use Sales Invoice in POS" must be enabled. Every transaction creates a Sales Invoice immediately on submission.
+**Rationale:** Asset assignment hook fires on Sales Invoice submission. Immediate creation is required — deferred POS Invoice mode would mean the asset assignment prompt never fires until shift close. All existing spec references to "Sales Invoice" are correct and unchanged.
+
+---
+
+## DEC-026 — Float Amount Corrected to $300, Configurable Per Venue
+
+**Date:** 2026-04-09
+**Context:** Float amount was previously recorded as $200 (spec example). Chris confirmed the actual Hamilton float.
+**Decision:** Hamilton float is $300 per shift. Stored in Hamilton Settings DocType — not hardcoded. Each venue sets its own float amount independently.
+**Rationale:** Float varies by venue and can change as business needs evolve. Configurable setting ensures no code change is needed when the amount changes.
+
+---
+
+## DEC-027 — Float Carryover: Operator Sets Float Aside, Drops Revenue Only
+
+**Date:** 2026-04-09
+**Context:** Needed to define how the $300 float is handled at shift end — does it get dropped with revenue or stay in the till?
+**Decision:** Option B — operator physically counts out the $300 float and sets it aside for the next shift before doing their cash drop. Only cash above the float is dropped. The system_expected calculation for reconciliation must therefore be: total cash payments for the shift minus the float amount.
+**Rationale:** This is how Hamilton actually operates. The float never goes into the safe — it transfers directly to the next shift. This keeps the drop math clean: drop = revenue only.
+
+---
+
+## DEC-028 — Tier Unavailable After Payment: No System Change Needed
+
+**Date:** 2026-04-09
+**Context:** Raised as a potential gap — what happens if a guest pays for a Deluxe room but all Deluxe rooms are Dirty when the operator goes to assign?
+**Decision:** No new system workflow required. Operators check the asset board before ringing up a sale. If no Deluxe rooms are available the operator would not ring up a Deluxe admission. The rare race condition (room becomes Dirty between board check and assignment) is handled by server-side concurrency locking (DEC-019) — the asset simply won't appear as available in the assignment prompt.
+**Rationale:** Operational procedure covers this naturally. Adding a complex "tier unavailable" recovery workflow would be over-engineering for Hamilton's single-operator environment.
+
+---
+
+## DEC-029 — Split Tender Accepted; Cash Portion Only Counts Toward Reconciliation
+
+**Date:** 2026-04-09
+**Context:** Hamilton accepts split payments (e.g., $20 cash + $21 card for a $41 room). Needed to define how this affects cash reconciliation math and asset assignment trigger.
+**Decision:** Split tender is fully supported via standard ERPNext POS payment handling. Two rules:
+1. Asset assignment triggers when the full transaction is confirmed in POS — regardless of payment mix.
+2. For cash reconciliation, system_expected = sum of cash-mode payment amounts only on Sales Invoices for that shift period. Card portions are reconciled separately against the standalone terminal batch report.
+**Rationale:** Standard ERPNext POS handles split tender natively. Card payments are never in the cash drawer so they must be excluded from cash reconciliation math.
+
+---
+
+*Add new decisions below this line. Use the next sequential number.*
