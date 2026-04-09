@@ -139,7 +139,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | Multi-layer permissions needed | All | ✅ DEC-021 | None |
 | Float carryover: does $200 stay or get dropped? | Gemini/ChatGPT | ❌ | CRITICAL — need decision from Chris |
-| system_expected calculation method | Grok/ChatGPT | ⚠️ | In progress — pending Chris confirmation of formula |
+| system_expected calculation method | Grok/ChatGPT | ✅ DEC-049 | Cash sales in drop period only. Float confirmed separately at start/end of shift. |
 | system_expected freezing — when exactly? | ChatGPT | ❌ | Add to reconciliation spec |
 | Refunds after drop affect reconciliation | Grok/ChatGPT | ❌ | Add to reconciliation spec |
 | Comp admissions must NOT affect cash totals | Grok | ❌ | Add to reconciliation spec |
