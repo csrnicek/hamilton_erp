@@ -129,6 +129,17 @@ Records architectural and implementation decisions made during development. This
 **Decision:** Add `asset_code` (Data, unique, read-only after creation) to Venue Asset. Set once at creation and never changed. Format: `R001`–`R999` for rooms, `L001`–`L999` for lockers. The `asset_name` field remains the display name shown on POS and asset board and can be freely changed.
 **Rationale:** Without an immutable identifier, renaming "Room 7" to "VIP Suite" would make historical records ambiguous. The asset_code provides a permanent reference that survives any renames or layout changes.
 
+## DEC-031 — last_vacated_at and last_cleaned_at on Venue Asset
+
+**Date:** 2026-04-09
+**Context:** Operators need to see how long a room has been sitting Dirty on the asset board. Management needs to identify if a worker is leaving rooms dirty for the next shift to clean when they had time to clean them.
+**Decision:** Add two timestamp fields to Venue Asset:
+- `last_vacated_at` (Datetime, read-only) — set automatically when Occupied → Dirty. Asset board shows "Dirty since X hours."
+- `last_cleaned_at` (Datetime, read-only) — set automatically when Dirty → Available. Shows how recently a room was turned over.
+
+Analysis is powered by the existing Asset Status Log — every transition is already logged with operator and timestamp. Reports can query: "All rooms in Dirty state for >X minutes during Operator Y's shift" to identify performance issues.
+**Rationale:** Operational visibility (how long is this room dirty?) and management accountability (is this operator cleaning rooms during their shift?). The Asset Status Log provides the historical data; the two fields on Venue Asset provide the live board display.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
