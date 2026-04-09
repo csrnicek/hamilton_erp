@@ -60,7 +60,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | session_number (auto-increment display ID) | ChatGPT | ✅ DEC-033 | Added to schema |
 | checkin_rate_gross, checkin_rate_net, tax_amount | ChatGPT | ✅ DEC-034 | Not added — data lives on Sales Invoice |
 | payment_status_snapshot | ChatGPT | ✅ DEC-035 | Not added — lives on Sales Invoice |
-| refund_status | ChatGPT | ❌ | Decision needed |
+| refund_status | ChatGPT | ✅ DEC-036 | Not added — session status + Sales Invoice covers it |
 | created_from_pos_invoice vs sales_invoice clarity | ChatGPT | ❌ | CRITICAL — POS Invoice vs Sales Invoice |
 
 ### Cash Drop
