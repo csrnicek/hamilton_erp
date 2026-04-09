@@ -116,7 +116,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | hamilton_is_admission, hamilton_asset_category/tier, hamilton_is_comp | All | ✅ | None |
 | hamilton_shift_record on Sales Invoice | Grok/ChatGPT | ✅ Current state | None |
-| hamilton_pricing_rule_override on Item | Grok | ❌ | Needed for Under 25 trigger |
+| hamilton_pricing_rule_override on Item | Grok | ✅ DEC-047 | Skipped — hamilton_is_admission already sufficient |
 | hamilton_requires_asset_assignment on Item | ChatGPT | ❌ | Same as hamilton_is_admission — DUPLICATE, skip |
 
 ---
