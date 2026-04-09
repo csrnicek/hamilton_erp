@@ -207,6 +207,13 @@ Card reconciliation is 2-way (operator declared vs system expected). Cash reconc
 The shift close screen shows the operator their OWN declared drop amounts as a running total. It never shows the system's expected cash total — the blind model is preserved.
 **Rationale:** Forces operator awareness of all incoming transactions. Operator cannot claim ignorance of card totals. Cash blind model is maintained.
 
+## DEC-039 — Add variance_amount to Cash Reconciliation
+
+**Date:** 2026-04-09
+**Context:** The reconciliation screen shows three numbers (system expected, operator declared, manager actual). The manager has to do mental math to calculate the difference. A mockup confirmed that showing the variance as a single calculated number (e.g. -$70.00 in red) makes the result immediately obvious.
+**Decision:** Add `variance_amount` (Currency, read-only, auto-calculated) to Cash Reconciliation. Value = manager_actual_count minus system_expected. Negative = short, positive = over, zero = clean. Only revealed after manager submits their blind count — never shown before submission. Visible on the reconciliation screen, the Cash Reconciliation record, and any management reports.
+**Rationale:** Eliminates mental math during investigations. The -$263 in red jumps out instantly vs reading three separate numbers and calculating the difference.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
