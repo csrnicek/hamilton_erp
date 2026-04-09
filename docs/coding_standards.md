@@ -95,12 +95,14 @@ The POS controller hook pattern changed in v16. Use the following approach for P
 - Do **not** attempt to hook into POS-specific Vue controller methods directly.
 - For POS-specific behavior, prefer server-side hooks on Sales Invoice over client-side POS controller overrides.
 
-### 2.11 Row Locking: Use FOR NO KEY UPDATE, Not FOR UPDATE
+### 2.11 Row Locking: Use FOR UPDATE (MariaDB)
 
-When locking rows for status changes, always use `FOR NO KEY UPDATE` instead of `FOR UPDATE`:
+When locking rows for status changes, use `FOR UPDATE` — this is the correct MariaDB syntax:
 
-- `FOR NO KEY UPDATE` acquires a lighter lock that does not block foreign key checks on child tables.
-- `FOR UPDATE` can cause unnecessary blocking of child table operations in MariaDB InnoDB.
+- `FOR NO KEY UPDATE` is PostgreSQL-only syntax and is **not supported in MariaDB**. Do not use it.
+- `FOR UPDATE` acquires a row-level exclusive lock in MariaDB InnoDB. This is correct and required.
+- The Redis advisory lock (§13.2) is the primary concurrency guard. The SQL `FOR UPDATE` is a secondary safety net held only for the duration of the validate+save operation.
+- FK child blocking concern is mitigated by the short lock window (Redis ensures only one writer enters at a time).
 
 ```python
 # CORRECT — use FOR NO KEY UPDATE in v16
@@ -819,7 +821,7 @@ These rules are mandatory for all `Venue Asset` status changes. Broken locking =
 Every status-changing operation on `Venue Asset` must use all three layers in order:
 
 1. **Redis advisory lock** — fast pre-check, prevents queuing at the DB level
-2. **MariaDB row lock** using `FOR NO KEY UPDATE` — strong DB integrity
+2. **MariaDB row lock** using `FOR UPDATE` — strong DB integrity
 3. **Version field check** — catches any bypasses of layers 1 and 2
 
 ### 13.2 Redis Lock Specification
