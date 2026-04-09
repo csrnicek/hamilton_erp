@@ -124,7 +124,7 @@ Naming: `VA-.####`
 | comp_flag | Check | |
 | *Forward compat fields (all null at Hamilton):* | | |
 | identity_method | Data | Default "not_applicable" |
-| member_id | Data | |
+| member_id | Link → Customer | Forward compat — null at Hamilton |
 | full_name | Data | |
 | date_of_birth | Date | |
 | membership_status | Data | |
@@ -163,6 +163,8 @@ Naming: `VA-.####`
 | timestamp | Datetime | |
 
 ### Asset Status Log
+**Autoname:** `autoincrement` — fast sequential IDs, no naming series needed.
+
 | Field | Type | Notes |
 |---|---|---|
 | venue_asset | Link → Venue Asset | |
@@ -170,8 +172,8 @@ Naming: `VA-.####`
 | new_status | Data | |
 | reason | Text | |
 | operator | Link → User | |
+| venue_session | Link → Venue Session | Traceability — which session caused this change |
 | timestamp | Datetime | |
-
 ### Shift Record
 | Field | Type | Notes |
 |---|---|---|
