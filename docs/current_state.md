@@ -26,7 +26,12 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 - DocType schemas updated with agreed additions
 - New roles defined: Operator / Manager / Admin
 - Concurrency locking approach confirmed: hybrid Redis + MariaDB + version field
-- **Phase 0 is ready to start — Venue Asset DocType + state machine first**
+- **Phase 0 is ready to start — Venue Asset DocType + state machine first
+- All 4 critical decisions resolved: DEC-025 through DEC-029
+- Float corrected to $300 (was $200)
+- POS Invoice vs Sales Invoice resolved: use Sales Invoice mode
+- Float carryover: operator sets aside, drops revenue only
+- Split tender: cash portion only counts toward reconciliation**
 
 ### Previous sessions
 - All pricing confirmed, blockers 1–9 resolved except retail item list
@@ -70,7 +75,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | Glory Hole | 2 | Glory | $45.00 | 6 hours |
 | Double Deluxe | 3 | Dbl DLX | $47.00 | 6 hours |
 
-All prices HST-inclusive. Float: $200. Label printer: Brother QL-820NWB.
+All prices HST-inclusive. Float: $300 (configurable per venue). Label printer: Brother QL-820NWB.
 
 **Pricing Rules:**
 - Locker Special: $17 flat — Mon–Fri 9–11am, Sun–Thu 4–7pm
@@ -199,7 +204,7 @@ Naming: `VA-.####`
 ### Hamilton Settings (Single DocType)
 | Field | Type | Notes |
 |---|---|---|
-| float_amount | Currency | Default $200 |
+| float_amount | Currency | Default $300 — configurable per venue |
 | default_stay_duration_minutes | Int | Default 360 |
 | printer_ip_address | Data | Brother QL-820NWB IP |
 | printer_model | Data | |
@@ -257,7 +262,7 @@ Naming: `VA-.####`
 
 | Configuration | Status | Notes |
 |---|---|---|
-| POS Profile (Hamilton) | Not started | — |
+| POS Profile (Hamilton) | Not started | Must enable "Use Sales Invoice in POS" setting |
 | Items — Admission types | Not started | 5 tiers + comp variants |
 | Items — Retail | Not started | List pending |
 | HST Tax Template | Not started | Company-level, "Included in Print Rate" (DEC-018) |
