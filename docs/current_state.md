@@ -3,7 +3,7 @@
 Living tracker of what has been built, what is in progress, and what is blocked.
 
 **Last updated:** 2026-04-09
-**Current phase:** Phase 0 — Complete. Pending Frappe Cloud live test (E5).
+**Current phase:** Phase 0 — Complete. E5 live test passed. Next: ERPNext setup wizard + 3-AI code review.
 
 ---
 
@@ -19,8 +19,14 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 ## Session Notes
 
+### 2026-04-09 (E5 live test + deployment)
+- **Phase 0 E5 live test PASSED — bench migrate ran with zero errors on Frappe Cloud**
+- Frappe Cloud site: hamilton-erp.v.frappe.cloud on private bench hamilton-erp-bench (bench-37550, N. Virginia, USA)
+- requirements.txt deleted (pyproject.toml is authoritative)
+- Next step: run ERPNext setup wizard, then 3-AI code review
+
 ### 2026-04-09 (Phase 0 coding session)
-- **Phase 0 coding complete — pending Frappe Cloud live test (E5)**
+- **Phase 0 coding complete**
 - 9 custom DocTypes built and verified (111 total fields)
 - 7 custom field fixtures on Item + Sales Invoice correct
 - 3 roles (Hamilton Operator, Hamilton Manager, Hamilton Admin) in role.json, hooks.py, and install.py
@@ -54,7 +60,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0: Foundation | **Complete — pending Frappe Cloud live test (E5)** | 9 DocTypes, 3 roles, workspace, fixtures |
+| Phase 0: Foundation | **Complete — E5 passed** | 9 DocTypes, 3 roles, workspace, fixtures. Live on Frappe Cloud. |
 | Phase 1: Asset Board & Sessions | Not started | — |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
@@ -67,7 +73,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Item | Status | Notes |
 |---|---|---|
-| ERPNext v16 development environment | ✅ Decided | Frappe Cloud |
+| ERPNext v16 development environment | ✅ Live | hamilton-erp.v.frappe.cloud (bench-37550, N. Virginia) |
 | GitHub repository | ✅ Done | https://github.com/csrnicek/hamilton_erp (private) |
 | Local repo path | ✅ Done | `/Users/chrissrnicek/hamilton_erp` |
 | Hosting platform | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, ~$40/mo |
