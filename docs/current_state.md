@@ -179,7 +179,7 @@ Applies to Locker item only. Price drops to $17 flat (not a % discount).
 | 6 | Asset pricing | ✅ Resolved | See pricing table above |
 | 7 | Pricing rules | ✅ Resolved | Locker Special + Under 25 — see above |
 | 8 | Retail item list | ⏳ Open | Chris to provide 25+ items with prices and tax status |
-| 9 | Comp admission reason categories | ⏳ Open | Spec: Loyalty Card / Promo / Manager Decision / Other — confirm |
+| 9 | Comp admission reason categories | ✅ Resolved | Loyalty Card / Promo / Manager Decision / Other (Other = mandatory free-text, 500 char max) |
 | 10 | Dev environment setup | ⏳ Open | Docker or native bench |
 
 ---
