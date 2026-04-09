@@ -244,6 +244,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Not added. At Hamilton, the operator on shift IS always the person who counts the float. The existing `operator` field on Shift Record already captures this. Redundant at a single-operator venue.
 **Rationale:** Adds no information at Hamilton. Can be revisited if a venue ever has multiple staff counting floats separately.
 
+## DEC-044 — Add reconciliation_status to Shift Record
+
+**Date:** 2026-04-09
+**Context:** A manager needs to see at a glance whether all cash drops from a shift have been reconciled.
+**Decision:** Add `reconciliation_status` (Select: Pending / Partially Reconciled / Fully Reconciled) to Shift Record. Auto-updated by the system each time a Cash Reconciliation is submitted for a drop in that shift.
+**Rationale:** Operational visibility — manager can scan the shift list and immediately see which shifts still have unreconciled envelopes. Easier to add now than later.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
