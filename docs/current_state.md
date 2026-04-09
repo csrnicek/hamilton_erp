@@ -199,6 +199,7 @@ Naming: `VA-.####`
 | pos_closing_entry | Link → POS Closing Entry | |
 | operator_declared_card_total | Currency | Operator reads terminal batch report and enters at shift close |
 | system_expected_card_total | Currency | Auto-calculated from card-mode Sales Invoices for the shift |
+| reconciliation_status | Select | Pending / Partially Reconciled / Fully Reconciled — auto-updated as drops are reconciled |
 | status | Select | Open / Closed |
 
 ### Comp Admission Log
