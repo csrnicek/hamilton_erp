@@ -311,6 +311,17 @@ A POS cart can contain a maximum of ONE admission item (enforced by spec §4.3 a
 New fields added to Shift Record: `closing_float_actual` (Currency), `closing_float_variance` (Currency).
 **Rationale:** If $300 goes in at shift start and $285 comes out at shift end, something happened during the shift. Both checks together create a complete float accountability chain.
 
+## DEC-051 — Refund Auto-Releases Asset (Occupied → Dirty)
+
+**Date:** 2026-04-09
+**Context:** When a guest gets a full refund after being assigned a room, the room must be released automatically. Nothing currently handles this.
+**Decision:** When a POS Return (refund) is submitted against a Sales Invoice that has a linked Venue Session, the system must automatically:
+1. Move the asset from Occupied → Dirty (needs cleaning)
+2. Mark the Venue Session as Completed with vacate_method = "Refund"
+3. Log the transition in Asset Status Log with reason "Refund processed"
+Implementation: doc_events hook on Sales Invoice `on_cancel` or POS Return `on_submit` that checks for a linked hamilton_venue_session and triggers the release.
+**Rationale:** Without this, a refunded guest could theoretically still occupy a room in the system while physically gone, and the room would never be cleaned or re-assigned.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
