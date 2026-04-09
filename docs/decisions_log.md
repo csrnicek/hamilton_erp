@@ -189,6 +189,24 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. Hamilton is single-operator — there is no witness. No numbered bags used. Envelope label content is TBD and will be addressed in Phase 3 when the label printer is implemented.
 **Rationale:** Unnecessary fields for a single-operator venue. Label details deferred to Phase 3.
 
+## DEC-038 — Operator Declares Both Cash and Card Totals at Shift Close
+
+**Date:** 2026-04-09
+**Context:** Operators need to be accountable for all payment streams, not just cash. At shift close, the operator should consciously acknowledge both cash drops and card terminal totals.
+**Decision:** At shift close, the operator:
+1. Sees a summary of their own declared cash drops for the shift (e.g. Drop 1: $300, Drop 2: $300) — their own numbers only, never system expected totals.
+2. Enters their final cash drop amount.
+3. Enters the card terminal batch total (read directly from the standalone terminal).
+
+Two new fields added to Shift Record:
+- `operator_declared_card_total` (Currency) — what the operator reads from the terminal and enters manually.
+- `system_expected_card_total` (Currency) — auto-calculated from card-mode Sales Invoices for the shift.
+
+Card reconciliation is 2-way (operator declared vs system expected). Cash reconciliation remains 3-way (system expected vs operator declared vs manager physical count).
+
+The shift close screen shows the operator their OWN declared drop amounts as a running total. It never shows the system's expected cash total — the blind model is preserved.
+**Rationale:** Forces operator awareness of all incoming transactions. Operator cannot claim ignorance of card totals. Cash blind model is maintained.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
