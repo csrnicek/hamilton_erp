@@ -221,6 +221,15 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Deferred to Phase 3 when the Manager Reconciliation screen is built. The screen will display the variance and flag; the investigation workflow will be defined then based on operational input from Hamilton.
 **Rationale:** Getting the data model and display right is Phase 0-3 work. The investigation process is an operational procedure that is best defined once the screen is in front of real managers.
 
+## DEC-041 — Add resolved_by and resolution_status to Cash Reconciliation Now
+
+**Date:** 2026-04-09
+**Context:** After a variance is flagged, the investigation workflow is deferred to Phase 3. However the schema fields needed to track resolution should be added now.
+**Decision:** Add two fields to Cash Reconciliation, both null until Phase 3 workflow is built:
+- `resolved_by` (Link → User) — manager who signs off that the investigation is complete
+- `resolution_status` (Select: Open / Resolved / Dismissed / Escalated) — outcome of the investigation
+**Rationale:** Per DEC-007, deferred ≠ absent from schema. Adding now takes 30 seconds. Adding later requires a migration script on live data. Zero cost now, real cost later.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
