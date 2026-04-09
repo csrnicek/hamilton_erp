@@ -1,0 +1,130 @@
+{
+ "actions": [],
+ "allow_rename": 0,
+ "creation": "2026-04-09 00:00:00.000000",
+ "doctype": "DocType",
+ "engine": "InnoDB",
+ "field_order": [
+  "section_cash",
+  "float_amount",
+  "column_break_cash",
+  "default_stay_duration_minutes",
+  "section_printer",
+  "printer_ip_address",
+  "printer_model",
+  "column_break_printer",
+  "printer_label_template_name",
+  "section_thresholds",
+  "grace_minutes",
+  "column_break_thresholds",
+  "assignment_timeout_minutes"
+ ],
+ "fields": [
+  {
+   "fieldname": "section_cash",
+   "fieldtype": "Section Break",
+   "label": "Cash & Duration"
+  },
+  {
+   "default": "300",
+   "description": "Default float amount per shift. Configurable per venue.",
+   "fieldname": "float_amount",
+   "fieldtype": "Currency",
+   "label": "Float Amount"
+  },
+  {
+   "fieldname": "column_break_cash",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "360",
+   "description": "Default stay duration in minutes for all asset types.",
+   "fieldname": "default_stay_duration_minutes",
+   "fieldtype": "Int",
+   "label": "Default Stay Duration (Minutes)"
+  },
+  {
+   "fieldname": "section_printer",
+   "fieldtype": "Section Break",
+   "label": "Label Printer"
+  },
+  {
+   "description": "IP address of the Brother QL-820NWB label printer.",
+   "fieldname": "printer_ip_address",
+   "fieldtype": "Data",
+   "label": "Printer IP Address"
+  },
+  {
+   "description": "Label printer model identifier.",
+   "fieldname": "printer_model",
+   "fieldtype": "Data",
+   "label": "Printer Model"
+  },
+  {
+   "fieldname": "column_break_printer",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Label template name for the Brother QL-820NWB.",
+   "fieldname": "printer_label_template_name",
+   "fieldtype": "Data",
+   "label": "Printer Label Template Name"
+  },
+  {
+   "fieldname": "section_thresholds",
+   "fieldtype": "Section Break",
+   "label": "Thresholds"
+  },
+  {
+   "default": "15",
+   "description": "Extra minutes after stay duration before overtime indicator fires on the asset board.",
+   "fieldname": "grace_minutes",
+   "fieldtype": "Int",
+   "label": "Grace Minutes"
+  },
+  {
+   "fieldname": "column_break_thresholds",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "15",
+   "description": "Minutes before a paid-but-unassigned session is flagged for cleanup.",
+   "fieldname": "assignment_timeout_minutes",
+   "fieldtype": "Int",
+   "label": "Assignment Timeout (Minutes)"
+  }
+ ],
+ "index_web_pages_for_search": 0,
+ "issingle": 1,
+ "links": [],
+ "modified": "2026-04-09 00:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Hamilton ERP",
+ "name": "Hamilton Settings",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 0,
+   "email": 0,
+   "print": 0,
+   "read": 1,
+   "role": "Hamilton Admin",
+   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "email": 0,
+   "print": 0,
+   "read": 1,
+   "role": "Hamilton Manager",
+   "share": 0,
+   "write": 0
+  }
+ ],
+ "sort_field": "modified",
+ "sort_order": "DESC",
+ "track_changes": 1
+}
