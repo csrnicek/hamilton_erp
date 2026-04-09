@@ -88,7 +88,8 @@ All prices HST-inclusive. Float: $300 (configurable per venue). Label printer: B
 ### Venue Asset
 | Field | Type | Notes |
 |---|---|---|
-| asset_name | Data | e.g. "Room 7", "Locker 22" |
+| asset_code | Data | Immutable unique code set at creation — never changes (e.g. R001, L001). Survives renames. |
+| asset_name | Data | Display name shown on POS and asset board — can be changed |
 | asset_category | Select | Room / Locker |
 | asset_tier | Select | Locker / Single Standard / Deluxe Single / Glory Hole / Double Deluxe |
 | status | Select | Available / Occupied / Dirty / Out of Service |
