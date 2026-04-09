@@ -141,6 +141,7 @@ The five core principles from V5.4 apply, adapted for Hamilton's context:
 5. **Forward compatibility** — the record structure must support the full V5.4 specification even though Hamilton doesn't use most of it
 6. **Cash control** — the system must never show expected totals to operators; all cash reconciliation uses blind procedures
 7. **Standard-first** — use standard ERPNext features wherever possible; custom-build only where operationally required
+8. **Plain-language errors** — every error message shown to an operator must be written in plain hospitality language: no developer terms ("transition," "Venue Asset," "session"), no stack traces, no placeholders. Every message must state what happened and what the operator should do next. See `coding_standards.md §8.4` for required message templates.
 
 ---
 
