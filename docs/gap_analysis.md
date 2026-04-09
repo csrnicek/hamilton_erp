@@ -100,7 +100,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Field | Reviewer | Status | Action |
 |---|---|---|---|
 | admission_item, comp_value, reason fields | All | ✅ Current state | None |
-| approved_by | ChatGPT | ❌ | Low priority for Hamilton — decide |
+| approved_by | ChatGPT | ✅ DEC-045 | Skipped — reason_category + reason_note already covers why it was free |
 
 ### Hamilton Settings
 | Field | Reviewer | Status | Action |
