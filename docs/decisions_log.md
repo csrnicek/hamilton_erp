@@ -268,6 +268,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 - `printer_label_template_name` (Data) — label template name for Brother QL-820NWB
 **Rationale:** All three are operational constants that will need tuning. Storing them as configurable settings means no code change required when values need adjusting.
 
+## DEC-047 — Skip hamilton_pricing_rule_override on Item
+
+**Date:** 2026-04-09
+**Context:** Grok suggested adding hamilton_pricing_rule_override to Item to support the Under 25 discount trigger.
+**Decision:** Not added. The existing hamilton_is_admission field already identifies which items are admission items. The Under 25 custom POS button applies 50% to all items where hamilton_is_admission = 1. No additional flag needed.
+**Rationale:** hamilton_is_admission is sufficient. Adding a duplicate eligibility flag creates maintenance overhead with no benefit.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
