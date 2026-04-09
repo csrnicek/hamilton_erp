@@ -221,6 +221,9 @@ Naming: `VA-.####`
 | default_stay_duration_minutes | Int | Default 360 |
 | printer_ip_address | Data | Brother QL-820NWB IP |
 | printer_model | Data | |
+| grace_minutes | Int | Extra minutes after stay duration before overtime fires (default 15) |
+| assignment_timeout_minutes | Int | Minutes before paid-but-unassigned session is flagged for cleanup (default 15) |
+| printer_label_template_name | Data | Label template name for Brother QL-820NWB |
 
 ### Hamilton Board Correction (Child DocType for Shift Record)
 | Field | Type | Notes |
