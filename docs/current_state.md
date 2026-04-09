@@ -162,6 +162,7 @@ Naming: `VA-.####`
 | actual_count | Currency | Manager's blind count |
 | system_expected | Currency | Revealed only after submission |
 | operator_declared | Currency | From Cash Drop |
+| variance_amount | Currency | Auto-calculated: manager_actual - system_expected. Negative = short, positive = over. Revealed only after manager submits blind count. |
 | variance_flag | Select | Clean / Possible Theft or Error / Operator Mis-declared |
 | notes | Text | |
 | timestamp | Datetime | |
