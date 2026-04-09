@@ -214,6 +214,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Add `variance_amount` (Currency, read-only, auto-calculated) to Cash Reconciliation. Value = manager_actual_count minus system_expected. Negative = short, positive = over, zero = clean. Only revealed after manager submits their blind count — never shown before submission. Visible on the reconciliation screen, the Cash Reconciliation record, and any management reports.
 **Rationale:** Eliminates mental math during investigations. The -$263 in red jumps out instantly vs reading three separate numbers and calculating the difference.
 
+## DEC-040 — Post-Variance Workflow Deferred to Phase 3
+
+**Date:** 2026-04-09
+**Context:** After a manager flags a variance (theft, mis-declared, or over), what happens next? Investigation process, notifications, escalation path — these were not defined.
+**Decision:** Deferred to Phase 3 when the Manager Reconciliation screen is built. The screen will display the variance and flag; the investigation workflow will be defined then based on operational input from Hamilton.
+**Rationale:** Getting the data model and display right is Phase 0-3 work. The investigation process is an operational procedure that is best defined once the screen is in front of real managers.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
