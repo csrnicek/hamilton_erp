@@ -77,6 +77,45 @@ Document hooks set up via `hooks.py` can no longer commit a database transaction
 
 ---
 
+
+### 2.9 v16 POS is a Vue.js Single Page Application
+
+The ERPNext v16 POS is built as a Vue.js SPA. This has two consequences for Hamilton:
+
+- Custom extensions that modify the POS UI must inject Vue components or use `page_js` hooks — they cannot manipulate the DOM like a traditional page.
+- ERPNext updates can break UI injections. All POS UI extensions must be **loosely coupled** — use event hooks and realtime messages rather than direct DOM manipulation.
+
+For Hamilton, the asset assignment prompt is triggered via `frappe.publish_realtime` after Sales Invoice submission (server-side), not by directly modifying the POS Vue UI. This is the correct, upgrade-safe approach.
+
+### 2.10 v16 POS Uses pos_controller Events
+
+The POS controller hook pattern changed in v16. Use the following approach for POS-specific behavior:
+
+- Hook into `Sales Invoice` via `doc_events` on `on_submit` (already in §3.2) — this is the primary integration point.
+- Do **not** attempt to hook into POS-specific Vue controller methods directly.
+- For POS-specific behavior, prefer server-side hooks on Sales Invoice over client-side POS controller overrides.
+
+### 2.11 Row Locking: Use FOR NO KEY UPDATE, Not FOR UPDATE
+
+When locking rows for status changes, always use `FOR NO KEY UPDATE` instead of `FOR UPDATE`:
+
+- `FOR NO KEY UPDATE` acquires a lighter lock that does not block foreign key checks on child tables.
+- `FOR UPDATE` can cause unnecessary blocking of child table operations in MariaDB InnoDB.
+
+```python
+# CORRECT — use FOR NO KEY UPDATE in v16
+locked = frappe.db.sql(
+    "SELECT name, status, version FROM `tabVenue Asset` WHERE name = %s FOR NO KEY UPDATE",
+    self.name, as_dict=True
+)
+
+# WRONG — do not use FOR UPDATE unless FK child blocking is specifically required
+locked = frappe.db.sql(
+    "SELECT name FROM `tabVenue Asset` WHERE name = %s FOR UPDATE",
+    self.name, as_dict=True
+)
+```
+
 ## 3. Hooks — Extending Standard ERPNext
 
 Hooks are the primary mechanism for extending ERPNext without modifying core code. All hooks are defined in `hooks.py`.
@@ -768,3 +807,116 @@ env/
 10. **Do not omit forward-compatibility fields** because Hamilton doesn't use them yet
 11. **Do not call `frappe.db.commit()` inside doc_events hooks** — v16 prohibits this
 12. **Do not use `"*"` wildcard in doc_events** unless absolutely necessary — it fires on every DocType and hurts performance
+
+---
+
+## 13. Concurrency and Locking Standards
+
+These rules are mandatory for all `Venue Asset` status changes. Broken locking = double-booked rooms in production.
+
+### 13.1 Three-Layer Locking (Required for All Venue Asset Status Changes)
+
+Every status-changing operation on `Venue Asset` must use all three layers in order:
+
+1. **Redis advisory lock** — fast pre-check, prevents queuing at the DB level
+2. **MariaDB row lock** using `FOR NO KEY UPDATE` — strong DB integrity
+3. **Version field check** — catches any bypasses of layers 1 and 2
+
+### 13.2 Redis Lock Specification
+
+Use Frappe's built-in `frappe.cache()` (Redis) for advisory locks:
+
+- **Key format:** `hamilton:asset_lock:{asset_name}:{operation_suffix}` (e.g. `hamilton:asset_lock:Room-7:assign`)
+- **Lock TTL:** 15 seconds maximum (`px=15000`)
+- **Owner token:** `str(uuid.uuid4())` — unique per acquisition
+- **Acquire:** `cache.set(lock_key, token, nx=True, px=15000)` — atomic SET NX
+- **Release:** Lua script for atomic token-verified release — **never raw DELETE**
+
+Required Lua release script (copy exactly):
+```python
+RELEASE_SCRIPT = """
+if redis.call("GET", KEYS[1]) == ARGV[1] then
+    return redis.call("DEL", KEYS[1])
+else
+    return 0
+end
+"""
+cache.eval(RELEASE_SCRIPT, 1, lock_key, token)
+```
+
+If Redis lock cannot be acquired, throw a plain-language message:
+```python
+frappe.throw(
+    _("Asset {0} is being processed by another operator. Refresh the board and try again.").format(self.asset_name)
+)
+```
+
+### 13.3 Lock Section Rules — Critical
+
+The code inside a lock must be minimal. Locks are held for milliseconds, not seconds.
+
+**INSIDE a lock (allowed):**
+- Read current status from DB
+- Validate the transition
+- Update status field and save the document
+- Create Asset Status Log entry
+
+**NEVER inside a lock:**
+- Print a label
+- Send email or notification
+- Make external API calls
+- `frappe.enqueue()` calls
+- Any I/O operation
+- `frappe.publish_realtime()` — this must go **after** the lock releases
+
+### 13.4 Consistent Lock Ordering for Multiple Assets
+
+If an operation ever needs to lock more than one `Venue Asset` simultaneously (e.g., future bulk operations), always sort by `name` before locking to prevent deadlocks:
+
+```python
+assets_to_lock = sorted(asset_list, key=lambda a: a["name"])
+for asset in assets_to_lock:
+    with asset.lock_for_status_change():
+        # process
+```
+
+### 13.5 Frontend Retry Logic for Concurrency Failures
+
+When an assignment attempt fails due to a concurrency conflict, the Asset Board JS must:
+
+1. Show a plain-language message: "That room was just taken — the board is refreshing."
+2. Auto-refresh the asset board via the realtime channel.
+3. Allow the operator to try again — **do NOT auto-retry silently**.
+
+```javascript
+async function assignAsset(assetName, sessionName) {
+    try {
+        await frappe.call({
+            method: "hamilton_erp.hamilton_erp.doctype.venue_asset.venue_asset.assign_to_session",
+            args: { asset_name: assetName, session_name: sessionName },
+            freeze: true,
+            freeze_message: __("Assigning asset...")
+        });
+    } catch (err) {
+        if (err.message && err.message.includes("being processed")) {
+            frappe.show_alert({
+                message: __("That room was just taken — refreshing board..."),
+                indicator: "orange"
+            });
+            refreshAssetBoard();
+        } else {
+            frappe.msgprint(err.message);
+        }
+    }
+}
+```
+
+### 13.6 MariaDB Isolation Level Consideration
+
+Frappe uses `REPEATABLE READ` by default (MariaDB InnoDB default). If deadlocks appear during load testing (error 1213 in logs), set `READ COMMITTED` at the session level in the affected whitelisted method:
+
+```python
+frappe.db.sql("SET SESSION TRANSACTION ISOLATION LEVEL READ COMMITTED")
+```
+
+Do **not** set this globally — only per-session in the specific method where deadlocks are observed.
