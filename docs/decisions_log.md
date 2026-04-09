@@ -125,3 +125,60 @@ Records architectural and implementation decisions made during development. This
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
+
+## DEC-013 — Asset Pricing (HST-Inclusive)
+
+**Date:** 2026-04-09
+**Context:** Asset prices were TBD in the original spec.
+**Decision:** All prices are HST-inclusive (13% Ontario HST back-calculated):
+
+| Asset | Display Name | Price |
+|---|---|---|
+| Locker | Lckr | $29.00 |
+| Single Standard | Sing STD | $36.00 |
+| Deluxe Single | Sing DLX | $41.00 |
+| Glory Hole | Glory | $45.00 |
+| Double Deluxe | Dbl DLX | $47.00 |
+
+**Rationale:** Prices stored as ERPNext Item Price records — never hardcoded. Configurable by manager without code changes.
+
+---
+
+## DEC-014 — Pricing Rules: Locker Special and Under 25 Discount
+
+**Date:** 2026-04-09
+**Context:** Hamilton has two special pricing rules that needed full definition.
+**Decision:**
+
+**Locker Special — $17.00 flat price:**
+- Monday–Friday: 9:00 AM – 11:00 AM
+- Sunday–Thursday: 4:00 PM – 7:00 PM
+- Applies to Locker item only
+- Configured as ERPNext Pricing Rule with day/time validity
+
+**Under 25 Discount — 50% off:**
+- Applies to all asset types
+- Operator manually applies after confirming guest age by ID
+- Any time, any day
+- Does NOT stack with Locker Special — operator chooses one or the other
+- Configured as ERPNext Pricing Rule, manually triggered
+
+**Rationale:** Both rules configured as standard ERPNext Pricing Rules — no custom code needed. Configurable by manager without code changes. Non-stacking rule prevents double discounting.
+
+---
+
+## DEC-015 — All Prices and Rules Are Configurable, Never Hardcoded
+
+**Date:** 2026-04-09
+**Context:** Prices, asset inventory, and promotional rules will change over time and vary by venue.
+**Decision:** Nothing business-configurable is hardcoded:
+- Asset prices → ERPNext Item Price records
+- Asset inventory → Venue Asset DocType records
+- Promotions → ERPNext Pricing Rules
+- Float, stay duration, printer IP → Hamilton Settings DocType
+
+**Rationale:** Managers can change prices, add assets, or modify specials without any code changes or developer involvement.
+
+---
+
+*Add new decisions below this line. Use the next sequential number.*
