@@ -75,7 +75,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | Field | Reviewer | Status | Action |
 |---|---|---|---|
 | cash_drop, manager, amounts, variance_flag | All | ✅ Current state | None |
-| variance_amount (explicit Currency field) | ChatGPT | ⚠️ | Pending Chris confirmation |
+| variance_amount (explicit Currency field) | ChatGPT | ⚠️ | Mockup reviewed — pending Chris decision |
 | resolved_by, resolution_status | ChatGPT | ❌ | Decision needed |
 | direct shift_record link | ChatGPT | ❌ | Can reach via cash_drop — decide if direct needed |
 
