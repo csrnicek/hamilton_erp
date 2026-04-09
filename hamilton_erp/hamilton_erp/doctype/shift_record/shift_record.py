@@ -16,4 +16,4 @@ class ShiftRecord(Document):
 
 	def _validate_shift_end(self):
 		if self.shift_end and self.shift_start and self.shift_end < self.shift_start:
-			frappe.throw(_("Shift End cannot be earlier than Shift Start."))
+			frappe.throw(_("Shift end time cannot be before shift start time."))

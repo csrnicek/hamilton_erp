@@ -2,8 +2,8 @@
 
 Living tracker of what has been built, what is in progress, and what is blocked. Update this file after each work session.
 
-**Last updated:** 2026-04-08  
-**Current phase:** Phase 0 complete — scaffold built, DocTypes defined, roles configured
+**Last updated:** 2026-04-08 (post-testing hardening)
+**Current phase:** Phase 0 complete and hardened — scaffold, DocTypes, roles, controllers, and tests all clean across 6 testing runs + false-positive audit
 
 ---
 
@@ -130,6 +130,37 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | H20 | Auto-Applied Promotion | — | 2 |
 | H21 | No Promotion Active | — | 2 |
 | H22 | Record Structure Integrity | — | 4 (partially tested in test_venue_session.py) |
+
+---
+
+## Post-Scaffold Hardening (completed 2026-04-08)
+
+A six-pass testing cycle (52 methods per pass) plus a dedicated false-positive audit was run against all Phase 0 code after the initial scaffold. All findings were fixed. Summary of changes made:
+
+| Fix | File(s) | Decision |
+|---|---|---|
+| `cash_reconciliation.json` + `venue_session.json` missing `is_submittable: 1` — `before_submit`/`on_submit` hooks never fired | Both JSON files | DEC-008 |
+| `install.py` missing `submit=1` for Hamilton Manager on Venue Session | `setup/install.py` | DEC-010 |
+| Variance flag fallthrough: `system≈operator, manager short` returned "Operator Mis-declared" instead of "Possible Theft or Error" | `cash_reconciliation.py` | DEC-009 |
+| `display_order` had no default — NULL values sort non-deterministically in MySQL | `venue_asset.json` | DEC-011 |
+| `get_asset_board_data` order_by missing `name asc` tiebreaker | `api.py` | §9.5 |
+| `get_current_shift_record` order_by missing `name asc` tiebreaker | `utils.py` | §9.5 |
+| `test_cash_reconciliation.py` `get_all` missing `order_by` | test file | §2.4 |
+| `cash_reconciliation.json` `timestamp` field `reqd=0` — only sort-by-timestamp DocType without reqd | `cash_reconciliation.json` | §9.5 |
+| `comp_admission_log.json` operator had `write=0` — contradicted `operator_rw_doctypes` in `install.py` | `comp_admission_log.json` | §8.3 |
+| `asset_status_log.json` operator had `create=1` — contradicted read-only audit log intent | `asset_status_log.json` | §8.3 |
+| `test_operator_cannot_access_cash_reconciliation` passed vacuously on fresh sites (zero assertions) | test file | DEC-013 |
+| `get_next_drop_number(None)` silently counted null-shift drops instead of failing | `utils.py` | DEC-012 |
+| `hooks.py` missing `override_doctype_class` — HamiltonSalesInvoice was dead code | `hooks.py` | — |
+| `_ensure_role_permission` silently skipped updates on existing wrong rows | `setup/install.py` | — |
+| No `submit=1` parameter on `_ensure_role_permission` — manager couldn't submit Cash Reconciliation | `setup/install.py` | — |
+| Asset Status Log operator had `write=1, create=1` — operators could fabricate audit entries | `setup/install.py` | §8.3 |
+| Locker tier not cleared on save | `venue_asset.py` | — |
+| Zero OOS tests in test suite | `test_venue_asset.py` | — |
+| `_REASON_REQUIRED_STATES` constant was wrong dead code | `asset_status_log.py` | — |
+| `_mark_drop_reconciled` was in `before_submit` (ran before commit) | `cash_reconciliation.py` | §2.8 |
+
+**Test count after hardening:** 32 tests across 7 DocTypes. All pass. All use `IntegrationTestCase` + `tearDown` rollback. Zero duplicate fixture names.
 
 ---
 

@@ -26,4 +26,4 @@ class VenueSession(Document):
 	def _validate_session_end(self):
 		"""Session end must be after session start."""
 		if self.session_end and self.session_start and self.session_end < self.session_start:
-			frappe.throw(_("Session End cannot be earlier than Session Start."))
+			frappe.throw(_("Check-out time cannot be before check-in time."))

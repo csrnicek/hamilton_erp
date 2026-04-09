@@ -58,6 +58,7 @@
    "fieldtype": "Column Break"
   },
   {
+   "default": "0",
    "fieldname": "display_order",
    "fieldtype": "Int",
    "label": "Display Order",

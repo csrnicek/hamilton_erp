@@ -3,8 +3,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
-# States that require a reason for audit completeness.
-_REASON_REQUIRED_STATES = {"Out of Service", "Available"}
+# Transitions involving Out of Service (to or from) require a mandatory reason.
+_OOS_STATE = "Out of Service"
 
 
 class AssetStatusLog(Document):
@@ -19,10 +19,10 @@ class AssetStatusLog(Document):
 	def _require_reason_for_oos_transitions(self):
 		"""Reason is mandatory when transitioning to or from Out of Service."""
 		involves_oos = (
-			self.new_status == "Out of Service"
-			or self.previous_status == "Out of Service"
+			self.new_status == _OOS_STATE
+			or self.previous_status == _OOS_STATE
 		)
 		if involves_oos and not self.reason:
 			frappe.throw(
-				_("A reason is required when marking an asset Out of Service or returning it to service.")
+				_("Please enter a reason. A reason is required for all Out of Service changes.")
 			)

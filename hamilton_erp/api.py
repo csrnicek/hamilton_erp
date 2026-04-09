@@ -11,45 +11,35 @@ from frappe import _
 def on_sales_invoice_submit(doc, method):
 	"""After POS Sales Invoice is submitted, check for admission items.
 
-	If the cart contains an admission item (hamilton_is_admission = 1) the
-	custom asset-assignment flow is triggered via a realtime event so the
-	operator can select a room or locker.  Retail-only sales pass through
-	untouched.
+	`doc` is a HamiltonSalesInvoice instance (registered via override_doctype_class
+	in hooks.py), so the Hamilton-specific helper methods are available directly.
+
+	If the cart contains an admission item, the custom asset-assignment flow is
+	triggered via a realtime event so the operator can select a room or locker.
+	Retail-only sales pass through untouched.
 
 	NOTE: Do not call frappe.db.commit() here — v16 prohibits commits inside
-	doc_events hooks.
-	"""
-	has_admission = any(
-		item.get("hamilton_is_admission") for item in doc.items
-	)
-	if not has_admission:
-		return
+	doc_events hooks (coding_standards.md §2.8).
 
-	admission_category = _get_admission_category(doc)
+	Realtime payload contract:
+	  event:    "show_asset_assignment"
+	  payload:  {"invoice": str, "category": "Room"|"Locker", "is_comp": bool}
+	"""
+	if not doc.has_admission_item():
+		return
 
 	# Trigger the asset-assignment overlay on the operator's terminal.
 	# after_commit=True ensures the client receives the event only after
 	# the Sales Invoice transaction has committed to the database.
 	frappe.publish_realtime(
 		"show_asset_assignment",
-		{"invoice": doc.name, "category": admission_category, "is_comp": _is_comp_admission(doc)},
+		{
+			"invoice": doc.name,
+			"category": doc.get_admission_category() or "Room",
+			"is_comp": doc.has_comp_admission(),
+		},
 		user=frappe.session.user,
 		after_commit=True,
-	)
-
-
-def _get_admission_category(doc) -> str:
-	"""Return the asset category (Room/Locker) from the first admission item."""
-	for item in doc.items:
-		if item.get("hamilton_is_admission"):
-			return item.get("hamilton_asset_category") or "Room"
-	return "Room"
-
-
-def _is_comp_admission(doc) -> bool:
-	"""Return True if any admission item in the invoice is a comp."""
-	return any(
-		item.get("hamilton_is_comp") for item in doc.items if item.get("hamilton_is_admission")
 	)
 
 
@@ -73,7 +63,7 @@ def get_asset_board_data() -> dict:
 			"expected_stay_duration",
 			"display_order",
 		],
-		order_by="asset_category asc, display_order asc",
+		order_by="asset_category asc, display_order asc, name asc",
 	)
 	return {"assets": assets}
 
@@ -86,5 +76,5 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	and transitions the asset to Occupied.  Phase 2 implementation.
 	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
-	# Full implementation in Phase 2.
-	frappe.throw(_("Phase 2 not yet implemented"))
+	# Phase 2 not yet built. This endpoint must not be exposed in any UI until Phase 2 ships.
+	frappe.throw(_("This feature is not yet available. Please contact your manager."))

@@ -43,15 +43,21 @@ class VenueAsset(Document):
 		valid = self._valid_transitions()
 		if self.status not in valid.get(old_status, []):
 			frappe.throw(
-				_("Cannot transition Venue Asset {0} from {1} to {2}.").format(
+				_("'{0}' is currently {1} and cannot be changed to {2} from here. "
+				  "Use the asset board to update room and locker status.").format(
 					self.asset_name, old_status, self.status
 				)
 			)
 
 	def _validate_tier_for_room(self):
-		"""Rooms must have a tier; lockers must not."""
+		"""Rooms must have a tier. Lockers must not — clear any accidentally set value."""
 		if self.asset_category == "Room" and not self.asset_tier:
-			frappe.throw(_("Asset Tier is required for Room assets."))
+			frappe.throw(_("Please select a Room Tier (Standard or Deluxe) before saving."))
+		elif self.asset_category == "Locker" and self.asset_tier:
+			# Lockers are single-tier. Silently clear any accidentally set value
+			# rather than throwing, as this is a configuration mistake not an
+			# operational error.
+			self.asset_tier = ""
 
 	@staticmethod
 	def _valid_transitions() -> dict:

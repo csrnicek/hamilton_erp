@@ -36,10 +36,19 @@ fixtures = [
 after_install = "hamilton_erp.setup.install.after_install"
 
 # ---------------------------------------------------------------------------
+# Override classes — extend standard ERPNext DocType classes
+# ---------------------------------------------------------------------------
+# HamiltonSalesInvoice adds has_admission_item(), get_admission_category(),
+# and has_comp_admission() as reusable methods on the document object.
+# The doc_event hook below receives a HamiltonSalesInvoice instance as `doc`.
+
+override_doctype_class = {
+	"Sales Invoice": "hamilton_erp.overrides.sales_invoice.HamiltonSalesInvoice",
+}
+
+# ---------------------------------------------------------------------------
 # doc_events — hooked into standard ERPNext DocType lifecycle
 # ---------------------------------------------------------------------------
-# Phase 2 wires this up fully. Stub is declared here so hooks.py is complete
-# from Phase 0 onward and the handler exists to accept the call.
 
 doc_events = {
 	"Sales Invoice": {

@@ -2,6 +2,12 @@
 
 Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be functional and testable before moving to the next.
 
+**Universal exit criteria for every phase:**
+1. Every error message that can reach an operator screen must be reviewed against the plain-language standard in `coding_standards.md §8.4`. No phase is complete while any error message contains developer terms, stack traces, or placeholder text.
+2. The 18-method pre-commit checklist (`coding_standards.md §9.5`) must pass with zero findings.
+3. The false-positive audit (`coding_standards.md §9.6`) must pass with zero findings.
+4. All decisions made or patterns established during the phase must be recorded in `decisions_log.md` and `current_state.md` before the phase is closed.
+
 ---
 
 ## Phase 0: Foundation
@@ -42,6 +48,9 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 - All DocTypes visible in desk with correct fields
 - No migration errors or missing columns
 - Fixtures export/import cleanly on a second test site
+
+### Status: COMPLETE (2026-04-08)
+All deliverables built and hardened. 32 unit tests passing. 19 bugs found and fixed across six testing passes plus a false-positive audit. All decisions recorded in `decisions_log.md` (DEC-001 through DEC-013). See `current_state.md` for full change log.
 
 ---
 

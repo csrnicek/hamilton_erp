@@ -240,6 +240,7 @@
   }
  ],
  "index_web_pages_for_search": 0,
+ "is_submittable": 1,
  "links": [],
  "modified": "2026-04-08 00:00:00.000000",
  "modified_by": "Administrator",
@@ -270,6 +271,7 @@
    "report": 1,
    "role": "Hamilton Manager",
    "share": 1,
+   "submit": 1,
    "write": 1
   }
  ],
