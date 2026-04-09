@@ -237,6 +237,13 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Add `shift_record` (Link → Shift Record) directly on Cash Reconciliation. Auto-populated when reconciliation is created. Developer implementation decision — no operational impact.
 **Rationale:** Faster report queries. Zero schema cost now. Would require a migration patch if added later.
 
+## DEC-043 — Skip opening_float_declared_by on Shift Record
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested tracking who physically counted the float at shift start.
+**Decision:** Not added. At Hamilton, the operator on shift IS always the person who counts the float. The existing `operator` field on Shift Record already captures this. Redundant at a single-operator venue.
+**Rationale:** Adds no information at Hamilton. Can be revisited if a venue ever has multiple staff counting floats separately.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
