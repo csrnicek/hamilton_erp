@@ -165,6 +165,8 @@ Naming: `VA-.####`
 | variance_amount | Currency | Auto-calculated: manager_actual - system_expected. Negative = short, positive = over. Revealed only after manager submits blind count. |
 | variance_flag | Select | Clean / Possible Theft or Error / Operator Mis-declared |
 | notes | Text | |
+| resolved_by | Link → User | Manager who signed off investigation — null until resolved |
+| resolution_status | Select | Open / Resolved / Dismissed / Escalated — null until actioned |
 | timestamp | Datetime | |
 
 ### Asset Status Log
