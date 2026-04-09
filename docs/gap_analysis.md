@@ -142,7 +142,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 | system_expected calculation method | Grok/ChatGPT | ✅ DEC-049 | Cash sales in drop period only. Float confirmed separately at start/end of shift. |
 | system_expected freezing — when exactly? | ChatGPT | ❌ | Add to reconciliation spec |
 | Refunds after drop affect reconciliation | Grok/ChatGPT | ❌ | Add to reconciliation spec |
-| Comp admissions must NOT affect cash totals | Grok | ❌ | Add to reconciliation spec |
+| Comp admissions must NOT affect cash totals | Grok | ✅ DEC-052 | Already handled — $0 comp invoices contribute $0 to cash formula |
 | Variance workflow — what happens after flag? | ChatGPT | ❌ | Add to manager workflow spec |
 
 ---
