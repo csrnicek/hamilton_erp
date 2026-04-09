@@ -68,7 +68,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | shift_record (Link) | Grok/ChatGPT | ✅ Current state | None |
 | pos_closing_entry (Link) | Grok/ChatGPT | ✅ Current state | None |
-| payment_mode_breakdown | ChatGPT | ⚠️ | In progress — operator enters cash + card at shift close |
+| payment_mode_breakdown | ChatGPT | ⚠️ | In progress — shift close shows operator their own declared drops + running total; card terminal total entered at close |
 | sealed_by, witnessed_by, bag_number | ChatGPT | ✅ DEC-037 | Not added — single operator, no witness, label TBD Phase 3 |
 
 ### Cash Reconciliation
