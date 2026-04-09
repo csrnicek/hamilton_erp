@@ -3,42 +3,38 @@
 Living tracker of what has been built, what is in progress, and what is blocked.
 
 **Last updated:** 2026-04-09
-**Current phase:** Pre–Phase 0 (Project setup — nothing built yet)
+**Current phase:** Pre–Phase 0 (Ready to start coding)
 
 ---
 
 ## ⚠️ SESSION PROTOCOL — READ FIRST
 
-**Every conversation in this project must update this file before ending.**
-
-At the end of each session, produce an updated `current_state.md` and tell the user:
-> "Here is the updated `current_state.md` — please replace the version in your Project knowledge base with this file."
-
-Update frequency: any session longer than ~1 hour should also checkpoint mid-session.
-
-What to update each session:
-- Change statuses in all tables (— → In Progress → Done)
-- Add any new blockers or resolved blockers
-- Add any new decisions to `decisions_log.md` (and note them here)
-- Update "Last updated" date and "Current phase"
-- Note what was worked on and what to pick up next under "Session Notes"
+**Every conversation in this project must:**
+1. Read all docs from https://github.com/csrnicek/hamilton_erp/tree/main/docs at session start
+2. Push updated `.md` files to GitHub every hour during the session
+3. Push all code immediately after writing it
+4. Update this file and push before closing out
 
 ---
 
 ## Session Notes
 
 ### 2026-04-09 (this session)
-- Diagnosed why conversations feel disconnected: each chat is separate by design; the fix is disciplined end-of-session file updates
-- Established the session update protocol above
-- Confirmed: hosting decision is **Frappe Cloud, Hetzner Ashburn (Virginia), dedicated plan ~$40/mo**
-- No code has been written yet — still Pre-Phase 0
-- **Next session should start Phase 0: app scaffold**
+- Established GitHub as single source of truth (DEC-012)
+- Removed all files from Claude Project knowledge base
+- Added Project Instructions to auto-read from GitHub each session
+- Recovered asset inventory, stay durations, float, and label printer decisions from previous chat
+- Confirmed local path: `/Users/chrissrnicek/hamilton_erp`
+- **Blockers #2, #3, #4, #5 all resolved** — see below
+- **Still outstanding:** Asset pricing (room/locker prices) and retail item list with prices — Chris to provide
+- **Next session:** Once pricing received, update docs then start Phase 0 app scaffold
 
 ### 2026-04-08
-- Created all 5 project `.md` files: `build_phases.md`, `decisions_log.md`, `current_state.md`, `coding_standards.md`, `reference_links.md`
-- Recorded DEC-001 through DEC-007 in decisions log
-- Deep-dive research on Frappe/ERPNext best practices — findings incorporated into `coding_standards.md` and `reference_links.md`
-- Hosting decision made: Frappe Cloud Hetzner Ashburn Virginia dedicated plan
+- Created all 5 project `.md` files
+- Recorded DEC-001 through DEC-011
+- Deep-dive research on Frappe/ERPNext best practices
+- Hosting decision: Frappe Cloud, Hetzner Ashburn Virginia, ~$40/mo
+- Resolved asset inventory, stay durations, float, label printer
 
 ---
 
@@ -46,7 +42,7 @@ What to update each session:
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0: Foundation | Not started | App scaffold, DocTypes, roles, permissions |
+| Phase 0: Foundation | Not started | Ready to begin once pricing confirmed |
 | Phase 1: Asset Board & Sessions | Not started | — |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
@@ -59,11 +55,40 @@ What to update each session:
 
 | Item | Status | Notes |
 |---|---|---|
-| ERPNext v16 development environment | Not set up | Docker or native bench — developer's choice (see `reference_links.md` §5) |
-| GitHub repository created | Not created | Repo name: `hamilton_erp` — create before Phase 0 coding starts |
-| Developer Mode enabled on site | Pending | Requires `bench set-config developer_mode 1` after site creation |
-| Project knowledge files in Claude Project | ✅ Done | All 5 `.md` files uploaded; session update protocol now in place |
-| Hosting platform decided | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, dedicated ~$40/mo |
+| ERPNext v16 development environment | Not set up | Docker or native bench |
+| GitHub repository | ✅ Done | https://github.com/csrnicek/hamilton_erp (private) |
+| Local repo path | ✅ Done | `/Users/chrissrnicek/hamilton_erp` |
+| Developer Mode enabled on site | Pending | After site creation |
+| Project knowledge files | ✅ Done | All in `/docs/` on GitHub. Claude reads from GitHub. |
+| Hosting platform | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, ~$40/mo |
+
+---
+
+## Hamilton Asset Inventory (CONFIRMED)
+
+| Asset Type | Count | Display Name | Tier Name | Stay Duration |
+|---|---|---|---|---|
+| Locker | 33 | Lckr | Locker | 6 hours |
+| Room | 11 | Sing STD | Single Standard | 6 hours |
+| Room | 10 | Sing DLX | Deluxe Single | 6 hours |
+| Room | 2 | Glory | Glory Hole | 6 hours |
+| Room | 3 | Dbl DLX | Double Deluxe | 6 hours |
+| **Total** | **59** | | | |
+
+**Float:** $200 (configurable per venue)
+**Label Printer:** Brother QL-820NWB, network WiFi, IP configurable
+
+---
+
+## Asset Pricing (OUTSTANDING — needed before Phase 0)
+
+| Asset | Price (HST-inclusive) |
+|---|---|
+| Lckr | ⏳ TBD |
+| Sing STD | ⏳ TBD |
+| Sing DLX | ⏳ TBD |
+| Glory | ⏳ TBD |
+| Dbl DLX | ⏳ TBD |
 
 ---
 
@@ -72,7 +97,7 @@ What to update each session:
 | DocType | Schema Defined | Controller Built | Tests Written | Notes |
 |---|---|---|---|---|
 | Venue Asset | — | — | — | |
-| Venue Session | — | — | — | Must include all V5.4 forward-compat fields (DEC-007) |
+| Venue Session | — | — | — | Must include all V5.4 forward-compat fields |
 | Cash Drop | — | — | — | |
 | Cash Reconciliation | — | — | — | |
 | Asset Status Log | — | — | — | |
@@ -87,10 +112,10 @@ What to update each session:
 |---|---|---|---|
 | Item | `hamilton_is_admission` | — | Check field |
 | Item | `hamilton_asset_category` | — | Select: Room / Locker |
-| Item | `hamilton_asset_tier` | — | Select: Standard / Deluxe / etc. |
+| Item | `hamilton_asset_tier` | — | Select: Locker / Single Standard / Deluxe Single / Glory Hole / Double Deluxe |
 | Item | `hamilton_is_comp` | — | Check field |
 | Sales Invoice | `hamilton_venue_session` | — | Link to Venue Session |
-| Sales Invoice | `hamilton_comp_reason` | — | Text — comp reason |
+| Sales Invoice | `hamilton_comp_reason` | — | Text |
 
 ---
 
@@ -99,8 +124,8 @@ What to update each session:
 | Page | Status | Notes |
 |---|---|---|
 | Asset Board | — | Primary custom UI |
-| Asset Assignment Prompt | — | Post-POS overlay showing available assets |
-| Cash Drop Screen | — | Blind — no expected totals shown ever |
+| Asset Assignment Prompt | — | Post-POS overlay |
+| Cash Drop Screen | — | Blind — no expected totals ever |
 | Shift Start | — | Float verify + board confirm |
 | Shift Close | — | Final drop + POS Closing auto-creation |
 | Manager Reconciliation | — | Blind entry then reveal |
@@ -111,12 +136,12 @@ What to update each session:
 
 | Configuration | Status | Notes |
 |---|---|---|
-| POS Profile (Hamilton) | — | Payment methods, default customer, item groups |
-| Items — Admission types | — | Standard Room, Deluxe Room, Locker, Comp variants |
-| Items — Retail | — | 25+ items (drinks, snacks, towels, supplies) — list TBD |
+| POS Profile (Hamilton) | — | — |
+| Items — Admission types | — | Lckr, Sing STD, Sing DLX, Glory, Dbl DLX + comp variants |
+| Items — Retail | — | 25+ items — list pending |
 | Item Tax Template — HST Taxable | — | 13% Ontario HST, tax-inclusive |
 | Item Tax Template — HST Exempt | — | 0% |
-| Pricing Rules (promos) | — | At least one test promo for QA — definitions TBD |
+| Pricing Rules (promos) | — | Definitions pending |
 | Mode of Payment — Card | — | No integration; operator confirms manually |
 | Mode of Payment — Cash | — | Standard |
 | Default Customer — Walk-in | — | Standard POS anonymous customer |
@@ -124,49 +149,21 @@ What to update each session:
 
 ---
 
-## QA Test Cases (Build Spec §15)
-
-| Test | Description | Status | Phase |
-|---|---|---|---|
-| H1 | Standard Room Check-in | — | 2 |
-| H2 | Standard Locker Check-in | — | 2 |
-| H3 | Check-in with Retail Items | — | 2 |
-| H4 | Cancel Mid-Transaction | — | 2 |
-| H5 | Comp Admission | — | 2 |
-| H6 | Standalone Retail Sale | — | 2 |
-| H7 | Tax Handling | — | 2 |
-| H8 | Line-Item Refund | — | 4 |
-| H9 | Full Transaction Refund | — | 4 |
-| H10 | Vacate and Turnover | — | 1 |
-| H11 | Out of Service | — | 1 |
-| H12 | Occupied Asset Rejection | — | 1 |
-| H13 | Mid-Shift Cash Drop | — | 3 |
-| H14 | End-of-Shift Close-out | — | 3 |
-| H15 | Manager Reconciliation (Clean) | — | 3 |
-| H16 | Manager Reconciliation (Variance) | — | 3 |
-| H17 | Operator Cannot Access POS Closing | — | 3 |
-| H18 | Shift Start with Float Variance | — | 3 |
-| H19 | Shift Start Board Correction | — | 3 |
-| H20 | Auto-Applied Promotion | — | 2 |
-| H21 | No Promotion Active | — | 2 |
-| H22 | Record Structure Integrity | — | 4 |
-
----
-
 ## Blockers and Open Questions
 
 | # | Question / Blocker | Status | Resolution |
 |---|---|---|---|
-| 1 | GitHub repo URL | Open | Create repo, update `reference_links.md` §6 |
-| 2 | Room count and tier names | Open | TBD during setup |
-| 3 | Expected stay durations (rooms + lockers) | Open | Values TBD per spec §13 |
-| 4 | Fixed float amount | Open | Example $200 — confirm actual with Hamilton |
-| 5 | Label printer model | Open | Dymo or Brother — decide in Phase 3 |
-| 6 | Retail item list (25+ items) | Open | Need complete list with prices and tax status |
-| 7 | Promotional pricing rules | Open | Need specific promo definitions (days, discount amount) |
-| 8 | Comp admission reason categories | Open | Spec lists: Loyalty Card / Promo / Manager Decision / Other — confirm |
-| 9 | Dev environment setup | Open | Docker or native bench — developer's choice |
+| 1 | GitHub repo URL | ✅ Resolved | https://github.com/csrnicek/hamilton_erp |
+| 2 | Room count and tier names | ✅ Resolved | 5 tiers, 59 total — see asset inventory above |
+| 3 | Expected stay durations | ✅ Resolved | 6 hours all asset types |
+| 4 | Fixed float amount | ✅ Resolved | $200, configurable per venue |
+| 5 | Label printer model | ✅ Resolved | Brother QL-820NWB, network print |
+| 6 | Retail item list (25+ items) | ⏳ Open | Chris to provide with prices and tax status |
+| 7 | Asset pricing | ⏳ Open | Chris to provide HST-inclusive prices for all 5 tiers |
+| 8 | Promotional pricing rules | ⏳ Open | Need specific promo definitions (days, discount) |
+| 9 | Comp admission reason categories | ⏳ Open | Spec lists: Loyalty Card / Promo / Manager Decision / Other — confirm |
+| 10 | Dev environment setup | ⏳ Open | Docker or native bench |
 
 ---
 
-*This file is the source of truth for project status. Replace in Claude Project knowledge base after every session.*
+*GitHub is the single source of truth. Push after every session.*
