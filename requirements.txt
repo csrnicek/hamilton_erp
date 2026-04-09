@@ -1,2 +1,0 @@
-# Runtime dependencies are managed through ERPNext/Frappe.
-# List only direct third-party dependencies that are NOT part of the Frappe stack.
