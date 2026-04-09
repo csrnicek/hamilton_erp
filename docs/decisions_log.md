@@ -258,6 +258,16 @@ The shift close screen shows the operator their OWN declared drop amounts as a r
 **Decision:** Not added. The reason is already fully captured by existing fields: reason_category (Loyalty Card / Promo / Manager Decision / Other) and reason_note (mandatory free text for Other). At Hamilton, the operator on shift IS the authoriser. No separate approval field needed.
 **Rationale:** Redundant at a single-operator venue. Existing reason fields already explain why the admission was free.
 
+## DEC-046 — Add grace_minutes, assignment_timeout_minutes, printer_label_template_name to Hamilton Settings
+
+**Date:** 2026-04-09
+**Context:** Three configurable system constants needed for overtime detection, session cleanup, and label printing.
+**Decision:** Add to Hamilton Settings DocType:
+- `grace_minutes` (Int, default 15) — extra minutes after stay duration before overtime indicator fires on asset board
+- `assignment_timeout_minutes` (Int, default 15) — minutes before a paid-but-unassigned session is flagged by cleanup job
+- `printer_label_template_name` (Data) — label template name for Brother QL-820NWB
+**Rationale:** All three are operational constants that will need tuning. Storing them as configurable settings means no code change required when values need adjusting.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
