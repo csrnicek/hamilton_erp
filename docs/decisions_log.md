@@ -122,6 +122,13 @@ Records architectural and implementation decisions made during development. This
 **Decision:** GitHub repo (`https://github.com/csrnicek/hamilton_erp`) is the single source of truth. All `.md` files live in `/docs/`. Local filesystem is the working copy — push to GitHub to make it official. Claude Project knowledge base contains no uploaded files; Claude reads from GitHub at session start via Chrome browser tool.
 **Rationale:** One source of truth eliminates confusion. Git provides version history. Claude's Project Instructions enforce the read-from-GitHub habit at session start.
 
+## DEC-030 — Immutable asset_code Field on Venue Asset
+
+**Date:** 2026-04-09
+**Context:** Room layouts change and rooms can be renamed over time (e.g., Glory Hole rooms didn't exist 2 years ago). Historical records (Venue Session, Asset Status Log) must always point to the correct physical asset even after a rename.
+**Decision:** Add `asset_code` (Data, unique, read-only after creation) to Venue Asset. Set once at creation and never changed. Format: `R001`–`R999` for rooms, `L001`–`L999` for lockers. The `asset_name` field remains the display name shown on POS and asset board and can be freely changed.
+**Rationale:** Without an immutable identifier, renaming "Room 7" to "VIP Suite" would make historical records ambiguous. The asset_code provides a permanent reference that survives any renames or layout changes.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
