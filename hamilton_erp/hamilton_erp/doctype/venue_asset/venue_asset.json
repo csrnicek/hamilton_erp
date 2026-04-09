@@ -1,32 +1,56 @@
 {
  "actions": [],
- "autoname": "field:asset_name",
+ "autoname": "VA-.####",
  "creation": "2026-04-08 00:00:00.000000",
- "docstatus": 0,
  "doctype": "DocType",
- "document_type": "Document",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "section_identity",
+  "asset_code",
   "asset_name",
   "asset_category",
   "asset_tier",
+  "column_break_identity",
   "status",
-  "col_break_1",
-  "display_order",
+  "current_session",
+  "is_active",
+  "company",
+  "section_operations",
   "expected_stay_duration",
-  "location",
-  "current_session"
+  "display_order",
+  "column_break_operations",
+  "hamilton_last_status_change",
+  "last_vacated_at",
+  "last_cleaned_at",
+  "section_out_of_service",
+  "reason",
+  "section_system",
+  "version"
  ],
  "fields": [
   {
+   "fieldname": "section_identity",
+   "fieldtype": "Section Break",
+   "label": "Identity"
+  },
+  {
+   "description": "Immutable unique code set at creation — never changes (e.g. R001, L001). Survives renames.",
+   "fieldname": "asset_code",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Asset Code",
+   "read_only_depends_on": "eval:!doc.__islocal",
+   "reqd": 1,
+   "unique": 1
+  },
+  {
    "bold": 1,
+   "description": "Display name shown on POS and asset board — can be changed.",
    "fieldname": "asset_name",
    "fieldtype": "Data",
    "in_list_view": 1,
    "label": "Asset Name",
-   "reqd": 1,
-   "unique": 1
+   "reqd": 1
   },
   {
    "fieldname": "asset_category",
@@ -34,15 +58,21 @@
    "in_list_view": 1,
    "label": "Asset Category",
    "options": "Room\nLocker",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "asset_tier",
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Asset Tier",
-   "options": "\nStandard\nDeluxe",
-   "description": "Required for Rooms; leave blank for Lockers."
+   "options": "Locker\nSingle Standard\nDeluxe Single\nGlory Hole\nDouble Deluxe",
+   "reqd": 1,
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_identity",
+   "fieldtype": "Column Break"
   },
   {
    "default": "Available",
@@ -51,47 +81,110 @@
    "in_list_view": 1,
    "label": "Status",
    "options": "Available\nOccupied\nDirty\nOut of Service",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
-   "fieldname": "col_break_1",
-   "fieldtype": "Column Break"
-  },
-  {
-   "default": "0",
-   "fieldname": "display_order",
-   "fieldtype": "Int",
-   "label": "Display Order",
-   "description": "Controls tile order on the asset board. Lower numbers appear first."
-  },
-  {
-   "fieldname": "expected_stay_duration",
-   "fieldtype": "Int",
-   "label": "Expected Stay Duration (minutes)",
-   "description": "Overtime overlay appears on the asset board when a session exceeds this duration."
-  },
-  {
-   "fieldname": "location",
-   "fieldtype": "Link",
-   "label": "Location (Company)",
-   "options": "Company"
-  },
-  {
+   "description": "Populated automatically when a session is active. Do not set manually.",
    "fieldname": "current_session",
    "fieldtype": "Link",
    "label": "Current Session",
    "options": "Venue Session",
-   "read_only": 1,
-   "description": "Populated automatically when a session is active. Do not set manually."
+   "read_only": 1
+  },
+  {
+   "default": "1",
+   "fieldname": "is_active",
+   "fieldtype": "Check",
+   "label": "Is Active"
+  },
+  {
+   "description": "Required for ERPNext multi-company support.",
+   "fieldname": "company",
+   "fieldtype": "Link",
+   "label": "Company",
+   "options": "Company"
+  },
+  {
+   "fieldname": "section_operations",
+   "fieldtype": "Section Break",
+   "label": "Operations"
+  },
+  {
+   "default": "360",
+   "description": "Minutes. Overtime overlay appears on the asset board when a session exceeds this duration.",
+   "fieldname": "expected_stay_duration",
+   "fieldtype": "Int",
+   "label": "Expected Stay Duration"
+  },
+  {
+   "default": "0",
+   "description": "Controls tile order on the asset board. Lower numbers appear first.",
+   "fieldname": "display_order",
+   "fieldtype": "Int",
+   "label": "Display Order",
+   "search_index": 1
+  },
+  {
+   "fieldname": "column_break_operations",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Read-only. Set automatically on every status change.",
+   "fieldname": "hamilton_last_status_change",
+   "fieldtype": "Datetime",
+   "label": "Last Status Change",
+   "read_only": 1
+  },
+  {
+   "description": "Set when Occupied → Dirty. Drives \"Dirty since X\" display on board.",
+   "fieldname": "last_vacated_at",
+   "fieldtype": "Datetime",
+   "label": "Last Vacated At",
+   "read_only": 1
+  },
+  {
+   "description": "Set when Dirty → Available. Shows how recently room was turned over.",
+   "fieldname": "last_cleaned_at",
+   "fieldtype": "Datetime",
+   "label": "Last Cleaned At",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_out_of_service",
+   "fieldtype": "Section Break",
+   "label": "Out of Service",
+   "depends_on": "eval:doc.status === 'Out of Service'"
+  },
+  {
+   "description": "Mandatory when status is Out of Service.",
+   "fieldname": "reason",
+   "fieldtype": "Text",
+   "label": "Reason",
+   "mandatory_depends_on": "eval:doc.status === 'Out of Service'"
+  },
+  {
+   "fieldname": "section_system",
+   "fieldtype": "Section Break",
+   "label": "System",
+   "collapsible": 1
+  },
+  {
+   "default": "0",
+   "description": "Optimistic locking counter. Incremented on every status change.",
+   "fieldname": "version",
+   "fieldtype": "Int",
+   "hidden": 1,
+   "label": "Version"
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-04-08 00:00:00.000000",
+ "modified": "2026-04-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Venue Asset",
- "naming_rule": "By fieldname",
+ "naming_rule": "Naming Series",
  "owner": "Administrator",
  "permissions": [
   {
@@ -107,8 +200,8 @@
    "write": 1
   },
   {
-   "create": 1,
-   "delete": 1,
+   "create": 0,
+   "delete": 0,
    "email": 1,
    "export": 1,
    "print": 1,
@@ -117,8 +210,21 @@
    "role": "Hamilton Manager",
    "share": 1,
    "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 0,
+   "export": 1,
+   "print": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Admin",
+   "share": 0,
+   "write": 1
   }
  ],
+ "search_fields": "asset_code,asset_name,asset_category,asset_tier,status",
  "sort_field": "display_order",
  "sort_order": "ASC",
  "track_changes": 1
