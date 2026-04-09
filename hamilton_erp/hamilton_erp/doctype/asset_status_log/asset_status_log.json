@@ -1,32 +1,27 @@
 {
  "actions": [],
- "autoname": "naming_series:",
+ "autoname": "autoincrement",
  "creation": "2026-04-08 00:00:00.000000",
- "docstatus": 0,
  "doctype": "DocType",
- "document_type": "Document",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
+  "section_log",
   "venue_asset",
   "operator",
   "timestamp",
-  "col_break_1",
+  "column_break_log",
   "previous_status",
   "new_status",
-  "reason"
+  "reason",
+  "venue_session"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "ASL-.YYYY.MM.-.####",
-   "reqd": 1
+   "fieldname": "section_log",
+   "fieldtype": "Section Break",
+   "label": "Status Change"
   },
   {
-   "bold": 1,
    "fieldname": "venue_asset",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -50,15 +45,14 @@
    "reqd": 1
   },
   {
-   "fieldname": "col_break_1",
+   "fieldname": "column_break_log",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "previous_status",
    "fieldtype": "Data",
    "in_list_view": 1,
-   "label": "Previous Status",
-   "read_only": 1
+   "label": "Previous Status"
   },
   {
    "fieldname": "new_status",
@@ -70,46 +64,51 @@
   {
    "fieldname": "reason",
    "fieldtype": "Text",
-   "label": "Reason",
-   "description": "Required when transitioning to or from Out of Service."
+   "label": "Reason"
+  },
+  {
+   "description": "Traceability — which session caused this status change.",
+   "fieldname": "venue_session",
+   "fieldtype": "Link",
+   "label": "Venue Session",
+   "options": "Venue Session"
   }
  ],
  "index_web_pages_for_search": 0,
- "in_create": 0,
  "links": [],
- "modified": "2026-04-08 00:00:00.000000",
+ "modified": "2026-04-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Asset Status Log",
- "naming_rule": "By Naming Series",
+ "naming_rule": "Autoincrement",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 0,
    "delete": 0,
-   "email": 0,
-   "export": 0,
-   "print": 0,
    "read": 1,
    "report": 1,
    "role": "Hamilton Operator",
-   "share": 0,
+   "write": 0
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
    "write": 0
   },
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Hamilton Manager",
-   "share": 1,
+   "role": "Hamilton Admin",
    "write": 1
   }
  ],
- "sort_field": "timestamp",
+ "sort_field": "creation",
  "sort_order": "DESC",
  "track_changes": 0
 }
