@@ -1,9 +1,44 @@
 # Hamilton ERP — Current State
 
-Living tracker of what has been built, what is in progress, and what is blocked. Update this file as work progresses.
+Living tracker of what has been built, what is in progress, and what is blocked.
 
-**Last updated:** 2026-04-08  
-**Current phase:** Pre–Phase 0 (Project setup)
+**Last updated:** 2026-04-09
+**Current phase:** Pre–Phase 0 (Project setup — nothing built yet)
+
+---
+
+## ⚠️ SESSION PROTOCOL — READ FIRST
+
+**Every conversation in this project must update this file before ending.**
+
+At the end of each session, produce an updated `current_state.md` and tell the user:
+> "Here is the updated `current_state.md` — please replace the version in your Project knowledge base with this file."
+
+Update frequency: any session longer than ~1 hour should also checkpoint mid-session.
+
+What to update each session:
+- Change statuses in all tables (— → In Progress → Done)
+- Add any new blockers or resolved blockers
+- Add any new decisions to `decisions_log.md` (and note them here)
+- Update "Last updated" date and "Current phase"
+- Note what was worked on and what to pick up next under "Session Notes"
+
+---
+
+## Session Notes
+
+### 2026-04-09 (this session)
+- Diagnosed why conversations feel disconnected: each chat is separate by design; the fix is disciplined end-of-session file updates
+- Established the session update protocol above
+- Confirmed: hosting decision is **Frappe Cloud, Hetzner Ashburn (Virginia), dedicated plan ~$40/mo**
+- No code has been written yet — still Pre-Phase 0
+- **Next session should start Phase 0: app scaffold**
+
+### 2026-04-08
+- Created all 5 project `.md` files: `build_phases.md`, `decisions_log.md`, `current_state.md`, `coding_standards.md`, `reference_links.md`
+- Recorded DEC-001 through DEC-007 in decisions log
+- Deep-dive research on Frappe/ERPNext best practices — findings incorporated into `coding_standards.md` and `reference_links.md`
+- Hosting decision made: Frappe Cloud Hetzner Ashburn Virginia dedicated plan
 
 ---
 
@@ -24,10 +59,11 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Item | Status | Notes |
 |---|---|---|
-| ERPNext v16 development environment | Not set up | Need bench with ERPNext v16 installed |
-| GitHub repository created | Not created | Repo name: `hamilton_erp` |
-| Developer Mode enabled on site | — | Requires `bench set-config developer_mode 1` |
-| Project knowledge files uploaded | In progress | Spec uploaded; coding standards, references, phases, decisions, this file pending |
+| ERPNext v16 development environment | Not set up | Docker or native bench — developer's choice (see `reference_links.md` §5) |
+| GitHub repository created | Not created | Repo name: `hamilton_erp` — create before Phase 0 coding starts |
+| Developer Mode enabled on site | Pending | Requires `bench set-config developer_mode 1` after site creation |
+| Project knowledge files in Claude Project | ✅ Done | All 5 `.md` files uploaded; session update protocol now in place |
+| Hosting platform decided | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, dedicated ~$40/mo |
 
 ---
 
@@ -36,7 +72,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | DocType | Schema Defined | Controller Built | Tests Written | Notes |
 |---|---|---|---|---|
 | Venue Asset | — | — | — | |
-| Venue Session | — | — | — | Must include all V5.4 forward-compat fields |
+| Venue Session | — | — | — | Must include all V5.4 forward-compat fields (DEC-007) |
 | Cash Drop | — | — | — | |
 | Cash Reconciliation | — | — | — | |
 | Asset Status Log | — | — | — | |
@@ -50,10 +86,11 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | Standard DocType | Custom Field | Status | Notes |
 |---|---|---|---|
 | Item | `hamilton_is_admission` | — | Check field |
-| Item | `hamilton_asset_category` | — | Link or Select: Room / Locker |
-| Item | `hamilton_asset_tier` | — | Link or Select: Standard / Deluxe / etc. |
+| Item | `hamilton_asset_category` | — | Select: Room / Locker |
+| Item | `hamilton_asset_tier` | — | Select: Standard / Deluxe / etc. |
 | Item | `hamilton_is_comp` | — | Check field |
 | Sales Invoice | `hamilton_venue_session` | — | Link to Venue Session |
+| Sales Invoice | `hamilton_comp_reason` | — | Text — comp reason |
 
 ---
 
@@ -62,11 +99,11 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | Page | Status | Notes |
 |---|---|---|
 | Asset Board | — | Primary custom UI |
-| Cash Drop Screen | — | Blind — no expected totals |
+| Asset Assignment Prompt | — | Post-POS overlay showing available assets |
+| Cash Drop Screen | — | Blind — no expected totals shown ever |
 | Shift Start | — | Float verify + board confirm |
 | Shift Close | — | Final drop + POS Closing auto-creation |
 | Manager Reconciliation | — | Blind entry then reveal |
-| Asset Assignment Prompt | — | Post-POS overlay showing available assets |
 
 ---
 
@@ -76,13 +113,13 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 |---|---|---|
 | POS Profile (Hamilton) | — | Payment methods, default customer, item groups |
 | Items — Admission types | — | Standard Room, Deluxe Room, Locker, Comp variants |
-| Items — Retail | — | 25+ items (drinks, snacks, towels, supplies) |
+| Items — Retail | — | 25+ items (drinks, snacks, towels, supplies) — list TBD |
 | Item Tax Template — HST Taxable | — | 13% Ontario HST, tax-inclusive |
 | Item Tax Template — HST Exempt | — | 0% |
-| Pricing Rules (promos) | — | At least one test promo for QA |
-| Mode of Payment — Card | — | No integration |
+| Pricing Rules (promos) | — | At least one test promo for QA — definitions TBD |
+| Mode of Payment — Card | — | No integration; operator confirms manually |
 | Mode of Payment — Cash | — | Standard |
-| Default Customer — Walk-in | — | Standard POS customer |
+| Default Customer — Walk-in | — | Standard POS anonymous customer |
 | Role Permissions — POS Closing blocked | — | Hamilton Operator cannot access POS Closing Entry |
 
 ---
@@ -120,16 +157,16 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | # | Question / Blocker | Status | Resolution |
 |---|---|---|---|
-| 1 | GitHub repo URL | Open | Need to create repo and update `reference_links.md` |
-| 2 | Room count and tier names | Open | TBD during setup — spec says "values TBD" |
-| 3 | Expected stay durations | Open | Rooms and lockers — values TBD per spec §13 |
-| 4 | Fixed float amount | Open | Spec says configurable, example $200 — confirm actual |
-| 5 | Label printer model and driver approach | Open | Dymo or Brother — decide during Phase 3 |
+| 1 | GitHub repo URL | Open | Create repo, update `reference_links.md` §6 |
+| 2 | Room count and tier names | Open | TBD during setup |
+| 3 | Expected stay durations (rooms + lockers) | Open | Values TBD per spec §13 |
+| 4 | Fixed float amount | Open | Example $200 — confirm actual with Hamilton |
+| 5 | Label printer model | Open | Dymo or Brother — decide in Phase 3 |
 | 6 | Retail item list (25+ items) | Open | Need complete list with prices and tax status |
-| 7 | Promotional pricing rules | Open | Need specific promo definitions (which days, what discount) |
+| 7 | Promotional pricing rules | Open | Need specific promo definitions (days, discount amount) |
 | 8 | Comp admission reason categories | Open | Spec lists: Loyalty Card / Promo / Manager Decision / Other — confirm |
-| 9 | Development environment setup | Open | Docker or native bench — developer's choice |
+| 9 | Dev environment setup | Open | Docker or native bench — developer's choice |
 
 ---
 
-*Update this file after each work session. Change statuses, add blockers, record completions.*
+*This file is the source of truth for project status. Replace in Claude Project knowledge base after every session.*
