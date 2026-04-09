@@ -25,12 +25,18 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
   - [ ] Asset Status Log
   - [ ] Shift Record
   - [ ] Comp Admission Log
+  - [ ] Hamilton Settings (Single DocType — float, stay duration, printer IP)
+  - [ ] Hamilton Board Correction (child DocType for Shift Record)
 - [ ] Custom fields on standard DocTypes defined via fixtures:
   - [ ] Item: `hamilton_is_admission`, `hamilton_asset_category`, `hamilton_asset_tier`, `hamilton_is_comp`
-  - [ ] Sales Invoice: `hamilton_venue_session` (link), `hamilton_comp_reason` fields
-- [ ] Custom roles created: `Hamilton Operator`, `Hamilton Manager`
+  - [ ] Sales Invoice: `hamilton_venue_session` (link), `hamilton_comp_reason`, `hamilton_shift_record` (link to Shift Record)
+- [ ] Custom roles created: `Hamilton Operator`, `Hamilton Manager`, `Hamilton Admin`
 - [ ] Role permissions set on all custom DocTypes
 - [ ] Standard POS Closing Entry permission **removed** from Hamilton Operator role
+- [ ] `naming_series` defined on every custom DocType (e.g. `VA-.####` for Venue Asset)
+- [ ] Venue Asset whitelisted methods implemented: `assign_to_session`, `mark_vacant`, `mark_clean`, `set_out_of_service`, `return_to_service`
+- [ ] Hamilton Desk/Workspace defined so operators have a clean landing page
+- [ ] POS Profile note: "Use Sales Invoice in POS" must be enabled (DEC-025)
 - [ ] `after_install` setup script creates default roles and any required initial configuration
 - [ ] App installs and migrates without errors on a clean ERPNext v16 site
 - [ ] `bench export-fixtures` runs cleanly and exports only hamilton_erp fields
