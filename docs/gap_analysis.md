@@ -92,7 +92,7 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | pos_profile, pos_opening_entry, pos_closing_entry | Grok/ChatGPT | ✅ Current state | None |
 | board_corrections as child table | ChatGPT/Grok | ✅ DEC-024 | None |
-| opening_float_declared_by | ChatGPT | ❌ | Add — who counted the float? |
+| opening_float_declared_by | ChatGPT | ✅ DEC-043 | Skipped — operator field covers it, single-operator venue |
 | closing_state | ChatGPT | ❌ | Partial — we have status Open/Closed |
 | reconciliation_status | ChatGPT | ❌ | Decision needed |
 
