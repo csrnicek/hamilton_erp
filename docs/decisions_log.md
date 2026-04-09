@@ -147,6 +147,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. Hamilton is always single-terminal. POS Profile is already captured on Shift Record which is sufficient. No need to duplicate it on Venue Session.
 **Rationale:** Adding a field Hamilton will never use adds schema noise. If a second terminal is ever added, this can be revisited.
 
+## DEC-033 — Session Number Format: {day}-{month}-{year}---{sequence}
+
+**Date:** 2026-04-09
+**Context:** Staff need a short human-readable reference to look up specific sessions (e.g. "pull up session 9-4-2026---042") rather than long ERPNext document IDs.
+**Decision:** Add `session_number` (Data, read-only, auto-generated) to Venue Session. Format: `{day}-{month}-{year}---{sequence}` with three dashes separating the date from the sequence. Example: `9-4-2026---001`. Sequence resets to 001 at midnight each day and increments continuously within the day. The sequence portion is displayed in bold in the UI — the stored value is plain text; bold formatting is applied by the frontend (asset board, receipts) on the digits after the `---`.
+**Rationale:** Staff reference sessions by number during shifts and investigations. Daily reset keeps numbers short and human-readable. Three-dash separator makes the sequence visually distinct.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
