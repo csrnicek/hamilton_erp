@@ -158,6 +158,7 @@ Naming: `VA-.####`
 | Field | Type | Notes |
 |---|---|---|
 | cash_drop | Link → Cash Drop | |
+| shift_record | Link → Shift Record | Direct link for faster reporting — also reachable via cash_drop |
 | manager | Link → User | |
 | actual_count | Currency | Manager's blind count |
 | system_expected | Currency | Revealed only after submission |
