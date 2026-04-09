@@ -1,56 +1,63 @@
 {
  "actions": [],
- "autoname": "naming_series:",
+ "autoname": "hash",
  "creation": "2026-04-08 00:00:00.000000",
- "docstatus": 0,
  "doctype": "DocType",
- "document_type": "Document",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
+  "section_session",
+  "session_number",
   "venue_asset",
   "sales_invoice",
   "admission_item",
+  "column_break_session",
   "status",
-  "col_break_1",
+  "assignment_status",
   "session_start",
   "session_end",
+  "section_operators",
   "operator_checkin",
   "operator_vacate",
   "vacate_method",
+  "column_break_operators",
+  "shift_record",
+  "customer",
+  "section_audit",
+  "pricing_rule_applied",
+  "under_25_applied",
+  "comp_flag",
   "section_forward_compat",
+  "identity_method",
   "member_id",
   "full_name",
-  "col_break_fwd",
+  "column_break_forward_compat",
   "date_of_birth",
   "membership_status",
-  "identity_method",
+  "block_status",
   "section_arrears",
   "arrears_amount",
   "arrears_flag",
   "arrears_sku",
-  "col_break_arrears",
+  "column_break_arrears",
   "scanner_data",
-  "eligibility_snapshot",
-  "block_status",
-  "section_payment_future",
-  "terminal_transaction_id",
-  "payment_provider",
-  "col_break_payment",
-  "integration_status",
-  "payment_gateway_reference"
+  "eligibility_snapshot"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "SESS-.YYYY.MM.-.####",
-   "reqd": 1
+   "fieldname": "section_session",
+   "fieldtype": "Section Break",
+   "label": "Session"
   },
   {
-   "bold": 1,
+   "description": "Auto-generated. Format: {day}-{month}-{year}---{sequence}. Resets to 001 at midnight.",
+   "fieldname": "session_number",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Session Number",
+   "read_only": 1,
+   "unique": 1
+  },
+  {
    "fieldname": "venue_asset",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -61,7 +68,6 @@
   {
    "fieldname": "sales_invoice",
    "fieldtype": "Link",
-   "in_list_view": 1,
    "label": "Sales Invoice",
    "options": "Sales Invoice"
   },
@@ -70,6 +76,10 @@
    "fieldtype": "Link",
    "label": "Admission Item",
    "options": "Item"
+  },
+  {
+   "fieldname": "column_break_session",
+   "fieldtype": "Column Break"
   },
   {
    "default": "Active",
@@ -81,8 +91,12 @@
    "reqd": 1
   },
   {
-   "fieldname": "col_break_1",
-   "fieldtype": "Column Break"
+   "default": "Pending",
+   "description": "Tracks whether asset assignment succeeded after payment (DEC-020).",
+   "fieldname": "assignment_status",
+   "fieldtype": "Select",
+   "label": "Assignment Status",
+   "options": "Pending\nAssigned\nFailed"
   },
   {
    "fieldname": "session_start",
@@ -97,16 +111,21 @@
    "label": "Session End"
   },
   {
+   "fieldname": "section_operators",
+   "fieldtype": "Section Break",
+   "label": "Operators"
+  },
+  {
    "fieldname": "operator_checkin",
    "fieldtype": "Link",
-   "label": "Checked In By",
+   "label": "Operator (Check-in)",
    "options": "User",
    "reqd": 1
   },
   {
    "fieldname": "operator_vacate",
    "fieldtype": "Link",
-   "label": "Vacated By",
+   "label": "Operator (Vacate)",
    "options": "User"
   },
   {
@@ -116,166 +135,164 @@
    "options": "\nKey Return\nDiscovery on Rounds"
   },
   {
+   "fieldname": "column_break_operators",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "shift_record",
+   "fieldtype": "Link",
+   "label": "Shift Record",
+   "options": "Shift Record"
+  },
+  {
+   "default": "Walk-in",
+   "description": "Forward compatibility — defaults to Walk-in at Hamilton.",
+   "fieldname": "customer",
+   "fieldtype": "Link",
+   "label": "Customer",
+   "options": "Customer"
+  },
+  {
+   "fieldname": "section_audit",
+   "fieldtype": "Section Break",
+   "label": "Audit"
+  },
+  {
+   "description": "Audit trail — which pricing rule was applied to this admission.",
+   "fieldname": "pricing_rule_applied",
+   "fieldtype": "Data",
+   "label": "Pricing Rule Applied"
+  },
+  {
+   "default": "0",
+   "description": "Audit trail — Under 25 discount was applied.",
+   "fieldname": "under_25_applied",
+   "fieldtype": "Check",
+   "label": "Under 25 Applied"
+  },
+  {
+   "default": "0",
+   "fieldname": "comp_flag",
+   "fieldtype": "Check",
+   "label": "Comp Flag"
+  },
+  {
    "collapsible": 1,
    "fieldname": "section_forward_compat",
    "fieldtype": "Section Break",
-   "label": "Forward Compatibility — Identity (V5.4)"
+   "label": "Forward Compatibility (Philadelphia)"
   },
   {
-   "fieldname": "member_id",
+   "default": "not_applicable",
+   "description": "Forward compatibility — null at Hamilton.",
+   "fieldname": "identity_method",
    "fieldtype": "Data",
+   "label": "Identity Method"
+  },
+  {
+   "description": "Forward compatibility — null at Hamilton.",
+   "fieldname": "member_id",
+   "fieldtype": "Link",
    "label": "Member ID",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "options": "Customer"
   },
   {
    "fieldname": "full_name",
    "fieldtype": "Data",
-   "label": "Full Name",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Full Name"
   },
   {
-   "fieldname": "col_break_fwd",
+   "fieldname": "column_break_forward_compat",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
-   "label": "Date of Birth",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Date of Birth"
   },
   {
    "fieldname": "membership_status",
    "fieldtype": "Data",
-   "label": "Membership Status",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Membership Status"
   },
   {
-   "default": "not_applicable",
-   "fieldname": "identity_method",
-   "fieldtype": "Select",
-   "label": "Identity Method",
-   "options": "not_applicable\nscan\nmanual_entry",
-   "description": "Defaults to not_applicable at Hamilton. Set by scanner integration in V5.4."
+   "fieldname": "block_status",
+   "fieldtype": "Data",
+   "label": "Block Status"
   },
   {
    "collapsible": 1,
    "fieldname": "section_arrears",
    "fieldtype": "Section Break",
-   "label": "Forward Compatibility — Arrears (V5.4)"
+   "label": "Arrears (Forward Compatibility)"
   },
   {
    "fieldname": "arrears_amount",
    "fieldtype": "Currency",
-   "label": "Arrears Amount",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Arrears Amount"
   },
   {
    "default": "0",
    "fieldname": "arrears_flag",
    "fieldtype": "Check",
-   "label": "Arrears Flag",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Arrears Flag"
   },
   {
    "fieldname": "arrears_sku",
    "fieldtype": "Data",
-   "label": "Arrears SKU",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
+   "label": "Arrears SKU"
   },
   {
-   "fieldname": "col_break_arrears",
+   "fieldname": "column_break_arrears",
    "fieldtype": "Column Break"
   },
   {
    "fieldname": "scanner_data",
    "fieldtype": "Text",
-   "label": "Scanner Data",
-   "description": "Null at Hamilton — raw scan payload captured by scanner in V5.4."
+   "label": "Scanner Data"
   },
   {
    "fieldname": "eligibility_snapshot",
    "fieldtype": "Text",
-   "label": "Eligibility Snapshot",
-   "description": "Null at Hamilton — JSON snapshot of eligibility at check-in time in V5.4."
-  },
-  {
-   "fieldname": "block_status",
-   "fieldtype": "Data",
-   "label": "Block Status",
-   "description": "Null at Hamilton — used by membership-enabled venues in V5.4."
-  },
-  {
-   "collapsible": 1,
-   "fieldname": "section_payment_future",
-   "fieldtype": "Section Break",
-   "label": "Forward Compatibility — Payment Integration (Future)"
-  },
-  {
-   "fieldname": "terminal_transaction_id",
-   "fieldtype": "Data",
-   "label": "Terminal Transaction ID",
-   "description": "Null until Stripe integration is activated."
-  },
-  {
-   "fieldname": "payment_provider",
-   "fieldtype": "Data",
-   "label": "Payment Provider",
-   "description": "Null until Stripe integration is activated."
-  },
-  {
-   "fieldname": "col_break_payment",
-   "fieldtype": "Column Break"
-  },
-  {
-   "fieldname": "integration_status",
-   "fieldtype": "Data",
-   "label": "Integration Status",
-   "description": "Null until Stripe integration is activated."
-  },
-  {
-   "fieldname": "payment_gateway_reference",
-   "fieldtype": "Data",
-   "label": "Payment Gateway Reference",
-   "description": "Null until Stripe integration is activated."
+   "label": "Eligibility Snapshot"
   }
  ],
  "index_web_pages_for_search": 0,
- "is_submittable": 1,
+ "naming_rule": "Random",
  "links": [],
- "modified": "2026-04-08 00:00:00.000000",
+ "modified": "2026-04-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Venue Session",
- "naming_rule": "By Naming Series",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
    "delete": 0,
-   "email": 0,
-   "export": 0,
-   "print": 0,
    "read": 1,
    "report": 1,
    "role": "Hamilton Operator",
-   "share": 0,
+   "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
    "write": 1
   },
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Hamilton Manager",
-   "share": 1,
-   "submit": 1,
+   "role": "Hamilton Admin",
    "write": 1
   }
  ],
- "sort_field": "session_start",
+ "search_fields": "session_number,venue_asset,status",
+ "sort_field": "modified",
  "sort_order": "DESC",
  "track_changes": 1
 }
