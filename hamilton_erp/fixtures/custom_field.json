@@ -45,7 +45,7 @@
   "modified_by": "Administrator",
   "module": "Hamilton ERP",
   "name": "Item-hamilton_asset_tier",
-  "options": "\nStandard\nDeluxe",
+  "options": "\nLocker\nSingle Standard\nDeluxe Single\nGlory Hole\nDouble Deluxe",
   "owner": "Administrator"
  },
  {
@@ -88,14 +88,29 @@
   "doctype": "Custom Field",
   "dt": "Sales Invoice",
   "fieldname": "hamilton_comp_reason",
-  "fieldtype": "Select",
+  "fieldtype": "Text",
   "insert_after": "hamilton_venue_session",
   "label": "Comp Reason",
-  "modified": "2026-04-08 00:00:00.000000",
+  "modified": "2026-04-09 00:00:00.000000",
   "modified_by": "Administrator",
   "module": "Hamilton ERP",
   "name": "Sales Invoice-hamilton_comp_reason",
-  "options": "\nLoyalty Card\nPromo\nManager Decision\nOther",
+  "owner": "Administrator"
+ },
+ {
+  "creation": "2026-04-09 00:00:00.000000",
+  "description": "Ties this invoice to the operator's shift for reconciliation.",
+  "doctype": "Custom Field",
+  "dt": "Sales Invoice",
+  "fieldname": "hamilton_shift_record",
+  "fieldtype": "Link",
+  "insert_after": "hamilton_comp_reason",
+  "label": "Shift Record",
+  "modified": "2026-04-09 00:00:00.000000",
+  "modified_by": "Administrator",
+  "module": "Hamilton ERP",
+  "name": "Sales Invoice-hamilton_shift_record",
+  "options": "Shift Record",
   "owner": "Administrator"
  }
 ]
