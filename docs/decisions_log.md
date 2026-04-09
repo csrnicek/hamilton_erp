@@ -154,6 +154,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Add `session_number` (Data, read-only, auto-generated) to Venue Session. Format: `{day}-{month}-{year}---{sequence}` with three dashes separating the date from the sequence. Example: `9-4-2026---001`. Sequence resets to 001 at midnight each day and increments continuously within the day. The sequence portion is displayed in bold in the UI — the stored value is plain text; bold formatting is applied by the frontend (asset board, receipts) on the digits after the `---`.
 **Rationale:** Staff reference sessions by number during shifts and investigations. Daily reset keeps numbers short and human-readable. Three-dash separator makes the sequence visually distinct.
 
+## DEC-034 — Do Not Duplicate Financial Amounts on Venue Session
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested storing checkin_rate_gross, checkin_rate_net, and tax_amount directly on Venue Session for easier reporting.
+**Decision:** Not added. All financial amounts live on the Sales Invoice which is already linked to Venue Session via the sales_invoice field. Reports query the Sales Invoice. Duplicating amounts on Venue Session risks data becoming out of sync if the invoice is amended or refunded.
+**Rationale:** One number, one place, always accurate. The Sales Invoice is the accounting record of truth.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
