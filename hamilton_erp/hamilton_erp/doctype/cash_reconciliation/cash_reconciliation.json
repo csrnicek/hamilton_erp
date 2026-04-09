@@ -1,36 +1,37 @@
 {
  "actions": [],
- "autoname": "naming_series:",
+ "autoname": "RECON-.YYYY.MM.-.####",
  "creation": "2026-04-08 00:00:00.000000",
- "docstatus": 0,
  "doctype": "DocType",
- "document_type": "Document",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
+  "section_reconciliation",
   "cash_drop",
+  "shift_record",
   "manager",
+  "column_break_reconciliation",
   "timestamp",
   "section_blind_entry",
   "actual_count",
   "section_reveal",
-  "operator_declared",
   "system_expected",
-  "col_break_reveal",
+  "operator_declared",
+  "variance_amount",
+  "column_break_reveal",
   "variance_flag",
-  "notes"
+  "notes",
+  "section_resolution",
+  "resolved_by",
+  "column_break_resolution",
+  "resolution_status"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "RECON-.YYYY.MM.-.####",
-   "reqd": 1
+   "fieldname": "section_reconciliation",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
   },
   {
-   "bold": 1,
    "fieldname": "cash_drop",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -39,12 +40,23 @@
    "reqd": 1
   },
   {
+   "description": "Direct link for faster reporting — also reachable via cash_drop (DEC-042).",
+   "fieldname": "shift_record",
+   "fieldtype": "Link",
+   "label": "Shift Record",
+   "options": "Shift Record"
+  },
+  {
    "fieldname": "manager",
    "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Manager",
    "options": "User",
    "reqd": 1
+  },
+  {
+   "fieldname": "column_break_reconciliation",
+   "fieldtype": "Column Break"
   },
   {
    "fieldname": "timestamp",
@@ -58,11 +70,11 @@
    "label": "Manager Blind Count"
   },
   {
+   "description": "The amount the manager physically counted — entered blind before any expected totals are shown.",
    "fieldname": "actual_count",
    "fieldtype": "Currency",
-   "label": "Actual Count (Manager)",
-   "reqd": 1,
-   "description": "The amount the manager physically counted from the envelope — entered blind before any expected totals are shown."
+   "label": "Actual Count",
+   "reqd": 1
   },
   {
    "fieldname": "section_reveal",
@@ -70,21 +82,28 @@
    "label": "Reconciliation Result (revealed after submission)"
   },
   {
-   "fieldname": "operator_declared",
-   "fieldtype": "Currency",
-   "label": "Operator Declared",
-   "read_only": 1,
-   "description": "Copied from the Cash Drop record. Only populated after manager submits their count."
-  },
-  {
+   "description": "Calculated from POS transactions for the drop period. Only revealed after manager submits blind count. NEVER expose to operator-role users (DEC-021).",
    "fieldname": "system_expected",
    "fieldtype": "Currency",
    "label": "System Expected",
-   "read_only": 1,
-   "description": "Calculated from POS transactions for the drop period. Only revealed after manager submits their count. NEVER expose to operator-role users."
+   "read_only": 1
   },
   {
-   "fieldname": "col_break_reveal",
+   "description": "Copied from the Cash Drop record. Only populated after manager submits their count.",
+   "fieldname": "operator_declared",
+   "fieldtype": "Currency",
+   "label": "Operator Declared",
+   "read_only": 1
+  },
+  {
+   "description": "Auto-calculated: actual_count - system_expected. Negative = short, positive = over. Revealed only after manager submits blind count (DEC-039).",
+   "fieldname": "variance_amount",
+   "fieldtype": "Currency",
+   "label": "Variance Amount",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_reveal",
    "fieldtype": "Column Break"
   },
   {
@@ -99,28 +118,56 @@
    "fieldname": "notes",
    "fieldtype": "Text",
    "label": "Notes"
+  },
+  {
+   "fieldname": "section_resolution",
+   "fieldtype": "Section Break",
+   "label": "Investigation Resolution (DEC-041)"
+  },
+  {
+   "description": "Manager who signed off investigation — null until resolved.",
+   "fieldname": "resolved_by",
+   "fieldtype": "Link",
+   "label": "Resolved By",
+   "options": "User"
+  },
+  {
+   "fieldname": "column_break_resolution",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Outcome of investigation — null until actioned.",
+   "fieldname": "resolution_status",
+   "fieldtype": "Select",
+   "label": "Resolution Status",
+   "options": "\nOpen\nResolved\nDismissed\nEscalated"
   }
  ],
  "index_web_pages_for_search": 0,
  "is_submittable": 1,
  "links": [],
- "modified": "2026-04-08 00:00:00.000000",
+ "modified": "2026-04-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Cash Reconciliation",
- "naming_rule": "By Naming Series",
+ "naming_rule": "Naming Series",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
-   "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
+   "delete": 0,
    "read": 1,
    "report": 1,
    "role": "Hamilton Manager",
-   "share": 1,
+   "submit": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Admin",
    "submit": 1,
    "write": 1
   }
