@@ -128,33 +128,15 @@ bench start
 
 ## 6. Hamilton ERP GitHub Repository
 
-**Status: To be created.**
+**Repository:** https://github.com/csrnicek/hamilton_erp  
+**Default branch:** `main`
 
-Recommended setup:
-
-- **Repo name:** `hamilton_erp`
-- **Default branch:** `main`
-- **Branch strategy:** `main` (stable) → `develop` (integration) → `feature/*` (work in progress)
-
-After creating the repo:
+Any bench environment can pull the app:
 
 ```bash
-cd apps/hamilton_erp
-git init
-git remote add origin https://github.com/[your-org]/hamilton_erp.git
-git add .
-git commit -m "feat: initial app scaffold with DocType definitions"
-git push -u origin main
-```
-
-Then any bench environment can pull the app:
-
-```bash
-bench get-app https://github.com/[your-org]/hamilton_erp.git
+bench get-app https://github.com/csrnicek/hamilton_erp.git
 bench --site [sitename] install-app hamilton_erp
 ```
-
-**Update this file with the actual repo URL once created.**
 
 ---
 
