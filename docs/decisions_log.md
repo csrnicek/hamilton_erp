@@ -168,6 +168,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. All financial amounts live on the Sales Invoice which is already linked to Venue Session via the sales_invoice field. Reports query the Sales Invoice. Duplicating amounts on Venue Session risks data becoming out of sync if the invoice is amended or refunded.
 **Rationale:** One number, one place, always accurate. The Sales Invoice is the accounting record of truth.
 
+## DEC-035 — Do Not Store Payment Status Snapshot on Venue Session
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested storing a payment_status_snapshot on Venue Session.
+**Decision:** Not added. Same reasoning as DEC-034 — payment data lives on the linked Sales Invoice. Duplicating it risks sync issues on refunds or amendments.
+**Rationale:** Sales Invoice is the single source of truth for all payment data.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
