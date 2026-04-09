@@ -68,8 +68,8 @@ Status: ✅ Captured | ⚠️ Partial | ❌ Missing
 |---|---|---|---|
 | shift_record (Link) | Grok/ChatGPT | ✅ Current state | None |
 | pos_closing_entry (Link) | Grok/ChatGPT | ✅ Current state | None |
-| payment_mode_breakdown | ChatGPT | ❌ | Low priority — decide |
-| sealed_by, witnessed_by, bag_number | ChatGPT | ❌ | Low priority — decide |
+| payment_mode_breakdown | ChatGPT | ⚠️ | Pending Chris confirmation — recommend auto-calculated fields |
+| sealed_by, witnessed_by, bag_number | ChatGPT | ✅ DEC-037 | Not added — single operator, no witness, label TBD Phase 3 |
 
 ### Cash Reconciliation
 | Field | Reviewer | Status | Action |
