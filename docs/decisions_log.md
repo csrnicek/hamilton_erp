@@ -329,6 +329,14 @@ Implementation: doc_events hook on Sales Invoice `on_cancel` or POS Return `on_s
 **Decision:** No special handling required. Comp admissions create a Sales Invoice with $0 cash payment. The system_expected formula (sum of cash-mode payments) naturally results in $0 contribution from comp invoices. Comps are invisible to cash reconciliation by design.
 **Rationale:** The formula already handles this correctly. A $0 payment adds $0 to the expected total. No additional code needed.
 
+## DEC-053 — Comp Admission Log: reason_note 500-char Limit Needs Controller
+
+**Date:** 2026-04-09
+**Context:** DEC-016 specifies reason_note is mandatory when reason_category = Other, max 500 characters. The JSON has max_length: 500 set on the Text field, but Frappe v16 does NOT enforce max_length on Text fieldtype (only on Data fieldtype).
+**Decision:** The mandatory condition is correctly enforced via mandatory_depends_on. The 500-char limit must be enforced server-side in the Comp Admission Log controller validate() method in Phase 2.
+**Implementation note:** Add to controller: if self.reason_category == "Other" and self.reason_note and len(self.reason_note) > 500: frappe.throw(_("Reason note must be 500 characters or fewer."))
+**Rationale:** Phase 0 blocker-free. Controller work deferred to Phase 2.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
