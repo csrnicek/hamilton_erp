@@ -70,6 +70,7 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
   - [ ] Vacate marks session complete, moves asset to Dirty
   - [ ] Vacate method field (Key Return / Discovery on Rounds)
 - [ ] Asset board tiles must be **card-based** (each asset is a self-contained card) — required for forward compatibility with Philadelphia which will show member name/photo on the card
+- [ ] Asset board tiles must be **card-based** — each asset is a self-contained card. Required for forward compatibility with Philadelphia which will display member name/photo on each card.
 - [ ] Realtime updates via `frappe.publish_realtime` (with `after_commit=True`) so board refreshes across tabs
 - [ ] Realtime listener cleanup when leaving the asset board page
 - [ ] Overtime overlay on tiles when session exceeds configured duration
