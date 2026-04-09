@@ -1,39 +1,46 @@
 {
  "actions": [],
- "autoname": "naming_series:",
+ "autoname": "SR-.YYYY.MM.-.####",
  "creation": "2026-04-08 00:00:00.000000",
- "docstatus": 0,
  "doctype": "DocType",
- "document_type": "Document",
- "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "naming_series",
+  "section_shift",
   "operator",
   "shift_date",
   "status",
-  "col_break_1",
+  "column_break_shift",
   "shift_start",
   "shift_end",
-  "section_float",
+  "section_float_start",
   "float_expected",
   "float_actual",
-  "col_break_float",
   "float_variance",
+  "section_float_close",
+  "closing_float_actual",
+  "closing_float_variance",
   "section_board",
   "board_confirmed",
-  "board_corrections"
+  "board_corrections",
+  "section_pos",
+  "pos_profile",
+  "pos_opening_entry",
+  "column_break_pos",
+  "pos_closing_entry",
+  "section_card",
+  "operator_declared_card_total",
+  "column_break_card",
+  "system_expected_card_total",
+  "section_reconciliation",
+  "reconciliation_status"
  ],
  "fields": [
   {
-   "fieldname": "naming_series",
-   "fieldtype": "Select",
-   "label": "Series",
-   "options": "SR-.YYYY.MM.-.####",
-   "reqd": 1
+   "fieldname": "section_shift",
+   "fieldtype": "Section Break",
+   "label": "Shift"
   },
   {
-   "bold": 1,
    "fieldname": "operator",
    "fieldtype": "Link",
    "in_list_view": 1,
@@ -58,7 +65,7 @@
    "reqd": 1
   },
   {
-   "fieldname": "col_break_1",
+   "fieldname": "column_break_shift",
    "fieldtype": "Column Break"
   },
   {
@@ -73,32 +80,46 @@
    "label": "Shift End"
   },
   {
-   "fieldname": "section_float",
+   "fieldname": "section_float_start",
    "fieldtype": "Section Break",
-   "label": "Float Verification"
+   "label": "Float — Shift Start"
   },
   {
+   "description": "The configured fixed float amount for this location.",
    "fieldname": "float_expected",
    "fieldtype": "Currency",
    "label": "Float Expected",
-   "reqd": 1,
-   "description": "The configured fixed float amount for this location."
+   "reqd": 1
   },
   {
    "fieldname": "float_actual",
    "fieldtype": "Currency",
-   "label": "Float Actual (Counted by Operator)"
+   "label": "Float Actual"
   },
   {
-   "fieldname": "col_break_float",
-   "fieldtype": "Column Break"
-  },
-  {
+   "description": "Variance at shift START (float_actual - float_expected).",
    "fieldname": "float_variance",
    "fieldtype": "Currency",
    "label": "Float Variance",
-   "read_only": 1,
-   "description": "float_actual − float_expected. Calculated automatically."
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_float_close",
+   "fieldtype": "Section Break",
+   "label": "Float — Shift End (DEC-050)"
+  },
+  {
+   "description": "Float counted by operator at shift END before handoff.",
+   "fieldname": "closing_float_actual",
+   "fieldtype": "Currency",
+   "label": "Closing Float Actual"
+  },
+  {
+   "description": "Variance at shift END (closing_float_actual - float_expected).",
+   "fieldname": "closing_float_variance",
+   "fieldtype": "Currency",
+   "label": "Closing Float Variance",
+   "read_only": 1
   },
   {
    "fieldname": "section_board",
@@ -107,49 +128,113 @@
   },
   {
    "default": "0",
+   "description": "Operator confirmed the asset board matches physical reality at shift start.",
    "fieldname": "board_confirmed",
    "fieldtype": "Check",
-   "label": "Board Confirmed",
-   "description": "Operator confirmed the asset board matches physical reality at shift start."
+   "label": "Board Confirmed"
   },
   {
+   "description": "Structured corrections made to the asset board at shift start (DEC-024).",
    "fieldname": "board_corrections",
-   "fieldtype": "Text",
+   "fieldtype": "Table",
    "label": "Board Corrections",
-   "description": "Description of any corrections made to the asset board at shift start."
+   "options": "Hamilton Board Correction"
+  },
+  {
+   "fieldname": "section_pos",
+   "fieldtype": "Section Break",
+   "label": "POS Links"
+  },
+  {
+   "fieldname": "pos_profile",
+   "fieldtype": "Link",
+   "label": "POS Profile",
+   "options": "POS Profile"
+  },
+  {
+   "fieldname": "pos_opening_entry",
+   "fieldtype": "Link",
+   "label": "POS Opening Entry",
+   "options": "POS Opening Entry"
+  },
+  {
+   "fieldname": "column_break_pos",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "pos_closing_entry",
+   "fieldtype": "Link",
+   "label": "POS Closing Entry",
+   "options": "POS Closing Entry"
+  },
+  {
+   "fieldname": "section_card",
+   "fieldtype": "Section Break",
+   "label": "Card Reconciliation (DEC-038)"
+  },
+  {
+   "description": "Operator reads terminal batch report and enters at shift close.",
+   "fieldname": "operator_declared_card_total",
+   "fieldtype": "Currency",
+   "label": "Operator Declared Card Total"
+  },
+  {
+   "fieldname": "column_break_card",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Auto-calculated from card-mode Sales Invoices for the shift.",
+   "fieldname": "system_expected_card_total",
+   "fieldtype": "Currency",
+   "label": "System Expected Card Total",
+   "read_only": 1
+  },
+  {
+   "fieldname": "section_reconciliation",
+   "fieldtype": "Section Break",
+   "label": "Reconciliation"
+  },
+  {
+   "default": "Pending",
+   "description": "Auto-updated as cash drops are reconciled (DEC-044).",
+   "fieldname": "reconciliation_status",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Reconciliation Status",
+   "options": "Pending\nPartially Reconciled\nFully Reconciled"
   }
  ],
  "index_web_pages_for_search": 0,
  "links": [],
- "modified": "2026-04-08 00:00:00.000000",
+ "modified": "2026-04-09 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Shift Record",
- "naming_rule": "By Naming Series",
+ "naming_rule": "Naming Series",
  "owner": "Administrator",
  "permissions": [
   {
    "create": 1,
    "delete": 0,
-   "email": 0,
-   "export": 0,
-   "print": 1,
    "read": 1,
    "report": 1,
    "role": "Hamilton Operator",
-   "share": 0,
    "write": 1
+  },
+  {
+   "create": 0,
+   "delete": 0,
+   "read": 1,
+   "report": 1,
+   "role": "Hamilton Manager",
+   "write": 0
   },
   {
    "create": 1,
    "delete": 1,
-   "email": 1,
-   "export": 1,
-   "print": 1,
    "read": 1,
    "report": 1,
-   "role": "Hamilton Manager",
-   "share": 1,
+   "role": "Hamilton Admin",
    "write": 1
   }
  ],
