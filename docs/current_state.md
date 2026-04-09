@@ -300,7 +300,7 @@ Naming: `VA-.####`
 | 1 | GitHub repo | ✅ https://github.com/csrnicek/hamilton_erp |
 | 2 | Room/locker counts | ✅ 59 assets, 5 tiers |
 | 3 | Stay durations | ✅ 6 hours all |
-| 4 | Float amount | ✅ $200, configurable |
+| 4 | Float amount | ✅ $300, configurable (DEC-026) |
 | 5 | Label printer | ✅ Brother QL-820NWB |
 | 6 | Asset pricing | ✅ See above |
 | 7 | Pricing rules | ✅ Locker Special + Under 25 defined |
