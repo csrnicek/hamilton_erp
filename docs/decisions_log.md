@@ -290,6 +290,27 @@ A POS cart can contain a maximum of ONE admission item (enforced by spec §4.3 a
 **Rationale:** Rule 1 confirmed by Chris — guest buys a Coke and a locker, only the locker is discounted. Rule 2 confirmed by Chris — prevents abuse where one 23-year-old's discount is used to admit multiple guests.
 **Rationale:** Both rules must be enforced server-side, not just in the UI.
 
+## DEC-049 — system_expected Calculation Formula
+
+**Date:** 2026-04-09
+**Context:** The reconciliation screen needs to calculate what cash should be in each drop envelope.
+**Decision:** system_expected for any drop = sum of cash-mode payments on Sales Invoices during that drop's time period. The float is never included in this calculation. The float is a constant that starts in the till, stays in the till, and is confirmed separately at shift start and end.
+**Example:** Shift has $1,050 cash sales. Drop 1 at 2pm covers $400 of sales → system_expected = $400. Final drop covers $650 of sales → system_expected = $650. Float of $300 remains in till — never dropped.
+**Rationale:** Confirmed by Chris. Clean, auditable, deterministic.
+
+---
+
+## DEC-050 — Operator Confirms Float at Both Shift Start and Shift End
+
+**Date:** 2026-04-09
+**Context:** The float must be accounted for at both ends of a shift to ensure it wasn't taken or lost during the shift.
+**Decision:** Two float confirmation steps:
+1. **Shift Start:** Operator counts the float and enters actual amount. System compares to expected $300. Variance logged in `float_actual` / `float_variance` on Shift Record.
+2. **Shift End:** After final cash drop, operator counts the remaining float and confirms it equals $300. Amount entered in `closing_float_actual`. Variance logged in `closing_float_variance`. This float is then left in the till for the next operator.
+
+New fields added to Shift Record: `closing_float_actual` (Currency), `closing_float_variance` (Currency).
+**Rationale:** If $300 goes in at shift start and $285 comes out at shift end, something happened during the shift. Both checks together create a complete float accountability chain.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
