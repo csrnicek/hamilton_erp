@@ -110,6 +110,7 @@ Naming: `VA-.####`
 ### Venue Session
 | Field | Type | Notes |
 |---|---|---|
+| session_number | Data | Auto-generated. Format: {day}-{month}-{year}---{sequence}. Example: 9-4-2026---001. Resets to 001 at midnight. Sequence bolded in UI display. |
 | venue_asset | Link → Venue Asset | |
 | sales_invoice | Link → Sales Invoice | |
 | admission_item | Link → Item | |
