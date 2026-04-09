@@ -25,7 +25,7 @@ fixtures = [
 	},
 	{
 		"dt": "Role",
-		"filters": [["name", "in", ["Hamilton Operator", "Hamilton Manager"]]],
+		"filters": [["name", "in", ["Hamilton Operator", "Hamilton Manager", "Hamilton Admin"]]],
 	},
 ]
 
