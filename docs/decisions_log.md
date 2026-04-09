@@ -182,6 +182,13 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 **Decision:** Not added. When a refund happens via POS Return, the session ends and the asset is released — this is already visible from the session status and the linked Sales Invoice. A separate refund_status field would duplicate information already captured elsewhere.
 **Rationale:** Session status + Sales Invoice together tell the complete story. No duplication needed.
 
+## DEC-037 — No sealed_by, witnessed_by, or bag_number on Cash Drop
+
+**Date:** 2026-04-09
+**Context:** ChatGPT suggested adding witnessed_by, sealed_by, and bag_number to Cash Drop for auditability.
+**Decision:** Not added. Hamilton is single-operator — there is no witness. No numbered bags used. Envelope label content is TBD and will be addressed in Phase 3 when the label printer is implemented.
+**Rationale:** Unnecessary fields for a single-operator venue. Label details deferred to Phase 3.
+
 ---
 
 *Add new decisions below this line. Use the next sequential number.*
