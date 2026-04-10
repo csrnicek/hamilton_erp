@@ -320,3 +320,58 @@ def mark_asset_clean(
 def _set_cleaned_timestamp(asset_name: str) -> None:
 	frappe.db.set_value("Venue Asset", asset_name,
 	                    "last_cleaned_at", frappe.utils.now_datetime())
+
+
+# ---------------------------------------------------------------------------
+# Set Out of Service (any state except OOS → Out of Service) — Task 7
+# ---------------------------------------------------------------------------
+
+
+def set_asset_out_of_service(asset_name: str, *, operator: str, reason: str) -> None:
+	"""Any state (except OOS) → Out of Service. Reason is mandatory.
+
+	OOS is the only transition that can be entered from multiple source states
+	(Available, Occupied, Dirty). When entered from Occupied, the current
+	Venue Session is auto-closed with vacate_method="Discovery on Rounds"
+	(the operator didn't return a key; we discovered it during rounds).
+	"""
+	# Defense-in-depth: the VenueAsset controller's _validate_reason_for_oos
+	# also rejects whitespace-only reasons at save time, but guarding here
+	# avoids acquiring the Redis lock for an obviously-bad call.
+	if not reason or not reason.strip():
+		frappe.throw(_("A reason is required to set an asset Out of Service."))
+	from hamilton_erp.locks import asset_status_lock
+	from hamilton_erp.realtime import publish_status_change
+
+	with asset_status_lock(asset_name, "oos") as row:
+		previous = row["status"]
+		_require_oos_entry(row, asset_name=asset_name)
+		# NOTE: when previous == Occupied, _close_current_session runs BEFORE
+		# _set_asset_status. A throw from _set_asset_status (e.g. hypothetical
+		# version-CAS failure) would leave the Venue Session already marked
+		# Completed — the request-level transaction rolls it back in a normal
+		# HTTP call path. Programmatic callers MUST NOT wrap this in try/except;
+		# let exceptions propagate to trigger rollback. Matches the Task 5
+		# vacate_session pattern.
+		if previous == "Occupied":
+			current_session = row["current_session"]
+			_close_current_session(
+				asset_name,
+				current_session=current_session,
+				operator=operator,
+				vacate_method="Discovery on Rounds",
+			)
+			log_venue_session = current_session
+		else:
+			log_venue_session = None
+		_set_asset_status(
+			asset_name,
+			new_status="Out of Service",
+			session=None,
+			log_venue_session=log_venue_session,
+			log_reason=reason,
+			operator=operator,
+			previous=previous,
+			expected_version=row["version"],
+		)
+	publish_status_change(asset_name, previous_status=previous)

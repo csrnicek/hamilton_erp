@@ -284,3 +284,91 @@ class TestMarkClean(IntegrationTestCase):
 		# hide behind the spy.
 		asset = frappe.get_doc("Venue Asset", self.asset.name)
 		self.assertEqual(asset.status, "Available")
+
+
+class TestSetOutOfService(IntegrationTestCase):
+	def setUp(self):
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"OOS-TEST-{suffix.upper()}",
+			"asset_name": f"OOS Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9005,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_oos_from_available(self):
+		"""Happy path + assert `reason` kwarg reaches _set_asset_status as log_reason.
+
+		The wraps= pattern (from Task 6 fix bundle) records call args while
+		still invoking the real implementation, so the status/reason-field
+		assertions below still fire.
+		"""
+		from unittest.mock import patch
+		target = "hamilton_erp.lifecycle._set_asset_status"
+		with patch(target, wraps=lifecycle._set_asset_status) as spy:
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator", reason="Plumbing failure"
+			)
+		spy.assert_called_once()
+		self.assertEqual(spy.call_args.kwargs["log_reason"], "Plumbing failure")
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Out of Service")
+		self.assertEqual(asset.reason, "Plumbing failure")
+
+	def test_oos_from_occupied_closes_session(self):
+		session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="Emergency"
+		)
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Out of Service")
+		s = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(s.status, "Completed")
+		self.assertEqual(s.vacate_method, "Discovery on Rounds")
+
+	def test_oos_requires_reason(self):
+		# Empty string
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator", reason=""
+			)
+		# Whitespace-only — covered by `not reason.strip()` branch
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator", reason="   \t\n  "
+			)
+
+	def test_oos_reject_if_already_oos(self):
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="First"
+		)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator", reason="Second"
+			)
+		# Review 2026-04-10: the rejection path must release the Redis lock via
+		# the finally-block Lua CAS. If release was skipped, acquiring the same
+		# asset's lock in a fresh call would raise LockContentionError instead
+		# of entering the with-block cleanly.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Out of Service")
