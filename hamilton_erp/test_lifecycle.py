@@ -103,6 +103,9 @@ class TestStartSession(IntegrationTestCase):
 		self.assertEqual(asset.status, "Occupied")
 		self.assertEqual(asset.current_session, session_name)
 		self.assertEqual(asset.version, 1)
+		# Review 2026-04-10: lock the contract Tasks 5-8 will copy — every
+		# transition stamps hamilton_last_status_change.
+		self.assertIsNotNone(asset.hamilton_last_status_change)
 
 	def test_start_session_creates_venue_session(self):
 		session_name = lifecycle.start_session_for_asset(
@@ -124,3 +127,10 @@ class TestStartSession(IntegrationTestCase):
 		self.asset.save(ignore_permissions=True)
 		with self.assertRaises(frappe.ValidationError):
 			lifecycle.start_session_for_asset(self.asset.name, operator="Administrator")
+		# Review 2026-04-10: the rejection path must release the Redis lock via
+		# the finally-block Lua CAS. If release was skipped, acquiring the same
+		# asset's lock in a fresh call would raise LockContentionError instead
+		# of entering the with-block cleanly.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Dirty")

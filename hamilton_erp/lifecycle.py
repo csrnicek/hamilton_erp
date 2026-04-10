@@ -103,6 +103,11 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "
 	with asset_status_lock(asset_name, "assign") as row:
 		_require_transition(row, current="Available", target="Occupied",
 		                    asset_name=asset_name)
+		# NOTE: _create_session runs BEFORE _set_asset_status. A throw from
+		# _set_asset_status (e.g. hypothetical version-CAS failure) would leave
+		# the Venue Session insert pending — the request-level transaction rolls
+		# it back in a normal HTTP call path. Programmatic callers MUST NOT
+		# wrap this in try/except; let exceptions propagate to trigger rollback.
 		session_name = _create_session(asset_name, operator=operator, customer=customer)
 		_set_asset_status(
 			asset_name,
@@ -123,6 +128,12 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "
 
 
 def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
+	"""Insert a Venue Session row for a freshly-assigned asset. Caller holds the asset lock.
+
+	NOTE: session_number is intentionally unset — Task 9 wires the Redis INCR
+	generator. identity_method defaults to 'not_applicable' via the controller's
+	_set_defaults hook.
+	"""
 	session = frappe.get_doc({
 		"doctype": "Venue Session",
 		"venue_asset": asset_name,
@@ -131,7 +142,6 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 		"session_start": frappe.utils.now_datetime(),
 		"status": "Active",
 		"assignment_status": "Assigned",
-		"identity_method": "not_applicable",
 	}).insert(ignore_permissions=True)
 	return session.name
 
@@ -151,7 +161,10 @@ def _set_asset_status(
 	The caller must have just read `expected_version` under FOR UPDATE inside the
 	same lock, so an optimistic-lock conflict here would be a bug, not a race.
 	"""
-	asset = frappe.get_doc("Venue Asset", asset_name)
+	# for_update=True bypasses frappe.local.document_cache, which could return
+	# a pre-lock snapshot if an earlier get_doc in this request cached the asset.
+	# Safe — we already hold the row lock via the caller's asset_status_lock.
+	asset = frappe.get_doc("Venue Asset", asset_name, for_update=True)
 	if asset.version != expected_version:
 		frappe.throw(_("Concurrent update to {0} — please refresh and retry.")
 		             .format(asset_name))
