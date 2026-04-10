@@ -76,11 +76,56 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 - [ ] Overtime overlay on tiles when session exceeds configured duration
 
 ### Test criteria
-- QA test H10 (Vacate and Turnover) passes
-- QA test H11 (Out of Service) passes
-- QA test H12 (Occupied Asset Rejection) passes
-- State transitions enforce the valid-only rule — invalid transitions throw errors
-- Two browser tabs viewing the asset board stay in sync via realtime
+
+#### Functional & State Lifecycle
+- [ ] QA test **H10 (Vacate and Turnover)** passes end-to-end (manual session → occupy → vacate → Dirty → Available)
+- [ ] QA test **H11 (Out of Service)** passes (including mandatory reason field and return-to-service flow)
+- [ ] QA test **H12 (Occupied Asset Rejection)** passes (cannot occupy or change state on an already-occupied asset)
+- [ ] All state transitions enforce the valid-only rule:
+  - Available → Occupied / Out of Service
+  - Occupied → Dirty (via vacate)
+  - Dirty → Available
+  - Any state → Out of Service (with reason)
+  - Out of Service → Available (with reason)
+  - **Invalid transitions throw clear `frappe.ValidationError` with user-friendly message**
+- [ ] Venue Session is correctly created on occupy (operator, asset, timestamp, status recorded)
+- [ ] Vacate correctly marks session as complete and triggers asset state change to Dirty
+- [ ] Asset Status Log is **automatically created** on every successful state change (with before/after state and reason where applicable)
+
+#### UI / Asset Board (Card-Based)
+- [ ] Asset board renders as **card-based grid** (rooms and lockers visually separated, tier badges visible)
+- [ ] Tiles are color-coded by state (Available = green, Occupied = blue, Dirty = orange, Out of Service = red)
+- [ ] Tap/click on tile shows context-appropriate actions and opens correct popover
+- [ ] Out of Service and Return to Service both require mandatory reason field (validation enforced on client and server)
+- [ ] Overtime warning overlay appears on Occupied tiles when session reaches stay_duration (amber border + clock icon)
+- [ ] Overtime overlay escalates to red pulsing border + OT badge when stay_duration + grace_minutes is exceeded
+- [ ] Board is usable on tablet (iPad landscape) at minimum tile size 96×96px
+
+#### Performance & Scale
+- [ ] Asset board loads in **< 1 second** with 59 assets (measured on Frappe Cloud instance)
+- [ ] Single batched query for initial board load — no N+1 queries (enforced by `test_get_asset_board_data_under_one_second`)
+
+#### Realtime & Multi-Tab
+- [ ] Two (or more) browser tabs viewing the asset board stay in sync within 2 seconds of any state change (`frappe.publish_realtime` with `after_commit=True`)
+- [ ] Realtime listener is properly cleaned up when leaving the asset board page (no memory leaks or console errors)
+
+#### Security & Permissions
+- [ ] Hamilton Operator / Manager / Admin roles can perform all allowed actions; unauthorized users are blocked
+- [ ] All whitelisted methods (`get_asset_board_data`, state change endpoints) enforce `frappe.has_permission` checks
+- [ ] No permission escalation possible via direct API calls
+
+#### Error Handling & Edge Cases
+- [ ] Attempting invalid state transition shows clear error toast and does not change data
+- [ ] Concurrent assign attempts on the same asset are rejected by the three-layer lock — second attempt gets a clear error, asset state remains consistent (DEC-019)
+- [ ] Board still functions with 0 assets (empty state message shown)
+- [ ] All mandatory fields (reason for Out of Service / Return to Service) are enforced on both client and server
+
+#### Data Integrity
+- [ ] Every state change is fully auditable via Asset Status Log (no orphaned logs, no missing entries)
+- [ ] No duplicate sessions created for the same asset (three-layer lock prevents this)
+- [ ] session_number is unique, correctly formatted (DEC-033), and auto-generated on every session creation
+
+**Acceptance:** All items above must pass before Phase 1 is marked complete.
 
 ---
 
