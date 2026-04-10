@@ -108,11 +108,14 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 #### Realtime & Multi-Tab
 - [ ] Two (or more) browser tabs viewing the asset board stay in sync within 2 seconds of any state change (`frappe.publish_realtime` with `after_commit=True`)
 - [ ] Realtime listener is properly cleaned up when leaving the asset board page (no memory leaks or console errors)
+- [ ] If realtime fails (connection lost), manual page refresh must reflect correct current state — no stale data persisted in the UI
 
 #### Security & Permissions
 - [ ] Hamilton Operator / Manager / Admin roles can perform all allowed actions; unauthorized users are blocked
 - [ ] All whitelisted methods (`get_asset_board_data`, state change endpoints) enforce `frappe.has_permission` checks
 - [ ] No permission escalation possible via direct API calls
+- [ ] Direct API call to a whitelisted method without a valid session returns HTTP 403
+- [ ] Client-side role spoofing does not bypass server-side permission checks
 
 #### Error Handling & Edge Cases
 - [ ] Attempting invalid state transition shows clear error toast and does not change data
@@ -124,6 +127,7 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 - [ ] Every state change is fully auditable via Asset Status Log (no orphaned logs, no missing entries)
 - [ ] No duplicate sessions created for the same asset (three-layer lock prevents this)
 - [ ] session_number is unique, correctly formatted (DEC-033), and auto-generated on every session creation
+- [ ] Database-level unique constraint on active session per asset is enforced (no two open sessions for the same asset in the DB)
 
 **Acceptance:** All items above must pass before Phase 1 is marked complete.
 
