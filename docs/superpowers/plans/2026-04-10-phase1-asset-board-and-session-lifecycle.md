@@ -6,7 +6,7 @@
 
 **Architecture:** Asset-centric (design doc §4.4). Whitelisted methods stay on `Venue Asset` as thin entry points; their bodies delegate to a new `hamilton_erp/lifecycle.py` module that drives the three-layer lock (`hamilton_erp/locks.py`) and emits realtime events through `hamilton_erp/realtime.py` **outside** the lock section. The Asset Board is a Frappe Page (`/app/asset-board`) with a vanilla JS class `hamilton_erp.AssetBoard`.
 
-**Tech Stack:** Frappe v16 / ERPNext v16 (Python 3.11, MariaDB 10.6–12.x, Redis), vanilla JS (no frameworks), `IntegrationTestCase` from `frappe.tests`, TDD via `bench run-tests`.
+**Tech Stack:** Frappe v16 / ERPNext v16 (Python 3.14, Node 24, MariaDB 10.6–12.x, Redis), vanilla JS (no frameworks), `IntegrationTestCase` from `frappe.tests`, TDD via `bench run-tests`.
 
 **Reference docs (read first):**
 - `docs/phase1_design.md` — authoritative design (2026-04-10)
@@ -38,13 +38,13 @@ Current state at 2026-04-10 (from `docs/phase1_design.md` §12): brew has instal
 - [ ] **M0.2** — `mkdir ~/.nvm`
 - [ ] **M0.3** — `brew services start mariadb && brew services start redis`
 - [ ] **M0.4** — Open a fresh terminal, verify: `pyenv --version && nvm --version && mysql --version && redis-cli ping`
-- [ ] **M0.5** — `pyenv install 3.11.9 && pyenv global 3.11.9`
-- [ ] **M0.6** — `nvm install 20 && nvm alias default 20`
-- [ ] **M0.7** — `pip install frappe-bench`
-- [ ] **M0.8** — `bench init ~/frappe-bench --frappe-branch version-16 --python $(pyenv which python)`
-- [ ] **M0.9** — `cd ~/frappe-bench && bench new-site hamilton-test.localhost --mariadb-root-password '' --admin-password admin`
+- [ ] **M0.5** — Use system Python 3.14 at `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3` (Frappe `version-16` `pyproject.toml` declares `requires-python = ">=3.14,<3.15"`). Do NOT use pyenv for this — the plan previously pinned 3.11.9 but Frappe v16 tip has moved past that. Verify: `/Library/Frameworks/Python.framework/Versions/3.14/bin/python3 --version` → `Python 3.14.0`
+- [ ] **M0.6** — `nvm install 24 && nvm alias default 24 && npm install -g yarn` (Frappe `version-16` `package.json` declares `engines.node >=24`. Node 20 LTS is stale for v16 tip.)
+- [ ] **M0.7** — `pip install frappe-bench` (can install into any active Python; frappe-bench is the orchestration CLI — the actual bench venv uses the Python passed via `--python` in M0.8)
+- [ ] **M0.8** — `bench init ~/frappe-bench-hamilton --frappe-branch version-16 --python /Library/Frameworks/Python.framework/Versions/3.14/bin/python3`
+- [ ] **M0.9** — `cd ~/frappe-bench-hamilton && bench new-site hamilton-test.localhost --mariadb-root-password '' --admin-password admin`
   - If MariaDB 12.2 rejects Frappe's root auth: `brew uninstall mariadb && brew install mariadb@11.4 && brew services start mariadb@11.4` and retry.
-- [ ] **M0.10** — `cd ~/frappe-bench && bench get-app erpnext --branch version-16`
+- [ ] **M0.10** — `cd ~/frappe-bench-hamilton && bench get-app erpnext --branch version-16`
 - [ ] **M0.11** — `bench --site hamilton-test.localhost install-app erpnext`
 - [ ] **M0.12** — `bench get-app /Users/chrissrnicek/hamilton_erp` (installs the working copy, not a clone — edits in-place)
 - [ ] **M0.13** — `bench --site hamilton-test.localhost install-app hamilton_erp`
@@ -103,7 +103,7 @@ Every task below uses the same five-step cycle:
 **Command template for Frappe tests throughout:**
 
 ```bash
-cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
   --app hamilton_erp --module hamilton_erp.<module_path>
 ```
 
@@ -121,7 +121,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 1: Run the existing Phase 0 tests on the fresh local bench**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset
   ```
 
@@ -158,7 +158,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run the Phase 0 tests again**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset
   ```
 
@@ -255,7 +255,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run the test and confirm it fails**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_locks
   ```
 
@@ -345,7 +345,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run the tests and confirm they pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_locks
   ```
 
@@ -437,7 +437,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run the test and confirm it fails**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -541,7 +541,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run the tests and confirm they pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -631,7 +631,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm the new tests fail**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -745,7 +745,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 5: Run the tests and confirm they pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -841,7 +841,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run tests, confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -899,7 +899,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -978,7 +978,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run tests, confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1023,7 +1023,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1115,7 +1115,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run tests, confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1154,7 +1154,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1224,7 +1224,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run tests, confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1261,7 +1261,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1355,7 +1355,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1412,7 +1412,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1470,7 +1470,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_session.test_venue_session
   ```
 
@@ -1515,7 +1515,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 5: Run `bench migrate` so Frappe picks up the JSON change, then run tests**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost migrate
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost migrate
   bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_session.test_venue_session
   ```
@@ -1615,7 +1615,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_seed_patch
   ```
 
@@ -1721,7 +1721,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 5: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_seed_patch
   ```
 
@@ -1805,7 +1805,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1860,7 +1860,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
   ```
 
@@ -1923,7 +1923,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run, confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset
   ```
 
@@ -1978,7 +1978,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run all affected test modules, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset
   bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_lifecycle
@@ -2075,7 +2075,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_api_phase1
   ```
 
@@ -2145,7 +2145,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_api_phase1
   ```
 
@@ -2223,7 +2223,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run and confirm failures**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_api_phase1
   ```
 
@@ -2282,7 +2282,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 4: Run tests, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_api_phase1
   ```
 
@@ -2447,7 +2447,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 7: Migrate and smoke-test in the browser**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost migrate
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost migrate
   bench --site hamilton-test.localhost clear-cache
   bench build --app hamilton_erp
   bench start &
@@ -2634,7 +2634,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 3: Rebuild assets and manually verify**
 
   ```bash
-  cd ~/frappe-bench && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
+  cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
   bench start &
   sleep 3
   ```
@@ -2932,7 +2932,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 3: Rebuild, manually QA**
 
   ```bash
-  cd ~/frappe-bench && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
+  cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
   bench start &
   sleep 3
   ```
@@ -3056,7 +3056,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 3: Manually QA**
 
   ```bash
-  cd ~/frappe-bench && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
+  cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
   ```
 
   Temporarily shorten an asset's stay on the backend so overtime fires quickly:
@@ -3169,7 +3169,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Manually QA cross-tab sync**
 
   ```bash
-  cd ~/frappe-bench && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
+  cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
   bench start &
   sleep 3
   ```
@@ -3257,7 +3257,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Manually QA**
 
   ```bash
-  cd ~/frappe-bench && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
+  cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache
   bench start &
   sleep 3
   ```
@@ -3396,7 +3396,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_e2e_phase1
   ```
 
@@ -3488,7 +3488,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_e2e_phase1
   ```
 
@@ -3568,7 +3568,7 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - [ ] **Step 2: Run, confirm pass**
 
   ```bash
-  cd ~/frappe-bench && bench --site hamilton-test.localhost run-tests \
+  cd ~/frappe-bench-hamilton && bench --site hamilton-test.localhost run-tests \
     --app hamilton_erp --module hamilton_erp.test_e2e_phase1
   ```
 
