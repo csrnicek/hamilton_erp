@@ -155,12 +155,23 @@ def _set_asset_status(
 	operator: str,
 	previous: str,
 	expected_version: int,
+	log_venue_session: Optional[str] = None,
 ) -> None:
 	"""Write the new status, bump version, and create the audit log.
 
 	The caller must have just read `expected_version` under FOR UPDATE inside the
 	same lock, so an optimistic-lock conflict here would be a bug, not a race.
+
+	`session` is written to `asset.current_session` (None clears it, e.g. on vacate).
+	`log_venue_session` is the FK written into the Asset Status Log row. When
+	omitted it defaults to `session` — which is correct for start_session (the
+	asset's new current_session IS the session to log). On vacate, the caller
+	passes `session=None` (to clear current_session) but `log_venue_session=
+	<closed session name>` so the audit row still links to the session that
+	was closed. Task 4's start_session callers rely on the default.
 	"""
+	if log_venue_session is None:
+		log_venue_session = session
 	# for_update=True bypasses frappe.local.document_cache, which could return
 	# a pre-lock snapshot if an earlier get_doc in this request cached the asset.
 	# Safe — we already hold the row lock via the caller's asset_status_lock.
@@ -181,7 +192,7 @@ def _set_asset_status(
 		new_status=new_status,
 		reason=log_reason,
 		operator=operator,
-		venue_session=session,
+		venue_session=log_venue_session,
 	)
 
 
@@ -189,12 +200,22 @@ def _set_asset_status(
 # Vacate (Occupied → Dirty) — Task 5
 # ---------------------------------------------------------------------------
 
+# SOURCE OF TRUTH: venue_session.json `vacate_method` Select field options.
+# Keep in sync — any change to the Select list here MUST also update the doctype JSON.
 _VACATE_METHODS = ("Key Return", "Discovery on Rounds")
 
 
 def vacate_session(asset_name: str, *, operator: str, vacate_method: str) -> None:
 	"""Occupied → Dirty + close linked Venue Session."""
-	assert vacate_method in _VACATE_METHODS, f"vacate_method must be one of {_VACATE_METHODS}"
+	# Validate operator input BEFORE acquiring the lock. `assert` would be
+	# stripped by `python -O`, so use frappe.throw to raise ValidationError
+	# which is safe in all run modes.
+	if vacate_method not in _VACATE_METHODS:
+		frappe.throw(
+			_("Invalid vacate method {0}. Must be one of: {1}.").format(
+				vacate_method, ", ".join(_VACATE_METHODS)
+			)
+		)
 	from hamilton_erp.locks import asset_status_lock
 	from hamilton_erp.realtime import publish_status_change
 
@@ -207,11 +228,22 @@ def vacate_session(asset_name: str, *, operator: str, vacate_method: str) -> Non
 		# transaction rolls it back in a normal HTTP call path. Programmatic
 		# callers MUST NOT wrap this in try/except; let exceptions propagate
 		# to trigger rollback. Matches the Task 4 start_session_for_asset pattern.
-		_close_current_session(asset_name, operator=operator, vacate_method=vacate_method)
+		#
+		# The lock row dict already includes `current_session` (see locks.py
+		# SELECT list) — read it here so we don't issue a redundant DB read
+		# inside _close_current_session.
+		current_session = row["current_session"]
+		_close_current_session(
+			asset_name,
+			current_session=current_session,
+			operator=operator,
+			vacate_method=vacate_method,
+		)
 		_set_asset_status(
 			asset_name,
 			new_status="Dirty",
-			session=None,
+			session=None,                      # clears asset.current_session
+			log_venue_session=current_session, # but the log row still links to the closed session
 			log_reason=None,
 			operator=operator,
 			previous="Occupied",
@@ -221,11 +253,16 @@ def vacate_session(asset_name: str, *, operator: str, vacate_method: str) -> Non
 	publish_status_change(asset_name, previous_status="Occupied")
 
 
-def _close_current_session(asset_name: str, *, operator: str, vacate_method: str) -> str:
-	current = frappe.db.get_value("Venue Asset", asset_name, "current_session")
-	if not current:
+def _close_current_session(asset_name: str, *, current_session: Optional[str],
+                           operator: str, vacate_method: str) -> str:
+	"""Close the Venue Session currently attached to an asset.
+
+	Caller passes `current_session` from the lock's row dict so we don't
+	re-query under the lock. Throws if current_session is falsy.
+	"""
+	if not current_session:
 		frappe.throw(_("Asset {0} has no current session to close.").format(asset_name))
-	session = frappe.get_doc("Venue Session", current)
+	session = frappe.get_doc("Venue Session", current_session)
 	session.session_end = frappe.utils.now_datetime()
 	session.operator_vacate = operator
 	session.vacate_method = vacate_method

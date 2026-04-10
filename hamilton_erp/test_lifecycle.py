@@ -194,9 +194,16 @@ class TestVacateSession(IntegrationTestCase):
 			lifecycle.vacate_session(
 				self.asset.name, operator="Administrator", vacate_method="Key Return"
 			)
+		# Review 2026-04-10: the rejection path must release the Redis lock via
+		# the finally-block Lua CAS. If release was skipped, acquiring the same
+		# asset's lock in a fresh call would raise LockContentionError instead
+		# of entering the with-block cleanly.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Dirty")
 
 	def test_vacate_requires_valid_method(self):
-		with self.assertRaises(AssertionError):
+		with self.assertRaises(frappe.ValidationError):
 			lifecycle.vacate_session(
 				self.asset.name, operator="Administrator", vacate_method="Nonsense"
 			)
