@@ -5,6 +5,8 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import now_datetime
 
+from hamilton_erp.lifecycle import VALID_TRANSITIONS
+
 
 class VenueAsset(Document):
 
@@ -34,11 +36,15 @@ class VenueAsset(Document):
 			return
 		old_doc = self.get_doc_before_save()
 		if not old_doc:
-			return  # New record — any initial status is valid
+			# New record — must start as Available (ChatGPT review 2026-04-10).
+			# Without this guard an operator could insert a row directly as
+			# "Occupied" or "Dirty", bypassing the lifecycle state machine.
+			if self.status != "Available":
+				frappe.throw(_("New assets must start as Available."))
+			return
 
 		old_status = old_doc.status
-		valid = self._valid_transitions()
-		if self.status not in valid.get(old_status, []):
+		if self.status not in VALID_TRANSITIONS.get(old_status, ()):
 			frappe.throw(
 				_("Cannot transition {0} from {1} to {2}.").format(
 					self.asset_name, old_status, self.status
@@ -57,18 +63,10 @@ class VenueAsset(Document):
 			)
 
 	def _validate_reason_for_oos(self):
-		"""Out of Service requires a reason."""
-		if self.status == "Out of Service" and not self.reason:
+		"""Out of Service requires a non-whitespace reason."""
+		# ChatGPT review 2026-04-10: strip() so " " / "\t" / "\n" don't pass as a reason.
+		if self.status == "Out of Service" and not (self.reason or "").strip():
 			frappe.throw(_("Please provide a reason for marking this asset Out of Service."))
-
-	@staticmethod
-	def _valid_transitions() -> dict:
-		return {
-			"Available": ["Occupied", "Out of Service"],
-			"Occupied": ["Dirty", "Out of Service"],
-			"Dirty": ["Available", "Out of Service"],
-			"Out of Service": ["Available"],
-		}
 
 	# ------------------------------------------------------------------
 	# Whitelisted methods — stubs for Phase 0, implemented in Phase 1

@@ -100,8 +100,15 @@ class TestAssetStatusLock(IntegrationTestCase):
 		self.assertIsNone(holder_error["value"])
 		self.assertTrue(contention_seen["value"])
 
-	def test_different_operations_are_independent(self):
-		"""Lock keys are (asset_name, operation) — separate ops don't block."""
+	def test_different_operations_on_same_asset_are_serialized(self):
+		"""Lock key is asset-only — ALL ops on one asset serialize against each other.
+
+		Previously (pre-ChatGPT-review 2026-04-10) the key included the operation
+		label, which let an "assign" and a "vacate" concurrently mutate the same
+		asset. The key is now asset-only, so a second acquisition from any caller
+		must raise LockContentionError regardless of the operation string.
+		"""
 		with asset_status_lock(self.asset.name, "assign"):
-			with asset_status_lock(self.asset.name, "oos"):
-				pass  # must not raise
+			with self.assertRaises(LockContentionError):
+				with asset_status_lock(self.asset.name, "oos"):
+					pass  # pragma: no cover — must not reach here

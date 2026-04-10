@@ -46,17 +46,37 @@ class LockContentionError(frappe.ValidationError):
 def asset_status_lock(asset_name: str, operation: str) -> Iterator[dict]:
 	"""Acquire the three-layer lock for a Venue Asset status change.
 
+	Args:
+	    asset_name: The Venue Asset primary key to lock.
+	    operation: Human-readable context label ("assign", "vacate", "oos", etc.).
+	        Used for logging only — the Redis lock key is asset-only, so any
+	        status change on the same asset serializes against all others
+	        (ChatGPT review 2026-04-10). Previously the key was keyed on
+	        (asset, operation), which let two operators concurrently mutate
+	        the same asset via different operation paths.
+
 	Yields: dict with keys {name, asset_code, asset_name, asset_category,
 	    asset_tier, status, current_session, version} — the row read under
 	    FOR UPDATE. Lifecycle callers can use these fields directly without
 	    re-querying outside the lock.
-	Raises: LockContentionError if the Redis lock is held by another caller.
+	Raises: LockContentionError if the Redis lock is held by another caller
+	    OR if the Redis service itself is unavailable (fail closed, not open).
 	"""
 	cache = frappe.cache()
-	key = f"hamilton:asset_lock:{asset_name}:{operation}"
+	# Asset-only key — ALL operations on the same asset serialize against each other.
+	key = f"hamilton:asset_lock:{asset_name}"
 	token = uuid.uuid4().hex
-	# Layer 1 — Redis NX set with TTL
-	acquired = cache.set(key, token, nx=True, px=LOCK_TTL_MS)
+	# Layer 1 — Redis NX set with TTL. Fail closed: any Redis exception becomes
+	# a LockContentionError so callers never silently skip the advisory lock.
+	try:
+		acquired = cache.set(key, token, nx=True, px=LOCK_TTL_MS)
+	except Exception as exc:
+		frappe.logger().warning(
+			f"asset_status_lock: Redis acquire failed for {key} (op={operation}): {exc}"
+		)
+		raise LockContentionError(
+			_("Asset lock service temporarily unavailable. Please try again.")
+		)
 	if not acquired:
 		# TODO(phase-2): distinguish transient contention from stuck-lock recovery.
 		# Currently both cases return the same message; operators mashing the button

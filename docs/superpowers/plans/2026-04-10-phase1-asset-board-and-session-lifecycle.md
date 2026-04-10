@@ -1177,6 +1177,29 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - Modify: `hamilton_erp/hamilton_erp/lifecycle.py`
 - Modify: `hamilton_erp/hamilton_erp/test_lifecycle.py`
 
+> **Additional requirement — Gemini AI review (2026-04-10):** When an asset
+> transitions from Out of Service back to Available, the persisted `reason`
+> field (set by Task 7's `set_asset_out_of_service`) must be cleared —
+> otherwise the stale OOS reason lingers on the asset forever. Two changes
+> are required in this task:
+>
+> 1. **Modify `_set_asset_status`** (defined in Task 5, around line 714 of
+>    this plan — the `if new_status == "Out of Service": asset.reason = log_reason`
+>    branch). Extend it with an `elif` branch:
+>    ```python
+>    if new_status == "Out of Service":
+>        asset.reason = log_reason
+>    elif previous == "Out of Service":
+>        asset.reason = None
+>    ```
+>    This keeps the reason-field lifecycle symmetric with the status-field
+>    lifecycle and centralizes the clearing logic in the one helper that all
+>    lifecycle functions already go through.
+> 2. **Extend `test_return_moves_to_available`** (Step 1 below) with an
+>    assertion: `self.assertFalse(asset.reason)` after the transition. The
+>    `setUp` for this test already seeds `reason: "Initial OOS"`, so this
+>    catches a regression if `_set_asset_status` stops clearing it.
+
 - [ ] **Step 1: Add failing tests**
 
   Append to `hamilton_erp/hamilton_erp/test_lifecycle.py`:

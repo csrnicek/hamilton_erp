@@ -170,3 +170,27 @@ class TestVenueAsset(IntegrationTestCase):
 			"display_order": 99,
 		})
 		self.assertRaises(frappe.ValidationError, doc.insert)
+
+	# ------------------------------------------------------------------
+	# ChatGPT review 2026-04-10 — new controller guards
+	# ------------------------------------------------------------------
+
+	def test_new_asset_must_start_available(self):
+		"""Directly inserting with any non-Available status must raise."""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-NEW-BAD-INIT",
+			"asset_name": "Test New Bad Init",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Occupied",
+			"display_order": 99,
+		})
+		self.assertRaises(frappe.ValidationError, doc.insert)
+
+	def test_oos_reason_whitespace_is_rejected(self):
+		"""A reason field of only whitespace must not satisfy OOS's mandatory reason."""
+		asset = self._make_asset("Test Room OOS Whitespace")
+		asset.status = "Out of Service"
+		asset.reason = "   "
+		self.assertRaises(frappe.ValidationError, asset.save)
