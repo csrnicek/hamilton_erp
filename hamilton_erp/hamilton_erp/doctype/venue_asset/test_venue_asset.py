@@ -14,11 +14,13 @@ IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
 class TestVenueAsset(IntegrationTestCase):
 	def _make_asset(self, name: str, category: str = "Room", tier: str = "Single Standard") -> object:
 		resolved_tier = "Locker" if category == "Locker" else tier
-		asset_code = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").upper()
+		# Test-only asset_code: slug-from-name for uniqueness. Production uses
+		# R001/L001-style immutable codes — see venue_asset.json asset_code description.
+		test_asset_code = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").upper()
 		return frappe.get_doc(
 			{
 				"doctype": "Venue Asset",
-				"asset_code": asset_code,
+				"asset_code": test_asset_code,
 				"asset_name": name,
 				"asset_category": category,
 				"asset_tier": resolved_tier,
@@ -43,18 +45,17 @@ class TestVenueAsset(IntegrationTestCase):
 		asset = self._make_asset("Test Locker L1", category="Locker")
 		self.assertEqual(asset.asset_category, "Locker")
 
-	def test_room_requires_tier(self):
-		doc = frappe.get_doc(
-			{
-				"doctype": "Venue Asset",
-				"asset_code": "TEST-ROOM-NO-TIER",
-				"asset_name": "Test Room No Tier",
-				"asset_category": "Room",
-				"asset_tier": "",
-				"status": "Available",
-				"display_order": 99,
-			}
-		)
+	def test_room_requires_valid_tier(self):
+		"""Rooms given a non-room tier must be rejected by the custom validator."""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-ROOM-BAD-TIER",
+			"asset_name": "Test Room Bad Tier",
+			"asset_category": "Room",
+			"asset_tier": "Locker",   # schema-valid option, semantically wrong for a Room
+			"status": "Available",
+			"display_order": 99,
+		})
 		self.assertRaises(frappe.ValidationError, doc.insert)
 
 	# ------------------------------------------------------------------
