@@ -1,3 +1,5 @@
+import re
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
@@ -10,13 +12,16 @@ IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
 
 
 class TestVenueAsset(IntegrationTestCase):
-	def _make_asset(self, name: str, category: str = "Room", tier: str = "Standard") -> object:
+	def _make_asset(self, name: str, category: str = "Room", tier: str = "Single Standard") -> object:
+		resolved_tier = "Locker" if category == "Locker" else tier
+		asset_code = re.sub(r"[^A-Za-z0-9]+", "-", name).strip("-").upper()
 		return frappe.get_doc(
 			{
 				"doctype": "Venue Asset",
+				"asset_code": asset_code,
 				"asset_name": name,
 				"asset_category": category,
-				"asset_tier": tier if category == "Room" else "",
+				"asset_tier": resolved_tier,
 				"status": "Available",
 				"display_order": 99,
 			}
@@ -35,17 +40,19 @@ class TestVenueAsset(IntegrationTestCase):
 		self.assertEqual(asset.asset_category, "Room")
 
 	def test_insert_locker_asset(self):
-		asset = self._make_asset("Test Locker L1", category="Locker", tier="")
+		asset = self._make_asset("Test Locker L1", category="Locker")
 		self.assertEqual(asset.asset_category, "Locker")
 
 	def test_room_requires_tier(self):
 		doc = frappe.get_doc(
 			{
 				"doctype": "Venue Asset",
+				"asset_code": "TEST-ROOM-NO-TIER",
 				"asset_name": "Test Room No Tier",
 				"asset_category": "Room",
 				"asset_tier": "",
 				"status": "Available",
+				"display_order": 99,
 			}
 		)
 		self.assertRaises(frappe.ValidationError, doc.insert)
@@ -98,6 +105,7 @@ class TestVenueAsset(IntegrationTestCase):
 	def test_available_to_oos(self):
 		asset = self._make_asset("Test Room OOS1")
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()  # must not raise
 		self.assertEqual(asset.status, "Out of Service")
 
@@ -106,6 +114,7 @@ class TestVenueAsset(IntegrationTestCase):
 		asset.status = "Occupied"
 		asset.save()
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()  # must not raise
 		self.assertEqual(asset.status, "Out of Service")
 
@@ -116,11 +125,13 @@ class TestVenueAsset(IntegrationTestCase):
 		asset.status = "Dirty"
 		asset.save()
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()  # must not raise
 
 	def test_oos_to_available(self):
 		asset = self._make_asset("Test Room OOS4")
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()
 		asset.status = "Available"
 		asset.save()  # must not raise
@@ -129,6 +140,7 @@ class TestVenueAsset(IntegrationTestCase):
 	def test_oos_to_occupied_is_invalid(self):
 		asset = self._make_asset("Test Room OOS5")
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()
 		asset.status = "Occupied"
 		self.assertRaises(frappe.ValidationError, asset.save)
@@ -136,6 +148,7 @@ class TestVenueAsset(IntegrationTestCase):
 	def test_oos_to_dirty_is_invalid(self):
 		asset = self._make_asset("Test Room OOS6")
 		asset.status = "Out of Service"
+		asset.reason = "Maintenance"
 		asset.save()
 		asset.status = "Dirty"
 		self.assertRaises(frappe.ValidationError, asset.save)
@@ -144,14 +157,15 @@ class TestVenueAsset(IntegrationTestCase):
 	# Locker tier clearing
 	# ------------------------------------------------------------------
 
-	def test_locker_tier_is_cleared_on_save(self):
-		"""Lockers must not carry a Room-type tier — it is silently cleared."""
-		locker = frappe.get_doc({
+	def test_locker_requires_locker_tier(self):
+		"""Lockers must have tier 'Locker' — any other tier raises."""
+		doc = frappe.get_doc({
 			"doctype": "Venue Asset",
-			"asset_name": "Test Locker Tier",
+			"asset_code": "TEST-LOCKER-WRONG-TIER",
+			"asset_name": "Test Locker Wrong Tier",
 			"asset_category": "Locker",
-			"asset_tier": "Standard",  # incorrectly set
+			"asset_tier": "Single Standard",
 			"status": "Available",
 			"display_order": 99,
-		}).insert(ignore_permissions=True)
-		self.assertEqual(locker.asset_tier, "")
+		})
+		self.assertRaises(frappe.ValidationError, doc.insert)
