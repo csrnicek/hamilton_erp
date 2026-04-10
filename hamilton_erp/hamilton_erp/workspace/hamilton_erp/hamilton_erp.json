@@ -123,9 +123,19 @@
  "number_cards": [],
  "owner": "Administrator",
  "parent_page": "",
- "public": 1,
+ "public": 0,
  "restrict_to_domain": "",
- "roles": [],
+ "roles": [
+  {
+   "role": "Hamilton Operator"
+  },
+  {
+   "role": "Hamilton Manager"
+  },
+  {
+   "role": "Hamilton Admin"
+  }
+ ],
  "sequence_id": 0,
  "shortcuts": [
   {

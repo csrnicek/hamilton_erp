@@ -575,4 +575,22 @@ Lock sections must be minimal — validate + save only, no I/O inside lock.
 
 ---
 
+## DEC-055 — Phase 1 Scope Additions from 3-AI Review Follow-Up
+
+**Date:** 2026-04-10
+**Context:** A second pass through the Phase 0 codebase using ChatGPT, Gemini, and Grok surfaced four findings that affect Phase 1 scope. ChatGPT's findings were all accurate. Grok and Gemini produced a number of false alarms (reviewed stale repo state, were wrong about Frappe file layout, and were wrong about valid `naming_rule` values) whose valid findings were already covered by the existing Phase 1 plan. The four items below are the surviving real issues that must be handled.
+**Decision:**
+
+1. **Walk-in Customer must exist before any Venue Session can be created.** The `Venue Session` DocType sets `customer` default to `"Walk-in"`, but no Customer document with that name is shipped by ERPNext or created by Phase 0. Without one, every session creation in Phase 1 will fail with a link-validation error. The Phase 1 seed migration patch (scoped in DEC-054 / Q6) must also create a Customer named `"Walk-in"` if it does not exist, with a minimal customer_group and territory per ERPNext defaults. Idempotent — skip if already present.
+
+2. **Lock down system-owned fields on Venue Session as each controller method lands.** These fields must be operator-writable only via server code, not directly in the Frappe form: `sales_invoice`, `admission_item`, `operator_checkin`, `shift_record`, `pricing_rule_applied`, `under_25_applied`, `comp_flag`. As Phase 1 implements each whitelisted method that writes one of these, set `read_only: 1` on the field in `venue_session.json` in the same commit. Prevents operator tampering in the UI while allowing server-side flows (Phase 2 POS integration, Phase 3 shift flows) to set them.
+
+3. **Hamilton Settings singleton must be seeded with defaults.** The seed migration patch from DEC-054 must also create the `Hamilton Settings` single-doctype record if it doesn't already exist, with `float_amount = 300`, `default_stay_duration_minutes = 360`, `grace_minutes = 15`, `assignment_timeout_minutes = 15`. Without this, Phase 1 code that reads these values via `frappe.db.get_single_value("Hamilton Settings", ...)` will get None and the overtime/cleanup logic will silently do nothing.
+
+4. **Hamilton Workspace permission tightening — quick fix applied 2026-04-10.** The Phase 0 workspace JSON had `"public": 1` and empty `"roles": []`, which exposed the workspace to every user on the site. Fixed immediately on 2026-04-10: set `"public": 0` and added `"roles": [Hamilton Operator, Hamilton Manager, Hamilton Admin]`. Committed separately from this decision. Workspace is now visible only to the three Hamilton roles.
+
+**Rationale:** Items 1 and 3 are gap-fillers — the DocType defaults assume records that Phase 0 never created, and any Phase 1 code that touches them would fail on a fresh install. Item 2 closes a blind spot where the form UI would let operators overwrite financial and audit-critical links that are supposed to be server-managed. Item 4 was a straight configuration bug in the Phase 0 workspace export. All four are either true Phase 1 scope additions (1, 2, 3) or quick fixes that should not wait for the full Phase 1 rollout (4). Grok and Gemini review findings that reviewed stale repo state or were wrong about Frappe internals are explicitly not recorded — ChatGPT's findings were the only accurate ones in this second pass.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*
