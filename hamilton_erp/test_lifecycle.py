@@ -345,6 +345,29 @@ class TestSetOutOfService(IntegrationTestCase):
 		self.assertEqual(s.status, "Completed")
 		self.assertEqual(s.vacate_method, "Discovery on Rounds")
 
+	def test_oos_from_dirty(self):
+		"""Dirty → OOS routes through the `else` branch (log_venue_session=None).
+
+		Locks in the invariant that vacate_session clears current_session,
+		so a Dirty asset entering OOS has no session to link in the audit log.
+		Walk the asset through the real pipeline (start → vacate → oos) rather
+		than raw save() so the invariant is exercised end-to-end.
+		"""
+		lifecycle.start_session_for_asset(self.asset.name, operator="Administrator")
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator", vacate_method="Key Return"
+		)
+		# Asset is now Dirty with current_session=None (vacate_session invariant).
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="Plumbing after turnover"
+		)
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Out of Service")
+		self.assertEqual(asset.reason, "Plumbing after turnover")
+		# The load-bearing invariant: Dirty assets have no current_session, so
+		# OOS-from-Dirty cannot link the audit log back to any session.
+		self.assertIsNone(asset.current_session)
+
 	def test_oos_requires_reason(self):
 		# Empty string
 		with self.assertRaises(frappe.ValidationError):
