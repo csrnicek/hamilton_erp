@@ -255,7 +255,7 @@ def return_asset_to_service(asset_name: str, *, operator: str, reason: str) -> N
 
 - `_require_transition(row, current, target, asset_name)` — throws if `row["status"] != current`
 - `_require_oos_entry(row, asset_name)` — throws if `row["status"] == "Out of Service"` (can't OOS something already OOS)
-- `_set_asset_status(asset_name, new_status, *, session, log_reason, operator, previous)` — loads the doc, writes `status`, `current_session`, `version += 1`, `hamilton_last_status_change = now`, saves with `ignore_permissions=False`, creates the Asset Status Log entry. All inside the lock. **Zero I/O.**
+- `_set_asset_status(asset_name, new_status, *, session, log_reason, operator, previous)` — loads the doc, writes `status`, `current_session`, `version += 1`, `hamilton_last_status_change = now`, saves with `ignore_permissions=False`, creates the Asset Status Log entry. All inside the lock. **Zero I/O.** The Asset Status Log creation helper starts with `if frappe.flags.in_test: return` so integration tests that exercise transitions at scale do not pollute the log table (Grok review, 2026-04-10). Tests that specifically assert log creation flip the flag off locally.
 - `_set_vacated_timestamp(asset_name)` — bumps `last_vacated_at`
 - `_set_cleaned_timestamp(asset_name)` — bumps `last_cleaned_at`
 - `_create_session(asset_name, operator, customer)` — creates a Venue Session with `assignment_status="Assigned"`, `operator_checkin=operator`, `session_start=now`, `customer=customer`. `session_number` is assigned by the Venue Session controller's `before_insert` (§5.4).
@@ -744,6 +744,7 @@ These run under `pytest` standalone if needed, or under `bench run-tests` as pla
 - `test_session_number_resets_per_day` — mocks `nowdate()`, verifies sequence starts at 001 on a new day
 - `test_realtime_event_fires_after_commit` — uses a mock `publish_realtime` capture to verify event name and payload keys
 - `test_redis_lock_prevents_double_assign` — spawns a thread holding the lock, verifies a second acquisition throws within the TTL
+- `test_get_asset_board_data_under_one_second` — **performance baseline** (Grok review, 2026-04-10). Seeds all 59 assets (some Occupied so the enrichment branch fires), calls `get_asset_board_data`, asserts wall-clock elapsed < 1.0 s. Enforces the single-query design — regression trips the test if anyone reintroduces an N+1 by looping asset lookups in the endpoint.
 - H10 end-to-end (Vacate and Turnover)
 - H11 end-to-end (Out of Service)
 - H12 end-to-end (Occupied Asset Rejection)
@@ -803,8 +804,9 @@ Phase 1 is "done" when all of the following are true:
 4. Two tabs viewing the same live board stay in sync within ~1 second on status changes
 5. Overtime warning and overtime borders appear at the correct thresholds under a contrived short-duration test
 6. Both bulk Mark All Clean buttons work with list-style confirmation, log entries carry the distinguishing reason string
-7. `current_state.md` reflects Phase 1 completion status, pushed to GitHub
-8. `MEMORY.md` project entry is updated to reflect that Phase 1 is complete
+7. `get_asset_board_data` returns all 59 assets in **under 1 second** (single-query baseline, Grok review 2026-04-10 — enforced by `test_get_asset_board_data_under_one_second`)
+8. `current_state.md` reflects Phase 1 completion status, pushed to GitHub
+9. `MEMORY.md` project entry is updated to reflect that Phase 1 is complete
 
 ---
 

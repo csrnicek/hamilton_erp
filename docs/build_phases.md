@@ -9,38 +9,38 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 **Goal:** App scaffold exists, installs cleanly, all DocTypes are defined with correct schemas.
 
 ### Deliverables
-- [ ] Frappe app created via `bench new-app hamilton_erp`
-- [ ] `hooks.py` configured:
-  - [ ] App metadata (name, title, publisher, description, version)
-  - [ ] `required_apps = ["frappe", "erpnext"]`
-  - [ ] Fixtures list (Custom Field, Property Setter, Role filters)
-  - [ ] `after_install` hook pointing to setup script
-  - [ ] `doc_events` stub for Sales Invoice (wired up in Phase 2)
-- [ ] `patches.txt` created with `[pre_model_sync]` and `[post_model_sync]` sections
-- [ ] All 7 custom DocTypes defined with complete field schemas (per build spec §9):
-  - [ ] Venue Asset
-  - [ ] Venue Session (including all forward-compatibility fields from V5.4)
-  - [ ] Cash Drop
-  - [ ] Cash Reconciliation
-  - [ ] Asset Status Log
-  - [ ] Shift Record
-  - [ ] Comp Admission Log
-  - [ ] Hamilton Settings (Single DocType — float, stay duration, printer IP)
-  - [ ] Hamilton Board Correction (child DocType for Shift Record)
-- [ ] Custom fields on standard DocTypes defined via fixtures:
-  - [ ] Item: `hamilton_is_admission`, `hamilton_asset_category`, `hamilton_asset_tier`, `hamilton_is_comp`
-  - [ ] Sales Invoice: `hamilton_venue_session` (link), `hamilton_comp_reason`, `hamilton_shift_record` (link to Shift Record)
-- [ ] Custom roles created: `Hamilton Operator`, `Hamilton Manager`, `Hamilton Admin`
-- [ ] Role permissions set on all custom DocTypes
-- [ ] Standard POS Closing Entry permission **removed** from Hamilton Operator role
-- [ ] `naming_series` defined on every custom DocType (e.g. `VA-.####` for Venue Asset)
-- [ ] Venue Asset whitelisted methods implemented: `assign_to_session`, `mark_vacant`, `mark_clean`, `set_out_of_service`, `return_to_service`
-- [ ] Hamilton Desk/Workspace defined so operators have a clean landing page
-- [ ] POS Profile note: "Use Sales Invoice in POS" must be enabled (DEC-025)
-- [ ] `after_install` setup script creates default roles and any required initial configuration
-- [ ] App installs and migrates without errors on a clean ERPNext v16 site
-- [ ] `bench export-fixtures` runs cleanly and exports only hamilton_erp fields
-- [ ] GitHub repo initialized with this code
+- [x] Frappe app created via `bench new-app hamilton_erp`
+- [x] `hooks.py` configured:
+  - [x] App metadata (name, title, publisher, description, version)
+  - [x] `required_apps = ["frappe", "erpnext"]`
+  - [x] Fixtures list (Custom Field, Property Setter, Role filters)
+  - [x] `after_install` hook pointing to setup script
+  - [x] `doc_events` stub for Sales Invoice (wired up in Phase 2)
+- [x] `patches.txt` created with `[pre_model_sync]` and `[post_model_sync]` sections
+- [x] All 7 custom DocTypes defined with complete field schemas (per build spec §9):
+  - [x] Venue Asset
+  - [x] Venue Session (including all forward-compatibility fields from V5.4)
+  - [x] Cash Drop
+  - [x] Cash Reconciliation
+  - [x] Asset Status Log
+  - [x] Shift Record
+  - [x] Comp Admission Log
+  - [x] Hamilton Settings (Single DocType — float, stay duration, printer IP)
+  - [x] Hamilton Board Correction (child DocType for Shift Record)
+- [x] Custom fields on standard DocTypes defined via fixtures:
+  - [x] Item: `hamilton_is_admission`, `hamilton_asset_category`, `hamilton_asset_tier`, `hamilton_is_comp`
+  - [x] Sales Invoice: `hamilton_venue_session` (link), `hamilton_comp_reason`, `hamilton_shift_record` (link to Shift Record)
+- [x] Custom roles created: `Hamilton Operator`, `Hamilton Manager`, `Hamilton Admin`
+- [x] Role permissions set on all custom DocTypes
+- [x] Standard POS Closing Entry permission **removed** from Hamilton Operator role
+- [x] `naming_series` defined on every custom DocType (e.g. `VA-.####` for Venue Asset)
+- [x] Venue Asset whitelisted methods stubbed: `assign_to_session`, `mark_vacant`, `mark_clean`, `set_out_of_service`, `return_to_service` (real bodies land in Phase 1)
+- [x] Hamilton Desk/Workspace defined so operators have a clean landing page
+- [x] POS Profile note: "Use Sales Invoice in POS" must be enabled (DEC-025)
+- [x] `after_install` setup script creates default roles and any required initial configuration
+- [x] App installs and migrates without errors on a clean ERPNext v16 site
+- [x] `bench export-fixtures` runs cleanly and exports only hamilton_erp fields
+- [x] GitHub repo initialized with this code
 
 ### Test criteria
 - `bench --site [site] install-app hamilton_erp` succeeds
