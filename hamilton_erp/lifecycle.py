@@ -88,3 +88,85 @@ def _make_asset_status_log(
 		"timestamp": frappe.utils.now_datetime(),
 	}).insert(ignore_permissions=True)
 	return log.name
+
+
+# ---------------------------------------------------------------------------
+# Public lifecycle functions
+# ---------------------------------------------------------------------------
+
+
+def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "Walk-in") -> str:
+	"""Available → Occupied + create Venue Session. Returns session name."""
+	from hamilton_erp.locks import asset_status_lock
+	from hamilton_erp.realtime import publish_status_change
+
+	with asset_status_lock(asset_name, "assign") as row:
+		_require_transition(row, current="Available", target="Occupied",
+		                    asset_name=asset_name)
+		session_name = _create_session(asset_name, operator=operator, customer=customer)
+		_set_asset_status(
+			asset_name,
+			new_status="Occupied",
+			session=session_name,
+			log_reason=None,
+			operator=operator,
+			previous="Available",
+			expected_version=row["version"],
+		)
+	publish_status_change(asset_name, previous_status="Available")
+	return session_name
+
+
+# ---------------------------------------------------------------------------
+# Private helpers (all run INSIDE the lock — zero I/O except the permitted writes)
+# ---------------------------------------------------------------------------
+
+
+def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
+	session = frappe.get_doc({
+		"doctype": "Venue Session",
+		"venue_asset": asset_name,
+		"operator_checkin": operator,
+		"customer": customer,
+		"session_start": frappe.utils.now_datetime(),
+		"status": "Active",
+		"assignment_status": "Assigned",
+		"identity_method": "not_applicable",
+	}).insert(ignore_permissions=True)
+	return session.name
+
+
+def _set_asset_status(
+	asset_name: str,
+	*,
+	new_status: str,
+	session: Optional[str],
+	log_reason: Optional[str],
+	operator: str,
+	previous: str,
+	expected_version: int,
+) -> None:
+	"""Write the new status, bump version, and create the audit log.
+
+	The caller must have just read `expected_version` under FOR UPDATE inside the
+	same lock, so an optimistic-lock conflict here would be a bug, not a race.
+	"""
+	asset = frappe.get_doc("Venue Asset", asset_name)
+	if asset.version != expected_version:
+		frappe.throw(_("Concurrent update to {0} — please refresh and retry.")
+		             .format(asset_name))
+	asset.status = new_status
+	asset.current_session = session
+	asset.version = expected_version + 1
+	asset.hamilton_last_status_change = frappe.utils.now_datetime()
+	if new_status == "Out of Service":
+		asset.reason = log_reason
+	asset.save(ignore_permissions=True)
+	_make_asset_status_log(
+		asset_name=asset_name,
+		previous=previous,
+		new_status=new_status,
+		reason=log_reason,
+		operator=operator,
+		venue_session=session,
+	)

@@ -10,6 +10,8 @@ IGNORE_TEST_RECORD_DEPENDENCIES — Frappe v16's IntegrationTestCase
 can't auto-detect cls.doctype for package-root modules, so it skips
 test-record generation entirely and there's no cascade to break.
 """
+import uuid
+
 import frappe
 from frappe.tests import IntegrationTestCase
 
@@ -62,3 +64,63 @@ class TestLifecycleHelpers(IntegrationTestCase):
 			self.assertIsNone(result)
 		finally:
 			frappe.flags.in_test = prev_flag
+
+
+class TestStartSession(IntegrationTestCase):
+	def setUp(self):
+		# Walk-in customer is required (DEC-055 §1). The seed patch creates it,
+		# but this test runs before Task 11, so create it here as a local fixture.
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"START-TEST-{suffix.upper()}",
+			"asset_name": f"Start Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9002,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_start_session_flips_asset_to_occupied(self):
+		session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Occupied")
+		self.assertEqual(asset.current_session, session_name)
+		self.assertEqual(asset.version, 1)
+
+	def test_start_session_creates_venue_session(self):
+		session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		s = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(s.venue_asset, self.asset.name)
+		self.assertEqual(s.assignment_status, "Assigned")
+		self.assertEqual(s.operator_checkin, "Administrator")
+		self.assertEqual(s.status, "Active")
+		self.assertIsNotNone(s.session_start)
+
+	def test_start_session_rejects_non_available(self):
+		# Walk the transitions legally: Available → Occupied → Dirty,
+		# because VenueAsset._validate_status_transition rejects illegal edges.
+		self.asset.status = "Occupied"
+		self.asset.save(ignore_permissions=True)
+		self.asset.status = "Dirty"
+		self.asset.save(ignore_permissions=True)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.start_session_for_asset(self.asset.name, operator="Administrator")
