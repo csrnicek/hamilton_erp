@@ -183,3 +183,57 @@ def _set_asset_status(
 		operator=operator,
 		venue_session=session,
 	)
+
+
+# ---------------------------------------------------------------------------
+# Vacate (Occupied → Dirty) — Task 5
+# ---------------------------------------------------------------------------
+
+_VACATE_METHODS = ("Key Return", "Discovery on Rounds")
+
+
+def vacate_session(asset_name: str, *, operator: str, vacate_method: str) -> None:
+	"""Occupied → Dirty + close linked Venue Session."""
+	assert vacate_method in _VACATE_METHODS, f"vacate_method must be one of {_VACATE_METHODS}"
+	from hamilton_erp.locks import asset_status_lock
+	from hamilton_erp.realtime import publish_status_change
+
+	with asset_status_lock(asset_name, "vacate") as row:
+		_require_transition(row, current="Occupied", target="Dirty",
+		                    asset_name=asset_name)
+		# NOTE: _close_current_session runs BEFORE _set_asset_status. A throw
+		# from _set_asset_status (e.g. hypothetical version-CAS failure) would
+		# leave the Venue Session already marked Completed — the request-level
+		# transaction rolls it back in a normal HTTP call path. Programmatic
+		# callers MUST NOT wrap this in try/except; let exceptions propagate
+		# to trigger rollback. Matches the Task 4 start_session_for_asset pattern.
+		_close_current_session(asset_name, operator=operator, vacate_method=vacate_method)
+		_set_asset_status(
+			asset_name,
+			new_status="Dirty",
+			session=None,
+			log_reason=None,
+			operator=operator,
+			previous="Occupied",
+			expected_version=row["version"],
+		)
+		_set_vacated_timestamp(asset_name)
+	publish_status_change(asset_name, previous_status="Occupied")
+
+
+def _close_current_session(asset_name: str, *, operator: str, vacate_method: str) -> str:
+	current = frappe.db.get_value("Venue Asset", asset_name, "current_session")
+	if not current:
+		frappe.throw(_("Asset {0} has no current session to close.").format(asset_name))
+	session = frappe.get_doc("Venue Session", current)
+	session.session_end = frappe.utils.now_datetime()
+	session.operator_vacate = operator
+	session.vacate_method = vacate_method
+	session.status = "Completed"
+	session.save(ignore_permissions=True)
+	return session.name
+
+
+def _set_vacated_timestamp(asset_name: str) -> None:
+	frappe.db.set_value("Venue Asset", asset_name,
+	                    "last_vacated_at", frappe.utils.now_datetime())

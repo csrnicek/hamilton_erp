@@ -134,3 +134,69 @@ class TestStartSession(IntegrationTestCase):
 		from hamilton_erp.locks import asset_status_lock
 		with asset_status_lock(self.asset.name, "verify-release") as row:
 			self.assertEqual(row["status"], "Dirty")
+
+
+class TestVacateSession(IntegrationTestCase):
+	def setUp(self):
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"VACATE-TEST-{suffix.upper()}",
+			"asset_name": f"Vacate Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9003,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		self.session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_vacate_moves_to_dirty(self):
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator", vacate_method="Key Return"
+		)
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Dirty")
+		self.assertIsNone(asset.current_session)
+		self.assertIsNotNone(asset.last_vacated_at)
+
+	def test_vacate_closes_session(self):
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator", vacate_method="Key Return"
+		)
+		s = frappe.get_doc("Venue Session", self.session_name)
+		self.assertEqual(s.status, "Completed")
+		self.assertEqual(s.operator_vacate, "Administrator")
+		self.assertEqual(s.vacate_method, "Key Return")
+		self.assertIsNotNone(s.session_end)
+
+	def test_vacate_rejects_non_occupied(self):
+		# Move asset to Dirty first so it's no longer Occupied
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator", vacate_method="Key Return"
+		)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.vacate_session(
+				self.asset.name, operator="Administrator", vacate_method="Key Return"
+			)
+
+	def test_vacate_requires_valid_method(self):
+		with self.assertRaises(AssertionError):
+			lifecycle.vacate_session(
+				self.asset.name, operator="Administrator", vacate_method="Nonsense"
+			)
