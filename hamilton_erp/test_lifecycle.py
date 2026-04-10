@@ -262,12 +262,25 @@ class TestMarkClean(IntegrationTestCase):
 			self.assertEqual(row["status"], "Available")
 
 	def test_mark_clean_accepts_bulk_reason(self):
-		"""Bulk reason is stored on the log entry (DEC-054 §5). Not asserted here
-		because the in_test flag suppresses log creation — covered in Task 11
-		integration via the seed patch."""
-		lifecycle.mark_asset_clean(
-			self.asset.name, operator="Administrator",
-			bulk_reason="Bulk Mark Clean — Room reset",
+		"""Bulk reason must be propagated as log_reason to _set_asset_status.
+
+		DEC-054 §5: bulk reason is written to the Asset Status Log row's reason
+		field. We mock _set_asset_status to verify the kwarg wiring at the unit
+		layer without depending on Task 11's log-creation integration.
+		"""
+		from unittest.mock import patch
+		target = "hamilton_erp.lifecycle._set_asset_status"
+		with patch(target, wraps=lifecycle._set_asset_status) as spy:
+			lifecycle.mark_asset_clean(
+				self.asset.name, operator="Administrator",
+				bulk_reason="Bulk Mark Clean — Room reset",
+			)
+		spy.assert_called_once()
+		self.assertEqual(
+			spy.call_args.kwargs["log_reason"],
+			"Bulk Mark Clean — Room reset",
 		)
+		# Happy-path still sanity-checked so a broken _set_asset_status doesn't
+		# hide behind the spy.
 		asset = frappe.get_doc("Venue Asset", self.asset.name)
 		self.assertEqual(asset.status, "Available")

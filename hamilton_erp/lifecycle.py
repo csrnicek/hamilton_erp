@@ -287,7 +287,12 @@ def mark_asset_clean(
 	operator: str,
 	bulk_reason: Optional[str] = None,
 ) -> None:
-	"""Dirty → Available. bulk_reason is set by the bulk Mark All Clean flow."""
+	"""Dirty → Available.
+
+	`bulk_reason`, when provided, is written to the Asset Status Log row's
+	reason field (DEC-054 §5). Used by the bulk Mark All Clean flow to tag
+	which sweep a given transition belonged to. Single-asset calls pass None.
+	"""
 	from hamilton_erp.locks import asset_status_lock
 	from hamilton_erp.realtime import publish_status_change
 
@@ -307,6 +312,11 @@ def mark_asset_clean(
 	publish_status_change(asset_name, previous_status="Dirty")
 
 
+# Parallel to `_set_vacated_timestamp`. Not folded into `_set_asset_status`
+# to keep that function's kwargs bounded — two status-specific timestamp
+# helpers is cheaper than a 10-kwarg core mutator. OOS/return (Tasks 7-8)
+# touch no `last_*_at` field, so this pair plateaus at two. ChatGPT/Grok
+# review 2026-04-10.
 def _set_cleaned_timestamp(asset_name: str) -> None:
 	frappe.db.set_value("Venue Asset", asset_name,
 	                    "last_cleaned_at", frappe.utils.now_datetime())
