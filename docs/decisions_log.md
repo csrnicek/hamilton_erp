@@ -442,14 +442,18 @@ Implementation: doc_events hook on Sales Invoice `on_cancel` or POS Return `on_s
 
 ## DEC-019 — Hybrid Locking: Redis Advisory + MariaDB Row Lock + Version Field
 
-**Date:** 2026-04-09
+**Date:** 2026-04-09 (revised 2026-04-10)
 **Context:** All three AI reviewers identified asset assignment concurrency as the #1 production risk. Grok provided complete working implementation.
 **Decision:** Three-layer locking on all Venue Asset status changes:
 1. Redis advisory lock (fast pre-check, 15s TTL, UUID token, atomic Lua release)
-2. MariaDB `FOR NO KEY UPDATE` row lock inside the Redis lock (strong DB integrity)
+2. MariaDB `FOR UPDATE` row lock inside the Redis lock (strong DB integrity)
 3. Optimistic `version` field on Venue Asset (catches any bypasses)
+
 Lock sections must be minimal — validate + save only, no I/O inside lock.
-Use `FOR NO KEY UPDATE` not `FOR UPDATE` in v16 (avoids blocking FK checks).
+
+**SQL lock syntax:** Use `FOR UPDATE` — this is the MariaDB row-level exclusive lock. Do **not** use `FOR NO KEY UPDATE`; that is PostgreSQL-only syntax and will error in MariaDB (Frappe's database). See `coding_standards.md` §2.11 for the correct code pattern. FK-child-blocking is mitigated by the short lock window (Redis gates entry to this section so contention is milliseconds, not seconds).
+
+**Revision note (2026-04-10):** Original decision said "FOR NO KEY UPDATE" — that was a carry-over from a PostgreSQL draft and was incorrect. Corrected to `FOR UPDATE` before any Phase 1 locking code was written.
 **Rationale:** Hamilton has 59 assets and multiple operators. Two operators assigning same asset simultaneously is a realistic scenario. Once asset status data becomes inconsistent in production it is expensive to fix. All three reviewers confirmed this is the #1 risk.
 
 ---

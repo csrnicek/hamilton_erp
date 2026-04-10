@@ -105,15 +105,15 @@ When locking rows for status changes, use `FOR UPDATE` — this is the correct M
 - FK child blocking concern is mitigated by the short lock window (Redis ensures only one writer enters at a time).
 
 ```python
-# CORRECT — use FOR NO KEY UPDATE in v16
+# CORRECT — FOR UPDATE is the MariaDB row-level exclusive lock.
 locked = frappe.db.sql(
-    "SELECT name, status, version FROM `tabVenue Asset` WHERE name = %s FOR NO KEY UPDATE",
+    "SELECT name, status, version FROM `tabVenue Asset` WHERE name = %s FOR UPDATE",
     self.name, as_dict=True
 )
 
-# WRONG — do not use FOR UPDATE unless FK child blocking is specifically required
+# WRONG — FOR NO KEY UPDATE is PostgreSQL-only syntax and will error in MariaDB.
 locked = frappe.db.sql(
-    "SELECT name FROM `tabVenue Asset` WHERE name = %s FOR UPDATE",
+    "SELECT name, status, version FROM `tabVenue Asset` WHERE name = %s FOR NO KEY UPDATE",
     self.name, as_dict=True
 )
 ```
