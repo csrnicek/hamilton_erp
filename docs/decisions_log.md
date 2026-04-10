@@ -135,10 +135,12 @@ Records architectural and implementation decisions made during development. This
 **Context:** Operators need to see how long a room has been sitting Dirty on the asset board. Management needs to identify if a worker is leaving rooms dirty for the next shift to clean when they had time to clean them.
 **Decision:** Add two timestamp fields to Venue Asset:
 - `last_vacated_at` (Datetime, read-only) — set automatically when Occupied → Dirty. Asset board shows "Dirty since X hours."
-- `last_cleaned_at` (Datetime, read-only) — set automatically when Dirty → Available. Shows how recently a room was turned over.
+- `last_cleaned_at` (Datetime, read-only) — set automatically when Dirty → Available **OR when Out of Service → Available**. Shows how recently a room was turned over or returned from maintenance.
 
 Analysis is powered by the existing Asset Status Log — every transition is already logged with operator and timestamp. Reports can query: "All rooms in Dirty state for >X minutes during Operator Y's shift" to identify performance issues.
 **Rationale:** Operational visibility (how long is this room dirty?) and management accountability (is this operator cleaning rooms during their shift?). The Asset Status Log provides the historical data; the two fields on Venue Asset provide the live board display.
+
+**Amendment 2026-04-10 (Phase 1 Task 8):** `last_cleaned_at` is also stamped on `Out of Service → Available` transitions via `return_asset_to_service`. Rationale: returning an asset from OOS is the end of a maintenance or repair cycle, functionally equivalent to a cleaning turnover for "how recently was this room serviced?" board display. Without this, an asset that went Available → OOS (plumbing) → Available would show a stale `last_cleaned_at` from before the outage, misrepresenting how recently the asset was touched. The semantic edge case (a "board correction" OOS followed by immediate return, where no physical work was done) is accepted as a minor overstatement — the Asset Status Log still records the full transition chain with operator and reason for anyone drilling into a specific asset's history. Flagged by code review during Task 8 implementation.
 
 ## DEC-032 — No POS Profile Link on Venue Session
 
