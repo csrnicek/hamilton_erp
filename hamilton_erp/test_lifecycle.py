@@ -395,3 +395,74 @@ class TestSetOutOfService(IntegrationTestCase):
 		from hamilton_erp.locks import asset_status_lock
 		with asset_status_lock(self.asset.name, "verify-release") as row:
 			self.assertEqual(row["status"], "Out of Service")
+
+
+class TestReturnToService(IntegrationTestCase):
+	def setUp(self):
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"RETURN-TEST-{suffix.upper()}",
+			"asset_name": f"Return Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9006,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		# Walk to OOS via the real production pipeline (Task 7's function).
+		# Raw-inserting with status="Out of Service" is blocked by the
+		# "New assets must start as Available" guard in venue_asset.py.
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="Initial OOS"
+		)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_return_moves_to_available(self):
+		"""Happy path + assert `reason` kwarg reaches _set_asset_status as log_reason.
+
+		Also locks in the Gemini-review requirement that OOS → Available
+		clears asset.reason via the new elif branch in _set_asset_status.
+		"""
+		from unittest.mock import patch
+		target = "hamilton_erp.lifecycle._set_asset_status"
+		with patch(target, wraps=lifecycle._set_asset_status) as spy:
+			lifecycle.return_asset_to_service(
+				self.asset.name, operator="Administrator", reason="Repair done"
+			)
+		spy.assert_called_once()
+		self.assertEqual(spy.call_args.kwargs["log_reason"], "Repair done")
+		self.assertEqual(spy.call_args.kwargs["previous"], "Out of Service")
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Available")
+		self.assertIsNotNone(asset.last_cleaned_at)
+		# Gemini review 2026-04-10: OOS → Available MUST clear asset.reason.
+		# The setUp seeds "Initial OOS", so any regression in the reason-
+		# clearing elif branch of _set_asset_status fails loudly here.
+		self.assertFalse(asset.reason)
+
+	def test_return_requires_reason(self):
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.return_asset_to_service(
+				self.asset.name, operator="Administrator", reason="   "
+			)
+
+	def test_return_rejects_non_oos(self):
+		# Walk the asset back to Available via the real pipeline so the
+		# state machine guards are respected.
+		lifecycle.return_asset_to_service(
+			self.asset.name, operator="Administrator", reason="Pre-reject reset"
+		)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.return_asset_to_service(
+				self.asset.name, operator="Administrator", reason="any"
+			)
+		# Review 2026-04-10: the rejection path must release the Redis lock via
+		# the finally-block Lua CAS. If release was skipped, acquiring the same
+		# asset's lock in a fresh call would raise LockContentionError instead
+		# of entering the with-block cleanly.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Available")

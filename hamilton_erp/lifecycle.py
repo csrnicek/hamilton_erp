@@ -185,6 +185,15 @@ def _set_asset_status(
 	asset.hamilton_last_status_change = frappe.utils.now_datetime()
 	if new_status == "Out of Service":
 		asset.reason = log_reason
+	elif previous == "Out of Service":
+		# Gemini AI review 2026-04-10: on OOS → Available, clear the stale
+		# OOS reason. Without this, the reason field lingers forever on
+		# assets that were once OOS, even though the state machine has
+		# moved on. Centralized here so all lifecycle callers benefit;
+		# no duplication in public functions. The only transition with
+		# previous == "Out of Service" is OOS → Available, triggered
+		# exclusively by return_asset_to_service.
+		asset.reason = None
 	asset.save(ignore_permissions=True)
 	_make_asset_status_log(
 		asset_name=asset_name,
@@ -375,3 +384,43 @@ def set_asset_out_of_service(asset_name: str, *, operator: str, reason: str) -> 
 			expected_version=row["version"],
 		)
 	publish_status_change(asset_name, previous_status=previous)
+
+
+# ---------------------------------------------------------------------------
+# Return to Service (Out of Service → Available) — Task 8
+# ---------------------------------------------------------------------------
+
+
+def return_asset_to_service(asset_name: str, *, operator: str, reason: str) -> None:
+	"""Out of Service → Available. Reason is mandatory.
+
+	Parallels mark_asset_clean in shape: single-branch lock body terminated
+	with _set_cleaned_timestamp (returning an asset from OOS is effectively
+	the end of a cleaning/repair cycle, so last_cleaned_at is the right
+	timestamp to bump).
+
+	The stale OOS reason on the asset is cleared centrally by
+	_set_asset_status's `elif previous == "Out of Service"` branch — do NOT
+	duplicate that logic here (Gemini review 2026-04-10).
+	"""
+	# Defense-in-depth: mirror set_asset_out_of_service's pre-lock reason
+	# guard so obviously-bad calls never acquire the Redis lock.
+	if not reason or not reason.strip():
+		frappe.throw(_("A reason is required to return an asset to service."))
+	from hamilton_erp.locks import asset_status_lock
+	from hamilton_erp.realtime import publish_status_change
+
+	with asset_status_lock(asset_name, "return") as row:
+		_require_transition(row, current="Out of Service", target="Available",
+		                    asset_name=asset_name)
+		_set_asset_status(
+			asset_name,
+			new_status="Available",
+			session=None,
+			log_reason=reason,
+			operator=operator,
+			previous="Out of Service",
+			expected_version=row["version"],
+		)
+		_set_cleaned_timestamp(asset_name)
+	publish_status_change(asset_name, previous_status="Out of Service")
