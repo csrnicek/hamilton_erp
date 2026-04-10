@@ -559,4 +559,20 @@ Lock sections must be minimal — validate + save only, no I/O inside lock.
 
 ---
 
+## DEC-054 — Mark All Clean Bulk Action: Rules, Scope, and Audit Flag
+
+**Date:** 2026-04-10
+**Context:** DEC-023 added a "Mark All Clean" bulk action to the Asset Board for Phase 1 but left five operational details unresolved: who can press it, scope, confirmation UX, concurrency strategy, and whether it could defeat the audit intent of DEC-031 (`last_vacated_at` / `last_cleaned_at` + Asset Status Log being used to detect operators who leave rooms dirty).
+**Decision:**
+
+1. **Permission:** Hamilton Operator role can trigger the bulk action. Morning open is the primary use case — requiring a manager tap at 9am defeats the purpose.
+2. **Scope:** Two separate buttons on the Asset Board — "Mark All Dirty Rooms Clean" and "Mark All Dirty Lockers Clean". Rooms and lockers have different cleaning workflows and must not be bulk-cleared together.
+3. **Confirmation dialog:** Shows the list of assets about to be marked clean (asset_code + asset_name) plus a Confirm / Cancel pair. Cheap, catches mistakes before they happen.
+4. **Concurrency:** Implemented as a loop over the single-asset `mark_clean` whitelisted method. Assets are sorted by `name` before locking (§13.4 deadlock-prevention rule). Each asset goes through the full three-layer lock (Redis advisory + MariaDB `FOR UPDATE` + version field). Failures (e.g. an asset was just re-occupied between the confirmation and the action) are reported at the end without aborting the batch — the Asset Board then refreshes via the standard realtime channel.
+5. **Audit hardening:** Every `Asset Status Log` entry created by the bulk action sets `reason = "Bulk Mark Clean — morning reset"` (or similar distinguishing string). Individual `mark_clean` calls from a single tile tap have `reason = null` (no reason required for Dirty → Available). Reports can then slice cleanings by reason to compare individual physical cleanings vs bulk operations. This addresses the tension with DEC-031: the bulk button is permitted but always leaves a machine-readable trail so management can detect overuse without changing operator permissions.
+
+**Rationale:** Operationally, morning-open with 59 assets and zero workers is the reality — the button must exist and must be fast. DEC-031's audit intent is preserved because every bulk transition is still logged individually with a distinguishing reason string. Managers retain full visibility without a permission fence that would force them into the building every morning.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*
