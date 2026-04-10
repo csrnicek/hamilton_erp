@@ -274,3 +274,39 @@ def _close_current_session(asset_name: str, *, current_session: Optional[str],
 def _set_vacated_timestamp(asset_name: str) -> None:
 	frappe.db.set_value("Venue Asset", asset_name,
 	                    "last_vacated_at", frappe.utils.now_datetime())
+
+
+# ---------------------------------------------------------------------------
+# Mark Clean (Dirty → Available) — Task 6
+# ---------------------------------------------------------------------------
+
+
+def mark_asset_clean(
+	asset_name: str,
+	*,
+	operator: str,
+	bulk_reason: Optional[str] = None,
+) -> None:
+	"""Dirty → Available. bulk_reason is set by the bulk Mark All Clean flow."""
+	from hamilton_erp.locks import asset_status_lock
+	from hamilton_erp.realtime import publish_status_change
+
+	with asset_status_lock(asset_name, "clean") as row:
+		_require_transition(row, current="Dirty", target="Available",
+		                    asset_name=asset_name)
+		_set_asset_status(
+			asset_name,
+			new_status="Available",
+			session=None,
+			log_reason=bulk_reason,
+			operator=operator,
+			previous="Dirty",
+			expected_version=row["version"],
+		)
+		_set_cleaned_timestamp(asset_name)
+	publish_status_change(asset_name, previous_status="Dirty")
+
+
+def _set_cleaned_timestamp(asset_name: str) -> None:
+	frappe.db.set_value("Venue Asset", asset_name,
+	                    "last_cleaned_at", frappe.utils.now_datetime())

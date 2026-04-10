@@ -207,3 +207,67 @@ class TestVacateSession(IntegrationTestCase):
 			lifecycle.vacate_session(
 				self.asset.name, operator="Administrator", vacate_method="Nonsense"
 			)
+
+
+class TestMarkClean(IntegrationTestCase):
+	def setUp(self):
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		# VenueAsset._validate_status_transition requires new assets to start
+		# as Available, so walk the state machine Available → Occupied → Dirty.
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"CLEAN-TEST-{suffix.upper()}",
+			"asset_name": f"Clean Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9004,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		self.asset.status = "Occupied"
+		self.asset.save(ignore_permissions=True)
+		self.asset.status = "Dirty"
+		self.asset.save(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_mark_clean_moves_dirty_to_available(self):
+		lifecycle.mark_asset_clean(self.asset.name, operator="Administrator")
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Available")
+		self.assertIsNotNone(asset.last_cleaned_at)
+
+	def test_mark_clean_rejects_non_dirty(self):
+		self.asset.status = "Available"
+		self.asset.save(ignore_permissions=True)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.mark_asset_clean(self.asset.name, operator="Administrator")
+		# Review 2026-04-10: the rejection path must release the Redis lock via
+		# the finally-block Lua CAS. If release was skipped, acquiring the same
+		# asset's lock in a fresh call would raise LockContentionError instead
+		# of entering the with-block cleanly.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Available")
+
+	def test_mark_clean_accepts_bulk_reason(self):
+		"""Bulk reason is stored on the log entry (DEC-054 §5). Not asserted here
+		because the in_test flag suppresses log creation — covered in Task 11
+		integration via the seed patch."""
+		lifecycle.mark_asset_clean(
+			self.asset.name, operator="Administrator",
+			bulk_reason="Bulk Mark Clean — Room reset",
+		)
+		asset = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(asset.status, "Available")
