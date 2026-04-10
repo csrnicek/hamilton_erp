@@ -1,6 +1,13 @@
 import frappe
 from frappe.tests import IntegrationTestCase
 
+# Break Frappe's test-record auto-seed cascade at the hamilton_erp boundary.
+# Venue Asset.company → Company pulls in ERPNext's entire test-fixture graph
+# (Item Price → _Test Customer, etc.), and Venue Session links to
+# Sales Invoice / Item / Customer / User which cascade the same way.
+# We never touch those in these tests, so tell the generator to skip them.
+IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
+
 
 class TestVenueAsset(IntegrationTestCase):
 	def _make_asset(self, name: str, category: str = "Room", tier: str = "Standard") -> object:
