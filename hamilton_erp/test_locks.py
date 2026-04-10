@@ -33,10 +33,14 @@ class TestAssetStatusLock(IntegrationTestCase):
 		frappe.db.rollback()
 
 	def test_lock_yields_row_dict(self):
-		"""Happy path — lock yields {name, status, version} from the DB row."""
+		"""Happy path — lock yields full row fields from the DB under FOR UPDATE."""
 		with asset_status_lock(self.asset.name, "test") as row:
 			self.assertEqual(row["name"], self.asset.name)
 			self.assertEqual(row["status"], "Available")
+			self.assertEqual(row["asset_category"], "Room")
+			self.assertEqual(row["asset_tier"], "Single Standard")
+			self.assertIn("asset_code", row)
+			self.assertIn("current_session", row)
 			self.assertIn("version", row)
 
 	def test_second_acquisition_raises(self):
@@ -71,29 +75,28 @@ class TestAssetStatusLock(IntegrationTestCase):
 
 		def contender():
 			acquired.wait(timeout=2)
+			frappe.init(site=site)
+			frappe.connect()
 			try:
-				frappe.init(site=site)
-				frappe.connect()
-				try:
-					with asset_status_lock(asset_name, "assign"):
-						pass
-				except LockContentionError:
-					contention_seen["value"] = True
-				finally:
-					frappe.destroy()
+				with asset_status_lock(asset_name, "assign"):
+					pass
 			except LockContentionError:
 				contention_seen["value"] = True
+			finally:
+				frappe.destroy()
 
 		t1 = threading.Thread(target=holder)
 		t2 = threading.Thread(target=contender)
-		t1.start()
-		t2.start()
-		t1.join()
-		t2.join()
-		# Clean up the fixture row we committed above so tearDown's rollback
-		# doesn't leak it — delete via a fresh SQL statement then commit.
-		frappe.db.sql("DELETE FROM `tabVenue Asset` WHERE name = %s", asset_name)
-		frappe.db.commit()
+		try:
+			t1.start()
+			t2.start()
+			t1.join()
+			t2.join()
+		finally:
+			# Clean up the fixture row we committed above so tearDown's rollback
+			# doesn't leak it — delete via a fresh SQL statement then commit.
+			frappe.db.sql("DELETE FROM `tabVenue Asset` WHERE name = %s", asset_name)
+			frappe.db.commit()
 		self.assertIsNone(holder_error["value"])
 		self.assertTrue(contention_seen["value"])
 
