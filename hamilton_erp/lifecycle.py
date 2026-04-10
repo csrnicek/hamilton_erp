@@ -192,7 +192,9 @@ def _set_asset_status(
 		# moved on. Centralized here so all lifecycle callers benefit;
 		# no duplication in public functions. The only transition with
 		# previous == "Out of Service" is OOS → Available, triggered
-		# exclusively by return_asset_to_service.
+		# exclusively by return_asset_to_service. Note: the audit log row
+		# below still records `log_reason` (the return/repair reason) —
+		# we only null out the persisted OOS reason on the asset itself.
 		asset.reason = None
 	asset.save(ignore_permissions=True)
 	_make_asset_status_log(
@@ -323,9 +325,10 @@ def mark_asset_clean(
 
 # Parallel to `_set_vacated_timestamp`. Not folded into `_set_asset_status`
 # to keep that function's kwargs bounded — two status-specific timestamp
-# helpers is cheaper than a 10-kwarg core mutator. OOS/return (Tasks 7-8)
-# touch no `last_*_at` field, so this pair plateaus at two. ChatGPT/Grok
-# review 2026-04-10.
+# helpers is cheaper than a 10-kwarg core mutator. Reused by
+# `mark_asset_clean` (Task 6) and `return_asset_to_service` (Task 8); the
+# helper pair plateaus at two because OOS entry itself (Task 7) touches no
+# `last_*_at` field. ChatGPT/Grok review 2026-04-10.
 def _set_cleaned_timestamp(asset_name: str) -> None:
 	frappe.db.set_value("Venue Asset", asset_name,
 	                    "last_cleaned_at", frappe.utils.now_datetime())
