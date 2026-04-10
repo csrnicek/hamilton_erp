@@ -2,8 +2,8 @@
 
 Living tracker of what has been built, what is in progress, and what is blocked.
 
-**Last updated:** 2026-04-09
-**Current phase:** Phase 0 — Complete. E5 live test passed. Next: ERPNext setup wizard + 3-AI code review.
+**Last updated:** 2026-04-10
+**Current phase:** Phase 0 complete on Frappe Cloud and locally. M0 (local bench setup) complete. Phase 1 plan finalized and ready for Task 1 execution via Subagent-Driven Development.
 
 ---
 
@@ -18,6 +18,27 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 ---
 
 ## Session Notes
+
+### 2026-04-10 (Phase 1 planning + M0 local bench setup)
+- **Phase 1 design doc finalized** — Asset Board + Session Lifecycle spec committed
+- **Phase 1 implementation plan written** — 25 tasks, `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md`
+- Plan updated for Frappe v16 version drift: Python 3.14 (was 3.11), Node 24 (was 20)
+- **M0 local bench setup COMPLETE**
+  - Bench path: `~/frappe-bench-hamilton`
+  - Python 3.14 (system, `/Library/Frameworks/Python.framework/Versions/3.14`)
+  - Node 24 LTS (via nvm, set as default)
+  - MariaDB 12.2.2 (Homebrew, root auth fixed via `chrissrnicek` unix_socket grant)
+  - Redis managed by bench (cache=13000, queue=11000)
+  - Site: `hamilton-test.localhost` (developer_mode=1, allow_tests=1)
+  - erpnext v16 + hamilton_erp installed
+  - hamilton_erp mounted as symlink → `/Users/chrissrnicek/hamilton_erp` for in-place editing
+  - `bench start` smoke test: HTTP 200, 25KB HTML
+  - Test harness: **Ran 15 tests in 0.23s** — 14 expected failures from stale Phase 0 "Standard" tier names (fixed in Phase 1 Task 1)
+- Test cascade blocker resolved via module-level `IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]` in `test_venue_asset.py`
+- Dev seed helper added: `hamilton_erp/scripts/seed_test_fixtures.py` (not in install path)
+- **Phase 1 execution mode:** Subagent-Driven Development — fresh subagent per task with review gates
+- New plugins available during Phase 1: Context7 (live Frappe v16 docs) + Frontend Design (Asset Board polish)
+- **TODO:** GitHub repo `csrnicek/hamilton_erp` is still public — needs to be made private
 
 ### 2026-04-09 (E5 live test + deployment)
 - **Phase 0 E5 live test PASSED — bench migrate ran with zero errors on Frappe Cloud**
@@ -60,8 +81,8 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 
 | Phase | Status | Notes |
 |---|---|---|
-| Phase 0: Foundation | **Complete — E5 passed** | 9 DocTypes, 3 roles, workspace, fixtures. Live on Frappe Cloud. |
-| Phase 1: Asset Board & Sessions | Not started | — |
+| Phase 0: Foundation | **Complete — E5 passed** | 9 DocTypes, 3 roles, workspace, fixtures. Live on Frappe Cloud + local bench. |
+| Phase 1: Asset Board & Sessions | **Plan finalized — ready for Task 1** | 25 tasks via Subagent-Driven Development. Test harness running 15 tests locally. |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
 | Phase 4: Refunds, Polish, Compatibility | Not started | — |
@@ -74,10 +95,12 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | Item | Status | Notes |
 |---|---|---|
 | ERPNext v16 development environment | ✅ Live | hamilton-erp.v.frappe.cloud (bench-37550, N. Virginia) |
-| GitHub repository | ✅ Done | https://github.com/csrnicek/hamilton_erp (private) |
+| Local bench environment | ✅ Live | `~/frappe-bench-hamilton` — Python 3.14, Node 24, MariaDB 12.2.2, site `hamilton-test.localhost`. hamilton_erp mounted via symlink for in-place edits. |
+| GitHub repository | ⚠️ Public — make private | https://github.com/csrnicek/hamilton_erp |
 | Local repo path | ✅ Done | `/Users/chrissrnicek/hamilton_erp` |
 | Hosting platform | ✅ Done | Frappe Cloud, Hetzner Ashburn VA, ~$40/mo |
 | Three-AI architecture review | ✅ Done | ChatGPT + Gemini + Grok — see review_synthesis.md |
+| Phase 1 implementation plan | ✅ Done | `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md` |
 
 ---
 
