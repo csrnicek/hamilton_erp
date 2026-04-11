@@ -1005,3 +1005,16 @@ def test_realtime_fires_outside_lock_not_inside(self):
 - [ ] current_session NEVER silently left set after vacate (stale Link field)
 - [ ] reason field NEVER silently persists after OOS → Available
 - [ ] start_session uses fewer than 20 transaction writes (N+1 query detection)
+
+## Category P2: Task 11 3-AI Review Hardening
+
+*Added 2026-04-10 from Task 11 3-AI review findings. These tests close the
+gap between "retry loop works in happy path" and "retry loop is
+production-ready under every failure mode a reviewer could think of".*
+
+- [x] `test_message_log_restored_after_successful_retry` — two failed inserts leave no "must be unique" toast residue on a successful third attempt (`test_lifecycle.py::TestCreateSessionRetryOnDuplicate`)
+- [x] `test_redis_failure_raises_validation_error` — a `redis.ConnectionError` inside `_next_session_number` surfaces as a user-friendly `frappe.ValidationError` containing "temporarily unavailable" (`test_lifecycle.py::TestNextSessionNumberRedisFailure`)
+- [x] `test_malformed_session_number_in_db_fallback` — a legacy row with a non-numeric trailing segment (e.g. `10-4-2026---XXXX`) causes `_db_max_seq_for_prefix` to fall through to the defensive `return 0` rather than raise `ValueError` (`test_checklist_complete.py::TestMalformedSessionNumberDBFallback`)
+- [x] `_next_session_number` logs an overflow warning via `frappe.logger().warning(...)` when `seq > 9999` but does NOT raise (UNIQUE constraint + retry loop handle correctness; logging preserves ops visibility)
+- [x] `_create_session` retry loop catches `UniqueValidationError` ONLY when `"session_number" in str(exc)`, re-raising for any other unique field so unrelated violations are not masked by three silent retries
+- [x] `venue_session.json` documents on the `session_number` field that the `unique: 1` constraint MUST NOT be dropped — it is the retry-loop contract

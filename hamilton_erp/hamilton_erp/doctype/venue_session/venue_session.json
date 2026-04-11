@@ -49,7 +49,7 @@
    "label": "Session"
   },
   {
-   "description": "Auto-generated. Format: {day}-{month}-{year}---{sequence}. Resets to 001 at midnight.",
+   "description": "Auto-generated. Format: {day}-{month}-{year}---{NNNN}. Resets to 0001 at midnight. UNIQUE KEY: this unique constraint is the retry-loop contract in lifecycle._create_session — it MUST NOT be dropped. Removing it breaks collision detection and allows duplicate session numbers under Redis cold-start races.",
    "fieldname": "session_number",
    "fieldtype": "Data",
    "in_list_view": 1,

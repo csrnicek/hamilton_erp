@@ -806,3 +806,77 @@ class TestFullInvariantSweep(IntegrationTestCase):
 		return_asset_to_service(self.asset.name, operator=OPERATOR, reason="Done")
 		self._assert_invariants("Available")
 
+
+# ---------------------------------------------------------------------------
+# Category P2 — Task 11 3-AI review
+# ---------------------------------------------------------------------------
+
+
+class TestMalformedSessionNumberDBFallback(IntegrationTestCase):
+	"""Category P2-1 (Task 11 3-AI review, Fix 4): cold-Redis fallback
+	must tolerate malformed session_number rows in the DB.
+
+	Scenario: some legacy or hand-patched row has a non-numeric trailing
+	segment (e.g. "10-4-2026---XXXX"). When Redis is cold and
+	_next_session_number falls back to _db_max_seq_for_prefix, the int()
+	cast on the tail will raise ValueError. The defensive except clause
+	must catch it and return 0 so the subsequent INCR restarts at 1.
+	"""
+
+	def setUp(self):
+		self._prefix = "7-7-2099"
+		self._suffix = uuid.uuid4().hex[:6]
+		# A throwaway asset so the decoy Venue Session has a valid FK.
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"MALFORM-{self._suffix.upper()}",
+			"asset_name": f"Malformed Test {self._suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9200,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_malformed_session_number_in_db_fallback(self):
+		"""_db_max_seq_for_prefix returns 0 when the matched row has a
+		non-numeric trailing segment."""
+		# Seed a Venue Session with a malformed session_number — tail
+		# "XXXX" cannot parse as int. Insert bypasses before_insert by
+		# setting session_number explicitly.
+		frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.asset.name,
+			"session_number": f"{self._prefix}---XXXX",
+			"status": "Active",
+			"session_start": now_datetime(),
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+
+		# Flush the Redis sequence key for this prefix so the fallback
+		# path would actually be taken in a real _next_session_number call.
+		# (The direct call below doesn't touch Redis, but we flush for
+		# parity with the real cold-Redis scenario.)
+		frappe.cache().delete(f"hamilton:session_seq:{self._prefix}")
+
+		# Call the fallback directly and assert graceful 0.
+		result = lifecycle._db_max_seq_for_prefix(self._prefix)
+		self.assertEqual(
+			result, 0,
+			f"Expected 0 for malformed tail 'XXXX', got {result}",
+		)
+

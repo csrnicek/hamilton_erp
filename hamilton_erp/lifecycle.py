@@ -178,7 +178,15 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 				"assignment_status": "Assigned",
 			}).insert(ignore_permissions=True)
 			return session.name
-		except frappe.UniqueValidationError:
+		except frappe.UniqueValidationError as exc:
+			# Scope tightly (Task 11 3-AI review, Fix 8): only retry when the
+			# collision is on `session_number`. If a future migration adds
+			# another unique field (or a caller violates a different
+			# constraint), silently retrying 3 times would mask the real
+			# error. Re-raise without touching message_log so the real toast
+			# reaches the client.
+			if "session_number" not in str(exc):
+				raise
 			# Discard the "must be unique" toast left by the failed attempt —
 			# otherwise a successful retry ships it to the client alongside
 			# the success response (operators would see a confusing toast
@@ -565,6 +573,16 @@ def _next_session_number() -> str:
 		# INCR is atomic — produces consecutive values even under concurrency.
 		# redis-py returns int; cast defensively in case the wrapper ever changes.
 		seq = int(cache.incr(key))
+		# Overflow guard (Task 11 3-AI review): the :04d format below caps at
+		# 9999. If the daily sequence ever exceeds that, the format still
+		# renders (Python %d never truncates), but ordering and visual width
+		# break. We do NOT raise — the UNIQUE constraint and retry loop
+		# downstream handle correctness. Just warn loudly so ops notices.
+		if seq > 9999:
+			frappe.logger().warning(
+				f"_next_session_number: session sequence overflow at {seq} "
+				f"for {key} — contact admin. Daily limit exceeded."
+			)
 	except Exception as exc:
 		frappe.logger().warning(
 			f"_next_session_number: Redis failure for {key}: {exc}"
@@ -576,7 +594,7 @@ def _next_session_number() -> str:
 
 
 def _db_max_seq_for_prefix(prefix: str) -> int:
-	"""Return the highest trailing NNN for today's prefix in `tabVenue Session`.
+	"""Return the highest trailing NNNN for today's prefix in `tabVenue Session`.
 
 	Used as a cold-Redis fallback so a mid-day Redis flush cannot restart the
 	daily sequence at 0001 and collide with already-persisted rows. Returns 0
@@ -606,7 +624,7 @@ def _db_max_seq_for_prefix(prefix: str) -> int:
 		# fall back to 0 rather than crash the assignment flow. The INCR
 		# path will then start at 1, which may collide with existing rows;
 		# Task 11 adds a DB uniqueness constraint on session_number so that
-		# collision surfaces as DuplicateEntryError the caller can retry.
+		# collision surfaces as UniqueValidationError the caller can retry.
 		#
 		# Log via frappe.log_error so production operators can see the bad
 		# row in the Error Log doctype — silent fallback would otherwise

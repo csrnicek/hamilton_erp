@@ -611,13 +611,14 @@ class TestSessionNumberGenerator(IntegrationTestCase):
 
 
 class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
-	"""Task 11(c): _create_session retries up to 3 times on DuplicateEntryError.
+	"""Task 11(c): _create_session retries up to 3 times on UniqueValidationError.
 
 	The DB has a UNIQUE constraint on Venue Session.session_number. If a
 	Redis hiccup or cold-start race ever produces a duplicate, the INSERT
-	raises DuplicateEntryError. _create_session catches it and retries with
-	a fresh session_number (rebuilt doc dict → before_insert re-runs →
-	_next_session_number() re-runs → fresh Redis INCR).
+	raises UniqueValidationError (field-level unique violation, raised by
+	frappe.model.base_document.show_unique_validation_message). _create_session
+	catches it and retries with a fresh session_number (rebuilt doc dict →
+	before_insert re-runs → _next_session_number() re-runs → fresh Redis INCR).
 	"""
 
 	def setUp(self):
@@ -719,3 +720,79 @@ class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
 					self.asset.name, operator="Administrator", customer="Walk-in"
 				)
 		self.assertIn("Session number collision", str(ctx.exception))
+
+	def test_message_log_restored_after_successful_retry(self):
+		"""Task 11 3-AI review, Fix 2: successful retries must not leak stale
+		"must be unique" toasts into frappe.local.message_log.
+
+		Scenario: the first 2 inserts collide on session_number (raising
+		UniqueValidationError, which appends a "must be unique" toast), then
+		the 3rd succeeds. The snapshot/restore logic in _create_session MUST
+		discard the failed-attempt toasts so the operator does not see a
+		misleading warning alongside a successful assignment.
+		"""
+		from unittest.mock import patch
+
+		# Clear any pre-existing messages so our assertion is precise.
+		frappe.local.message_log = []
+
+		unique_number = f"{self._collide_prefix}---0077"
+		call_count = {"n": 0}
+
+		def fake_next():
+			call_count["n"] += 1
+			if call_count["n"] <= 2:
+				return self._collide_number
+			return unique_number
+
+		with patch("hamilton_erp.lifecycle._next_session_number", side_effect=fake_next):
+			session_name = lifecycle._create_session(
+				self.asset.name, operator="Administrator", customer="Walk-in"
+			)
+
+		# (a) Session was created successfully.
+		self.assertTrue(frappe.db.exists("Venue Session", session_name))
+		session = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(session.session_number, unique_number)
+
+		# (b) message_log has no residual "must be unique" toast from the
+		# two failed attempts. Each entry in message_log is a dict with a
+		# 'message' key; stringify defensively in case Frappe changes the
+		# shape across versions.
+		leaked_toasts = [
+			m for m in (getattr(frappe.local, "message_log", []) or [])
+			if "must be unique" in str(m).lower()
+		]
+		self.assertEqual(
+			leaked_toasts,
+			[],
+			f"Expected message_log clean after retry, but found leaked "
+			f"'must be unique' toasts: {leaked_toasts}",
+		)
+
+
+class TestNextSessionNumberRedisFailure(IntegrationTestCase):
+	"""Task 11 3-AI review, Fix 3: Redis faults must surface as a
+	user-friendly ValidationError, not a bare redis.ConnectionError
+	stack trace.
+	"""
+
+	def test_redis_failure_raises_validation_error(self):
+		"""If cache().get raises redis.ConnectionError, _next_session_number
+		catches it and raises frappe.ValidationError with 'temporarily
+		unavailable' in the message."""
+		import redis
+		from unittest.mock import patch
+
+		# Patch the cache's .get to raise on the very first call — this
+		# simulates Redis being down when we check whether the sequence
+		# key exists. The broad except in _next_session_number should
+		# wrap this in a user-friendly ValidationError.
+		with patch.object(
+			frappe.cache(), "get",
+			side_effect=redis.ConnectionError("simulated Redis outage"),
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				lifecycle._next_session_number()
+
+		self.assertIn("temporarily unavailable", str(ctx.exception))
