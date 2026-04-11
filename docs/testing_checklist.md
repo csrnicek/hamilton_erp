@@ -1059,3 +1059,110 @@ What this module protects against:
 - [x] `test_redis_cache_port_reachable` — Redis cache on port 13000 answers `PING`
 - [x] `test_redis_queue_port_reachable` — Redis queue on port 11000 answers `PING`
 - [x] `test_walk_in_customer_exists` — `Customer "Walk-in"` exists in the database
+
+## Category SEC: Security and Regression Tests
+
+*Added 2026-04-11 after the bulk security audit sweep. These tests
+lock in the fixes for class-of-bug issues found during the audit:
+SQL injection, stored XSS, silent schema drift in the Asset Board API,
+audit-trail gaps, Redis namespace collisions, and the Task 17.2
+setup_wizard regression. Unlike the ENV tests above (which are dev-site
+canaries), these run purely against source files and the DB — no
+HTTP probes, no external dependencies — so they're fast and suitable
+for every /run-tests invocation.*
+
+**What this category protects against:**
+
+- **SQL injection** — a future `frappe.db.sql(f"...{user_input}")`
+  bypassing parameter substitution
+- **Stored XSS in the Asset Board** — an unescaped `${asset.field}`
+  interpolation in `asset_board.js::render_tile` rendering a
+  malicious `asset_name`, `asset_code`, or `status` raw into the DOM
+- **Asset Board schema drift** — a DocType field rename or removal
+  silently producing `undefined` in the tile without breaking any
+  explicit test, just a blank board for the operator
+- **Audit-trail gaps** — a refactor that drops the
+  `_make_asset_status_log` call from a lifecycle path, leaving an
+  un-audited ghost transition in history
+- **Redis namespace collisions** — any `cache.set(...)` or
+  `cache.delete(...)` call in hamilton_erp that writes to a bare
+  key without the `hamilton:` prefix, which could collide with
+  another app sharing the same redis instance
+- **`is_setup_complete` regression** — a refactor that reads
+  `setup_complete` from the wrong table (System Settings,
+  tabDefaultValue) and silently reintroduces the setup_wizard loop
+
+### Tests in `test_security_audit.py`
+
+- [x] `test_no_frappe_db_sql_uses_string_interpolation` — AST scan
+      of every `.py` file for `frappe.db.sql(...)` calls whose first
+      argument is an f-string, `.format()`, `%` operator, or string
+      concatenation with a non-constant
+- [x] `test_regex_catches_obvious_format_string_bugs` — second-line
+      defense regex scan for the `frappe.db.sql(f"..."` pattern
+- [x] `test_asset_name_is_escaped_in_render_tile` — parses
+      `asset_board.js`, extracts the `render_tile` return template,
+      and fails if any `${...asset.asset_name...}` expression inside
+      the HTML template is NOT wrapped in `frappe.utils.escape_html`
+- [x] `test_asset_code_is_escaped_in_render_tile` — same contract for
+      `asset.asset_code`
+- [x] `test_status_is_escaped_in_render_tile` — same contract for
+      `asset.status` (including the `data-status` attribute, which
+      was the gap this audit discovered and fixed)
+
+### Tests in `test_api_phase1.py`
+
+- [x] `test_schema_snapshot_pins_asset_board_fields` — locks the
+      exact field list returned by `get_asset_board_data()`
+      (`name`, `asset_code`, `asset_name`, `asset_category`,
+      `asset_tier`, `status`, `current_session`,
+      `expected_stay_duration`, `display_order`, `last_vacated_at`,
+      `last_cleaned_at`, `hamilton_last_status_change`, `version`,
+      `session_start`) plus the `settings` block (`grace_minutes`,
+      `default_stay_duration_minutes`,
+      `assignment_timeout_minutes`). Fails loudly if any field is
+      renamed, removed, or the top-level `assets`/`settings` keys
+      are changed — catches the failure mode where
+      `asset_board.js::render_tile` would silently render
+      `undefined` for a dropped field.
+
+### Tests in `test_lifecycle.py::TestAuditTrailExactlyOneLog`
+
+Each of these tests flips `frappe.flags.in_test = False` for the
+duration of the test so the `_make_asset_status_log` short-circuit
+is bypassed and the audit row is actually inserted. Each test
+counts the `tabAsset Status Log` delta for its fixture asset and
+fails if the delta is not exactly 1:
+
+- [x] `test_start_session_creates_exactly_one_log` — every
+      `start_session_for_asset` call emits one and only one
+      `Asset Status Log` row
+- [x] `test_vacate_session_creates_exactly_one_log` — every
+      `vacate_session` call emits one and only one log row
+- [x] `test_mark_clean_creates_exactly_one_log` — every
+      `mark_asset_clean` call emits one and only one log row
+- [x] `test_set_out_of_service_creates_exactly_one_log` — every
+      `set_asset_out_of_service` call emits one and only one log row
+- [x] `test_return_to_service_creates_exactly_one_log` — every
+      `return_asset_to_service` call emits one and only one log row
+
+### Tests in `test_environment_health.py` (added this pass)
+
+- [x] `test_regression_installed_application_is_setup_complete_is_authoritative`
+      — regression pin for the 2026-04-11 setup_wizard-loop bug.
+      Asserts that `tabInstalled Application` exists, has rows for
+      `app_name IN ('frappe', 'erpnext')`, and every matching row has
+      `is_setup_complete = 1`. Cross-checks
+      `frappe.is_setup_complete()` agrees. Documents in the docstring
+      that the authoritative source is NOT `System Settings` and NOT
+      `tabDefaultValue` — both were red herrings during the incident.
+- [x] `test_all_redis_keys_use_hamilton_namespace` — AST walk of
+      every production `.py` file under `hamilton_erp/` (excludes
+      `test_*.py`) looking for `cache.*` method calls (`set`, `get`,
+      `delete`, `incr`, etc.). For each call, resolves the first
+      argument's string literal (via Constant, JoinedStr, or simple
+      local-variable lookup) and fails if the literal does not start
+      with `hamilton:`. Also fails if the scanner finds zero calls
+      — a broken matcher would silently pass otherwise. Pins the
+      existing `hamilton:asset_lock:{name}` and
+      `hamilton:session_seq:{prefix}` patterns.

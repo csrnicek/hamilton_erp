@@ -83,6 +83,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	render_tile(asset) {
+		// Status is constrained by Venue Asset's Select field, but we still
+		// escape every user-facing value here as defense-in-depth. The audit
+		// test in test_security_audit.py pins this contract — if any of
+		// asset_name, asset_code, or status is interpolated without
+		// frappe.utils.escape_html, that test fails.
 		const status_class = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
 		const tier_short = asset.asset_tier === "Single Standard" ? "STD"
 			: asset.asset_tier === "Deluxe Single" ? "DLX"
@@ -93,7 +98,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			<div class="hamilton-tile ${status_class}"
 			     data-asset-name="${frappe.utils.escape_html(asset.name)}"
 			     data-asset-code="${frappe.utils.escape_html(asset.asset_code || "")}"
-			     data-status="${asset.status}">
+			     data-status="${frappe.utils.escape_html(asset.status)}">
 				<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>
 				<div class="hamilton-tile-name">${frappe.utils.escape_html(asset.asset_name)}</div>
 				${tier_short ? `<div class="hamilton-tile-tier">${tier_short}</div>` : ""}

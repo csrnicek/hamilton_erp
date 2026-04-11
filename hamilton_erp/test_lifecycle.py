@@ -1542,6 +1542,143 @@ class TestRealtimeContracts(IntegrationTestCase):
 			"publish_board_refresh MUST use after_commit=True")
 
 
+class TestAuditTrailExactlyOneLog(IntegrationTestCase):
+	"""Every lifecycle operation must create EXACTLY one Asset Status Log.
+
+	The ``_make_asset_status_log`` helper in lifecycle.py short-circuits
+	when ``frappe.flags.in_test`` is True (to keep the other ~200 tests
+	fast — they don't care about the audit log). This class is the
+	exception: it clears the flag per-test, runs the real log insert
+	path, and verifies the DELTA in ``tabAsset Status Log`` is exactly
+	1 after each lifecycle call.
+
+	Why exactly one (not "at least one"): a regression where we call
+	``_make_asset_status_log`` twice by accident — e.g. once in
+	``_set_asset_status`` and once at the end of the public function —
+	would double-count audit rows and break any downstream report that
+	groups by status change.  Why not zero: if the helper is refactored
+	to unconditionally short-circuit (or if the call site is deleted),
+	every operator action becomes an un-audited ghost. This test pins
+	the 1:1 contract.
+
+	Setup: each test creates its own Venue Asset, runs the operation(s),
+	counts the delta, then rolls back. No session_number seeding needed
+	because we commit nothing.
+	"""
+
+	def setUp(self):
+		# Create Walk-in customer if missing — same pattern as
+		# TestStartSession above. start_session requires this FK.
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name")
+					or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name")
+					or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"AUDIT-{suffix.upper()}",
+			"asset_name": f"Audit Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9100,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+		# Flip off the in_test short-circuit so _make_asset_status_log
+		# actually inserts. Restored in tearDown.
+		self._prev_in_test = frappe.flags.in_test
+		frappe.flags.in_test = False
+
+	def tearDown(self):
+		frappe.flags.in_test = self._prev_in_test
+		frappe.db.rollback()
+
+	def _log_count_for_asset(self) -> int:
+		"""Rows in Asset Status Log pointing at self.asset.name."""
+		return frappe.db.count(
+			"Asset Status Log", {"venue_asset": self.asset.name}
+		)
+
+	def _assert_delta(self, before: int, label: str):
+		after = self._log_count_for_asset()
+		delta = after - before
+		self.assertEqual(
+			delta, 1,
+			f"{label}: expected exactly 1 new Asset Status Log row "
+			f"for {self.asset.name}, got {delta} (before={before}, "
+			f"after={after}). Either the lifecycle path no longer "
+			"calls _make_asset_status_log or it calls it more than "
+			"once. Both are bugs.",
+		)
+
+	def test_start_session_creates_exactly_one_log(self):
+		before = self._log_count_for_asset()
+		lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		self._assert_delta(before, "start_session_for_asset")
+
+	def test_vacate_session_creates_exactly_one_log(self):
+		# Put the asset into Occupied first so we can vacate it. The
+		# start_session call creates its OWN log row; we snapshot AFTER
+		# it so only the vacate delta is measured.
+		lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		before = self._log_count_for_asset()
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator",
+			vacate_method="Key Return",
+		)
+		self._assert_delta(before, "vacate_session")
+
+	def test_mark_clean_creates_exactly_one_log(self):
+		# Route the asset through Available → Occupied → Dirty first.
+		lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator"
+		)
+		lifecycle.vacate_session(
+			self.asset.name, operator="Administrator",
+			vacate_method="Key Return",
+		)
+		before = self._log_count_for_asset()
+		lifecycle.mark_asset_clean(
+			self.asset.name, operator="Administrator"
+		)
+		self._assert_delta(before, "mark_asset_clean")
+
+	def test_set_out_of_service_creates_exactly_one_log(self):
+		before = self._log_count_for_asset()
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator",
+			reason="Maintenance test",
+		)
+		self._assert_delta(before, "set_asset_out_of_service")
+
+	def test_return_to_service_creates_exactly_one_log(self):
+		# Send the asset OOS first (one log row). Then measure the
+		# return-to-service delta in isolation.
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator",
+			reason="Maintenance test",
+		)
+		before = self._log_count_for_asset()
+		lifecycle.return_asset_to_service(
+			self.asset.name, operator="Administrator",
+			reason="Back in service",
+		)
+		self._assert_delta(before, "return_asset_to_service")
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

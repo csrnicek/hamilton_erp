@@ -67,6 +67,100 @@ class TestGetAssetBoardData(IntegrationTestCase):
 		self.assertIn("session_start", r001)
 		self.assertIsNotNone(r001["session_start"])
 
+	def test_schema_snapshot_pins_asset_board_fields(self):
+		"""Schema snapshot — fail LOUDLY on any field rename or removal.
+
+		This test pins the EXACT shape of the ``get_asset_board_data()``
+		response so the Asset Board JS (which reads asset.asset_name,
+		asset.asset_code, asset.status, etc. at render_tile time) does
+		not silently break if a field is renamed or dropped on the
+		backend.
+
+		Why snapshot: Frappe makes it trivial to rename a DocType field
+		via the bench UI, and whoever does the rename sees nothing
+		wrong — ``frappe.get_all`` just returns the new name. The JS
+		silently renders ``undefined`` into the tile and the operator
+		sees a blank board.
+
+		If this test fails because you intentionally added a field:
+		add it to REQUIRED_ASSET_FIELDS below AND update asset_board.js
+		in the same commit.
+
+		If this test fails because you intentionally renamed a field:
+		update REQUIRED_ASSET_FIELDS, asset_board.js, and any other
+		caller (search the repo for the old name) in one atomic commit.
+
+		If this test fails because you removed a field: you just broke
+		the board. Roll back or consciously decide the board can live
+		without it and update both ends.
+		"""
+		REQUIRED_ASSET_FIELDS = {
+			"name",
+			"asset_code",
+			"asset_name",
+			"asset_category",
+			"asset_tier",
+			"status",
+			"current_session",
+			"expected_stay_duration",
+			"display_order",
+			"last_vacated_at",
+			"last_cleaned_at",
+			"hamilton_last_status_change",
+			"version",
+			# Enrichment field — added by get_asset_board_data after the
+			# base query. Not in Venue Asset's DocType, but the JS reads it.
+			"session_start",
+		}
+		REQUIRED_SETTINGS_FIELDS = {
+			"grace_minutes",
+			"default_stay_duration_minutes",
+			"assignment_timeout_minutes",
+		}
+
+		data = api.get_asset_board_data()
+
+		# Top-level shape
+		self.assertIn("assets", data,
+			"get_asset_board_data() no longer returns an 'assets' key — "
+			"this is a breaking API change.")
+		self.assertIn("settings", data,
+			"get_asset_board_data() no longer returns a 'settings' key — "
+			"this is a breaking API change.")
+
+		# Assets array shape — sample the first row, not all 59. If the
+		# query is consistent, one row is representative; if the query is
+		# NOT consistent (e.g. a field only present conditionally), that's
+		# a bug this test should also catch.
+		self.assertTrue(data["assets"], "No assets returned — seed wiped?")
+		sample = data["assets"][0]
+		actual_asset_fields = set(sample.keys())
+
+		missing_asset = REQUIRED_ASSET_FIELDS - actual_asset_fields
+		self.assertEqual(
+			missing_asset, set(),
+			f"get_asset_board_data() asset row is missing required fields: "
+			f"{sorted(missing_asset)}. Expected superset: "
+			f"{sorted(REQUIRED_ASSET_FIELDS)}. Actual: "
+			f"{sorted(actual_asset_fields)}. Either the DocType was altered, "
+			"the SELECT list in api.py was narrowed, or the enrichment loop "
+			"was removed. Update REQUIRED_ASSET_FIELDS AND asset_board.js "
+			"together in the same commit.",
+		)
+
+		# Settings block shape
+		actual_settings_fields = set(data["settings"].keys())
+		missing_settings = REQUIRED_SETTINGS_FIELDS - actual_settings_fields
+		self.assertEqual(
+			missing_settings, set(),
+			f"get_asset_board_data() 'settings' is missing required fields: "
+			f"{sorted(missing_settings)}. Expected superset: "
+			f"{sorted(REQUIRED_SETTINGS_FIELDS)}. Actual: "
+			f"{sorted(actual_settings_fields)}. "
+			"Update REQUIRED_SETTINGS_FIELDS and anywhere the board reads "
+			"from settings in one commit.",
+		)
+
 	def test_get_asset_board_data_under_one_second(self):
 		"""Grok review — single-query perf baseline. 59 assets in < 1.0s."""
 		# Occupy a handful so the enrichment branch fires

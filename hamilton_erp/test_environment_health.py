@@ -1,5 +1,6 @@
 """Environment health smoke tests for Hamilton ERP.
 
+
 This module is the canary for dev-site regressions. Every test here
 catches a class of failure that has bitten Chris in the past and is
 not covered by the behavioral test modules:
@@ -22,7 +23,9 @@ does not fail on a cold machine. The redis tests use a low-level
 socket connect rather than the frappe cache wrapper so a misconfigured
 connection pool is surfaced as a test failure, not a framework error.
 """
+import ast
 import socket
+from pathlib import Path
 
 import frappe
 import requests
@@ -217,6 +220,238 @@ class TestEnvironmentHealth(IntegrationTestCase):
 			frappe.db.exists("Customer", "Walk-in"),
 			"'Walk-in' Customer is missing from the database. "
 			"Run seed_hamilton_env.execute() to re-create it.",
+		)
+
+	def test_regression_installed_application_is_setup_complete_is_authoritative(self):
+		"""Pin the authoritative source of ``frappe.is_setup_complete()``.
+
+		REGRESSION — 2026-04-11: dev site was stuck in an infinite
+		``/app/setup-wizard`` redirect loop. The naive fix was to set
+		``System Settings.setup_complete`` or write to ``tabDefaultValue``
+		with ``key='setup_complete'``. Neither worked. After several
+		hours of chasing ghosts, the actual source was found:
+
+		    Frappe v16 reads ``tabInstalled Application.is_setup_complete``
+		    for each installed app (``frappe`` and ``erpnext``). If EITHER
+		    row has ``is_setup_complete = 0``, ``frappe.is_setup_complete()``
+		    returns False and the browser loops on the setup wizard.
+
+		This test locks that contract in place so no future refactor of
+		``frappe.is_setup_complete()`` — or a test that resets the wrong
+		table — silently reintroduces the loop. It verifies BOTH the
+		field name (``is_setup_complete``, not ``setup_complete``) and
+		the table (``tabInstalled Application``, not ``tabDefaultValue``
+		or ``tabSystem Settings``) are the authoritative location.
+
+		If this test fails, do NOT patch ``System Settings`` or
+		``tabDefaultValue``. The fix is:
+
+		    UPDATE `tabInstalled Application`
+		       SET is_setup_complete = 1
+		     WHERE parent = 'hamilton-test.localhost';
+		"""
+		# 1. The table must exist.
+		self.assertTrue(
+			frappe.db.table_exists("Installed Application"),
+			"tabInstalled Application does not exist. This is the table "
+			"frappe.is_setup_complete() reads; without it the function "
+			"returns False unconditionally and the setup-wizard loop "
+			"kicks in. Run `bench migrate` to restore it.",
+		)
+
+		# 2. frappe.is_setup_complete() in Frappe v16 filters on
+		#    app_name IN ('frappe', 'erpnext'). Those exact rows MUST
+		#    exist and be is_setup_complete=1. We assert the filter
+		#    AND the column name here so a refactor that renames
+		#    either one trips this test before the browser does.
+		rows = frappe.db.sql(
+			"""
+			SELECT app_name, is_setup_complete
+			  FROM `tabInstalled Application`
+			 WHERE app_name IN ('frappe', 'erpnext')
+			""",
+			as_dict=True,
+		)
+		found_apps = {r.app_name for r in rows}
+		self.assertEqual(
+			found_apps, {"frappe", "erpnext"},
+			f"tabInstalled Application is missing a row for one of "
+			f"('frappe', 'erpnext'). Found: {found_apps}. "
+			"frappe.is_setup_complete() (Frappe v16 "
+			"__init__.py:1519) filters on exactly these two app_names; "
+			"if either is missing the function returns False.",
+		)
+
+		incomplete = [r.app_name for r in rows if not r.is_setup_complete]
+		self.assertEqual(
+			incomplete, [],
+			f"tabInstalled Application.is_setup_complete is 0 for: "
+			f"{incomplete}. This is the field frappe.is_setup_complete() "
+			"reads — NOT System Settings.setup_complete, NOT "
+			"tabDefaultValue.setup_complete. Fix with: UPDATE "
+			"`tabInstalled Application` SET is_setup_complete = 1 "
+			"WHERE app_name IN ('frappe', 'erpnext').",
+		)
+
+		# 3. frappe.is_setup_complete() must agree. If it does not, the
+		#    function's internals have been refactored and this test
+		#    needs to be updated alongside the new source of truth.
+		self.assertTrue(
+			frappe.is_setup_complete(),
+			"tabInstalled Application rows are all is_setup_complete=1 "
+			"but frappe.is_setup_complete() returned False. The function's "
+			"internals have changed — update this regression test to "
+			"match the new authoritative source before proceeding.",
+		)
+
+	def test_all_redis_keys_use_hamilton_namespace(self):
+		"""Every Redis key written by hamilton_erp must start with ``hamilton:``.
+
+		Frappe's redis instances are shared between apps (cache on 13000,
+		queue on 11000). If hamilton_erp writes to a bare key like
+		``asset_lock:RM-101`` it can collide with any other app that does
+		the same — and worse, ``frappe.cache().delete_keys("asset_lock*")``
+		in another app would silently wipe our locks.
+
+		This test walks every production .py file in hamilton_erp and
+		finds ``cache.set/get/delete/incr/set_value/get_value/delete_value``
+		calls. For each call, it extracts the string literal backing the
+		first argument (resolving simple local-variable assignments) and
+		asserts it starts with ``hamilton:``.
+
+		Keys we expect to find:
+		  - ``hamilton:asset_lock:{asset_name}`` (locks.py)
+		  - ``hamilton:session_seq:{prefix}`` (lifecycle.py)
+
+		If you add a new Redis key, prefix it with ``hamilton:``. If this
+		test starts failing on a new key, don't suppress it — prefix the key.
+		"""
+		# Frappe's cache API calls we care about. Any AST call where the
+		# function attribute is in this set is a candidate.
+		CACHE_METHODS = {
+			"set", "get", "delete",
+			"set_value", "get_value", "delete_value",
+			"incr", "incrby", "decr",
+			"hset", "hget", "hdel",
+			"expire", "ttl",
+			"sadd", "srem", "smembers",
+			"lpush", "rpush", "lpop", "rpop", "lrange",
+			"setex",
+		}
+		# Only flag calls where the receiver chain contains ``cache(``
+		# or a name bound to ``frappe.cache()``. Matching any method
+		# named ``set`` would hit dict/set operations everywhere.
+		CACHE_RECEIVER_HINTS = ("cache", "redis")
+
+		def _receiver_chain_str(node: ast.AST) -> str:
+			"""Best-effort textual dump of a receiver expression."""
+			if isinstance(node, ast.Name):
+				return node.id
+			if isinstance(node, ast.Attribute):
+				return f"{_receiver_chain_str(node.value)}.{node.attr}"
+			if isinstance(node, ast.Call):
+				return f"{_receiver_chain_str(node.func)}()"
+			return ""
+
+		def _resolve_key_literal(arg: ast.AST, func_body: list) -> str | None:
+			"""Return the string literal backing ``arg``, if determinable.
+
+			Handles:
+			  - Plain Constant string
+			  - JoinedStr (f-string) where the first segment is a Constant
+			    (``f"hamilton:asset_lock:{name}"`` → ``hamilton:asset_lock:``)
+			  - Name bound via simple assignment earlier in the function
+			    to one of the above
+			"""
+			if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+				return arg.value
+			if isinstance(arg, ast.JoinedStr):
+				first = arg.values[0] if arg.values else None
+				if isinstance(first, ast.Constant) and isinstance(first.value, str):
+					return first.value
+				return None
+			if isinstance(arg, ast.BinOp) and isinstance(arg.op, ast.Add):
+				# ``"hamilton:" + name`` — look at left side.
+				return _resolve_key_literal(arg.left, func_body)
+			if isinstance(arg, ast.Name):
+				# Walk back through the function body for an assignment.
+				for stmt in func_body:
+					if isinstance(stmt, ast.Assign):
+						for tgt in stmt.targets:
+							if isinstance(tgt, ast.Name) and tgt.id == arg.id:
+								return _resolve_key_literal(stmt.value, func_body)
+			return None
+
+		package_root = Path(__file__).resolve().parent
+		violations: list[str] = []
+		# Track that we actually found SOMETHING to audit; if the walker
+		# matches zero calls across the whole package, the matcher is
+		# broken and we'd silently pass.
+		scanned_calls = 0
+
+		for py_file in package_root.rglob("*.py"):
+			if "__pycache__" in py_file.parts:
+				continue
+			if py_file.name.startswith("test_"):
+				continue
+			if py_file.name == "test_environment_health.py":
+				continue
+			try:
+				tree = ast.parse(py_file.read_text(), filename=str(py_file))
+			except SyntaxError:
+				continue
+
+			# Walk every FunctionDef so we can resolve local-var key refs.
+			for func in ast.walk(tree):
+				if not isinstance(func, (ast.FunctionDef, ast.AsyncFunctionDef)):
+					continue
+				for node in ast.walk(func):
+					if not isinstance(node, ast.Call):
+						continue
+					if not isinstance(node.func, ast.Attribute):
+						continue
+					if node.func.attr not in CACHE_METHODS:
+						continue
+					receiver = _receiver_chain_str(node.func.value)
+					if not any(hint in receiver for hint in CACHE_RECEIVER_HINTS):
+						continue
+					if not node.args:
+						continue
+
+					scanned_calls += 1
+					key_literal = _resolve_key_literal(node.args[0], func.body)
+					if key_literal is None:
+						# Couldn't resolve — be strict and flag, since an
+						# un-inspectable key could be a bare non-prefixed
+						# string at runtime.
+						rel = py_file.relative_to(package_root)
+						violations.append(
+							f"{rel}:{node.lineno}: {receiver}.{node.func.attr}(...) "
+							f"— could not statically resolve key literal. "
+							f"Assign the key to a local var with a Constant or "
+							f"f-string whose first segment starts with 'hamilton:'."
+						)
+						continue
+					if not key_literal.startswith("hamilton:"):
+						rel = py_file.relative_to(package_root)
+						violations.append(
+							f"{rel}:{node.lineno}: {receiver}.{node.func.attr}(...) "
+							f"uses bare key '{key_literal}' — must start with "
+							f"'hamilton:' to avoid collisions with other apps "
+							f"sharing the redis instance."
+						)
+
+		self.assertGreater(
+			scanned_calls, 0,
+			"Redis namespace scanner found zero cache calls in hamilton_erp/ — "
+			"the AST matcher is broken (it should have found at least the "
+			"asset_lock key in locks.py and the session_seq key in lifecycle.py). "
+			"Fix the scanner before trusting this test.",
+		)
+		self.assertEqual(
+			violations, [],
+			"Redis keys without 'hamilton:' namespace prefix:\n  "
+			+ "\n  ".join(violations),
 		)
 
 
