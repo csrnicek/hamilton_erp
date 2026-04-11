@@ -957,3 +957,99 @@ class TestNextSessionNumberRedisFailure(IntegrationTestCase):
 				lifecycle._next_session_number()
 
 		self.assertIn("temporarily unavailable", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
+# Task 12 — Realtime publishers
+# ---------------------------------------------------------------------------
+
+
+class TestRealtimePublishers(IntegrationTestCase):
+	"""Task 12: realtime.publish_status_change and publish_board_refresh.
+
+	Both publishers must fire `frappe.publish_realtime` with
+	after_commit=True — they are called OUTSIDE the lock section from
+	lifecycle.py, and the event must only be observable to clients after
+	the transaction that produced the state change has committed.
+	Emitting before commit would leak state that could still roll back.
+	"""
+
+	def setUp(self):
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"RT-{uuid.uuid4().hex[:6].upper()}",
+			"asset_name": f"RT Test {uuid.uuid4().hex[:6]}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9009,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_publish_status_change_emits_expected_payload(self):
+		from unittest.mock import patch
+
+		captured = {}
+
+		def fake_publish(event, payload, **kwargs):
+			captured["event"] = event
+			captured["payload"] = payload
+			captured["kwargs"] = kwargs
+
+		from hamilton_erp import realtime
+		with patch.object(frappe, "publish_realtime", side_effect=fake_publish):
+			realtime.publish_status_change(self.asset.name, previous_status="Available")
+
+		self.assertEqual(captured["event"], "hamilton_asset_status_changed")
+		self.assertEqual(captured["payload"]["name"], self.asset.name)
+		self.assertEqual(captured["payload"]["old_status"], "Available")
+		self.assertIn("version", captured["payload"])
+		self.assertIn("status", captured["payload"])
+		self.assertTrue(captured["kwargs"].get("after_commit"))
+
+	def test_publish_board_refresh_emits_expected_payload(self):
+		from unittest.mock import patch
+
+		captured = {}
+
+		def fake_publish(event, payload, **kwargs):
+			captured["event"] = event
+			captured["payload"] = payload
+			captured["kwargs"] = kwargs
+
+		from hamilton_erp import realtime
+		with patch.object(frappe, "publish_realtime", side_effect=fake_publish):
+			realtime.publish_board_refresh("bulk_clean", 5)
+
+		self.assertEqual(captured["event"], "hamilton_asset_board_refresh")
+		self.assertEqual(captured["payload"]["triggered_by"], "bulk_clean")
+		self.assertEqual(captured["payload"]["count"], 5)
+		self.assertTrue(captured["kwargs"].get("after_commit"))
+
+	def test_publish_status_change_noop_when_asset_missing(self):
+		"""If the asset row does not exist (e.g. deleted between the
+		lifecycle call and the after-commit publish), the publisher
+		returns cleanly instead of raising. The alternative — blowing
+		up on a missing row — would surface a confusing error to the
+		operator for a state change that already committed successfully."""
+		from unittest.mock import patch
+
+		captured = {"called": False}
+
+		def fake_publish(event, payload, **kwargs):
+			captured["called"] = True
+
+		from hamilton_erp import realtime
+		with patch.object(frappe, "publish_realtime", side_effect=fake_publish):
+			realtime.publish_status_change(
+				"NonExistent-ASSET-XYZ", previous_status="Available"
+			)
+
+		self.assertFalse(
+			captured["called"],
+			"publish_status_change must be a no-op when the asset row "
+			"cannot be read — not emit an empty/bogus event.",
+		)
