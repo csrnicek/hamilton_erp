@@ -1,41 +1,44 @@
 # Hamilton ERP — Complete Feature Implementation
-# Usage: /feature [feature name or task number]
-# Implements a Phase 1 task using the full Subagent-Driven Development workflow.
+# Usage: /feature [task number or feature name]
+# Fully autonomous. Implements the task end-to-end using Subagent-Driven Development.
+# Never stops to ask Chris unless a STOP condition is hit.
 
-For feature/task: $ARGUMENTS
+## STOP conditions (only these pause for Chris):
+# 1. A decision conflicts with an existing DEC-0XX entry
+# 2. bench migrate would drop or alter existing data columns
+# 3. The task spec is ambiguous about a fundamental design choice
 
-## Phase 1 — Refresh context
-1. git pull origin main
-2. Read CLAUDE.md, docs/decisions_log.md, docs/coding_standards.md
-3. Read the task section in docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md
-4. Read docs/testing_checklist.md — check which Category P/O tests apply to this task
+## Step 1 — Refresh context
+git pull origin main
+Read: CLAUDE.md, docs/decisions_log.md, docs/coding_standards.md,
+      docs/testing_checklist.md, docs/testing_guide.md,
+      docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md
+      (find the section for task: $ARGUMENTS)
 
-## Phase 2 — Implementation (Subagent-Driven)
-1. Dispatch implementer subagent
-2. Dispatch spec compliance reviewer
-3. Dispatch code quality reviewer
-4. Apply any CHANGES_REQUIRED fixes
+## Step 2 — Implement (Subagent-Driven, fully autonomous)
+1. Dispatch implementer subagent — implement the full task
+2. Dispatch spec compliance reviewer — verify against plan
+3. Dispatch code quality reviewer — verify code quality
+4. Apply all CHANGES_REQUIRED fixes autonomously
 5. Re-run reviewer if critical issues were found
+Do not ask Chris which fix to apply — pick the safer, more conservative option.
 
-## Phase 3 — Testing
-Run the full test suite (all 5 modules separately):
-cd ~/frappe-bench-hamilton && source env/bin/activate && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_locks && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_additional_expert && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_checklist_complete
+## Step 3 — Run /fix-and-test
+Run all 7 modules. Fix every failure autonomously using fix-and-test.md decision tree.
+Do not stop until all 7 modules are green or a STOP condition is hit.
 
-Report: X passing, X skipped, X failing.
+## Step 4 — Commit and push
+git add -A && git commit -m "feat: [task description]"
+git push origin main
 
-## Phase 4 — Commit and close
-1. git add + git commit with descriptive message
-2. git push origin main
-3. Update .claude/commands/run-tests.md if new test modules were added
-4. Report to Chris: task complete, X tests passing, commit SHA
+## Step 5 — Update run-tests.md if new test modules were added
+If a new test_*.py file was created, add it to .claude/commands/run-tests.md
+and commit that too.
 
-## 3-AI review checkpoints (remind Chris at these):
-- After Task 9 (lifecycle complete) ✅ Done
-- After Task 11 (seed patch)
-- After Task 21 (full Asset Board UI)
-- After Task 25 (final Frappe Cloud deploy)
+## Step 6 — Report to Chris
+"Task [N] complete. X tests passing, X skipped. Commit: [SHA]. Ready for Task [N+1]."
+
+## 3-AI review checkpoints — remind Chris at these tasks:
+- Task 11 (seed patch) 🔜
+- Task 21 (full Asset Board UI)
+- Task 25 (final Frappe Cloud deploy)
