@@ -185,16 +185,18 @@ def _set_asset_status(
 	asset.hamilton_last_status_change = frappe.utils.now_datetime()
 	if new_status == "Out of Service":
 		asset.reason = log_reason
-	elif previous == "Out of Service":
-		# Gemini AI review 2026-04-10: on OOS → Available, clear the stale
-		# OOS reason. Without this, the reason field lingers forever on
-		# assets that were once OOS, even though the state machine has
-		# moved on. Centralized here so all lifecycle callers benefit;
-		# no duplication in public functions. The only transition with
-		# previous == "Out of Service" is OOS → Available, triggered
-		# exclusively by return_asset_to_service. Note: the audit log row
-		# below still records `log_reason` (the return/repair reason) —
-		# we only null out the persisted OOS reason on the asset itself.
+	else:
+		# Gemini AI review 2026-04-10, generalized by 3-AI review 2026-04-10:
+		# the `reason` field is OOS-specific. ANY transition that does not
+		# enter OOS clears it, so a stale reason can never linger on an
+		# asset whose status no longer justifies one. The load-bearing case
+		# is OOS → Available (via return_asset_to_service) — without this,
+		# an asset that was once OOS would carry the reason forever. The
+		# generalization to plain `else` is defense-in-depth: even if some
+		# future code path wrote a reason on a non-OOS asset, the next
+		# legitimate transition would scrub it. Note: the audit log row
+		# below still records `log_reason` (e.g. the return/repair reason);
+		# we only null out the persisted reason on the asset row itself.
 		asset.reason = None
 	asset.save(ignore_permissions=True)
 	_make_asset_status_log(
@@ -274,6 +276,17 @@ def _close_current_session(asset_name: str, *, current_session: Optional[str],
 	if not current_session:
 		frappe.throw(_("Asset {0} has no current session to close.").format(asset_name))
 	session = frappe.get_doc("Venue Session", current_session)
+	# 3-AI review 2026-04-10: defensive cross-doctype invariant checks. The
+	# asset_status_lock guards the asset row but not the linked session row,
+	# so explicitly verify the session still belongs to this asset and is
+	# still Active before mutating it. Catches drift from manual SQL edits,
+	# partial backfills, or future bugs that double-close a session.
+	if session.venue_asset != asset_name:
+		frappe.throw(_("Session {0} belongs to {1}, not {2}.")
+		             .format(current_session, session.venue_asset, asset_name))
+	if session.status != "Active":
+		frappe.throw(_("Session {0} is already {1} — cannot close again.")
+		             .format(current_session, session.status))
 	session.session_end = frappe.utils.now_datetime()
 	session.operator_vacate = operator
 	session.vacate_method = vacate_method

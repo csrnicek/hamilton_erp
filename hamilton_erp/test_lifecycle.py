@@ -167,6 +167,7 @@ class TestVacateSession(IntegrationTestCase):
 		frappe.db.rollback()
 
 	def test_vacate_moves_to_dirty(self):
+		initial_version = frappe.db.get_value("Venue Asset", self.asset.name, "version")
 		lifecycle.vacate_session(
 			self.asset.name, operator="Administrator", vacate_method="Key Return"
 		)
@@ -174,6 +175,10 @@ class TestVacateSession(IntegrationTestCase):
 		self.assertEqual(asset.status, "Dirty")
 		self.assertIsNone(asset.current_session)
 		self.assertIsNotNone(asset.last_vacated_at)
+		# 3-AI review 2026-04-10: every transition must bump version + stamp
+		# hamilton_last_status_change. Lock these contracts for vacate.
+		self.assertEqual(asset.version, initial_version + 1)
+		self.assertIsNotNone(asset.hamilton_last_status_change)
 
 	def test_vacate_closes_session(self):
 		lifecycle.vacate_session(
@@ -207,6 +212,26 @@ class TestVacateSession(IntegrationTestCase):
 			lifecycle.vacate_session(
 				self.asset.name, operator="Administrator", vacate_method="Nonsense"
 			)
+
+	def test_vacate_rejects_oos_asset(self):
+		"""OOS → vacate must throw.
+
+		3-AI review 2026-04-10: closes the gap where test_vacate_rejects_non_occupied
+		only covers Dirty → vacate. Walk the asset Occupied → OOS via the real
+		pipeline (set_asset_out_of_service auto-closes the linked session via
+		Discovery on Rounds), then attempt vacate_session and assert rejection.
+		"""
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="Maintenance"
+		)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.vacate_session(
+				self.asset.name, operator="Administrator", vacate_method="Key Return"
+			)
+		# Lock release after rejection — same invariant as the other tests.
+		from hamilton_erp.locks import asset_status_lock
+		with asset_status_lock(self.asset.name, "verify-release") as row:
+			self.assertEqual(row["status"], "Out of Service")
 
 
 class TestMarkClean(IntegrationTestCase):
@@ -243,10 +268,15 @@ class TestMarkClean(IntegrationTestCase):
 		frappe.db.rollback()
 
 	def test_mark_clean_moves_dirty_to_available(self):
+		initial_version = frappe.db.get_value("Venue Asset", self.asset.name, "version")
 		lifecycle.mark_asset_clean(self.asset.name, operator="Administrator")
 		asset = frappe.get_doc("Venue Asset", self.asset.name)
 		self.assertEqual(asset.status, "Available")
 		self.assertIsNotNone(asset.last_cleaned_at)
+		# 3-AI review 2026-04-10: every transition must bump version + stamp
+		# hamilton_last_status_change. Lock these contracts for mark-clean.
+		self.assertEqual(asset.version, initial_version + 1)
+		self.assertIsNotNone(asset.hamilton_last_status_change)
 
 	def test_mark_clean_rejects_non_dirty(self):
 		self.asset.status = "Available"
@@ -322,6 +352,7 @@ class TestSetOutOfService(IntegrationTestCase):
 		"""
 		from unittest.mock import patch
 		target = "hamilton_erp.lifecycle._set_asset_status"
+		initial_version = frappe.db.get_value("Venue Asset", self.asset.name, "version")
 		with patch(target, wraps=lifecycle._set_asset_status) as spy:
 			lifecycle.set_asset_out_of_service(
 				self.asset.name, operator="Administrator", reason="Plumbing failure"
@@ -331,6 +362,10 @@ class TestSetOutOfService(IntegrationTestCase):
 		asset = frappe.get_doc("Venue Asset", self.asset.name)
 		self.assertEqual(asset.status, "Out of Service")
 		self.assertEqual(asset.reason, "Plumbing failure")
+		# 3-AI review 2026-04-10: every transition must bump version + stamp
+		# hamilton_last_status_change. Lock these contracts for OOS entry.
+		self.assertEqual(asset.version, initial_version + 1)
+		self.assertIsNotNone(asset.hamilton_last_status_change)
 
 	def test_oos_from_occupied_closes_session(self):
 		session_name = lifecycle.start_session_for_asset(
@@ -428,6 +463,7 @@ class TestReturnToService(IntegrationTestCase):
 		"""
 		from unittest.mock import patch
 		target = "hamilton_erp.lifecycle._set_asset_status"
+		initial_version = frappe.db.get_value("Venue Asset", self.asset.name, "version")
 		with patch(target, wraps=lifecycle._set_asset_status) as spy:
 			lifecycle.return_asset_to_service(
 				self.asset.name, operator="Administrator", reason="Repair done"
@@ -440,8 +476,12 @@ class TestReturnToService(IntegrationTestCase):
 		self.assertIsNotNone(asset.last_cleaned_at)
 		# Gemini review 2026-04-10: OOS → Available MUST clear asset.reason.
 		# The setUp seeds "Initial OOS", so any regression in the reason-
-		# clearing elif branch of _set_asset_status fails loudly here.
+		# clearing else branch of _set_asset_status fails loudly here.
 		self.assertFalse(asset.reason)
+		# 3-AI review 2026-04-10: every transition must bump version + stamp
+		# hamilton_last_status_change. Lock these contracts for return-to-service.
+		self.assertEqual(asset.version, initial_version + 1)
+		self.assertIsNotNone(asset.hamilton_last_status_change)
 
 	def test_return_requires_reason(self):
 		with self.assertRaises(frappe.ValidationError):

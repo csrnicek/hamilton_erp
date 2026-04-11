@@ -105,6 +105,24 @@ def asset_status_lock(asset_name: str, operation: str) -> Iterator[dict]:
 			frappe.throw(_("Venue Asset {0} not found.").format(asset_name))
 		yield rows[0]
 	finally:
+		# 3-AI review 2026-04-10: detect TTL expiry. If our token is no longer
+		# in Redis by release time, the 15s lock window elapsed during the
+		# critical section and another caller may have acquired the same key.
+		# The Lua CAS release below will safely no-op (token mismatch), but
+		# we want a logged warning so this isn't silent — MariaDB FOR UPDATE
+		# preserved data integrity, but this is a load/perf signal worth
+		# surfacing in logs. Wrapped in try/except so a Redis fault here
+		# never masks the primary exception or the eval release below.
+		try:
+			token_now = cache.get(key)
+			if token_now != token.encode():
+				frappe.logger().warning(
+					f"asset_status_lock: Redis TTL expired during critical section "
+					f"for {key} — lock was held by another caller by release time. "
+					f"MariaDB FOR UPDATE preserved data integrity."
+				)
+		except Exception:
+			pass
 		# Atomic release via Lua CAS — only delete if the token is still ours.
 		# This is Redis server-side Lua scripting (EVAL command), not Python eval.
 		try:
