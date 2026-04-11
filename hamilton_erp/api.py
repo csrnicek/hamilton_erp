@@ -50,22 +50,75 @@ def on_sales_invoice_submit(doc, method):
 
 @frappe.whitelist(methods=["GET"])
 def get_asset_board_data() -> dict:
-	"""Return all venue assets for the asset board UI."""
+	"""Initial Asset Board load. Single batched query shape — no N+1.
+
+	Returns:
+		{
+			"assets": [ {name, asset_code, asset_name, asset_category,
+			             asset_tier, status, current_session,
+			             expected_stay_duration, display_order,
+			             last_vacated_at, last_cleaned_at,
+			             hamilton_last_status_change, version,
+			             session_start (only for Occupied)}, ... ],
+			"settings": {grace_minutes, default_stay_duration_minutes, ...},
+		}
+
+	Enrichment is deliberately batched: after pulling the asset list, we
+	collect every `current_session` for Occupied rows and fetch their
+	`session_start` values in a single `frappe.get_all(..., "name in ...)`
+	call. A naive loop over `get_value` would be 1 + N round trips; this
+	path is guaranteed to be 2 queries regardless of occupancy. The
+	`test_get_asset_board_data_under_one_second` perf baseline in
+	`test_api_phase1.py` guards against future N+1 regressions.
+	"""
+	frappe.has_permission("Venue Asset", "read", throw=True)
+
 	assets = frappe.get_all(
 		"Venue Asset",
 		fields=[
-			"name",
-			"asset_name",
-			"asset_category",
-			"asset_tier",
-			"status",
-			"current_session",
-			"expected_stay_duration",
-			"display_order",
+			"name", "asset_code", "asset_name", "asset_category", "asset_tier",
+			"status", "current_session", "expected_stay_duration", "display_order",
+			"last_vacated_at", "last_cleaned_at", "hamilton_last_status_change",
+			"version",
 		],
-		order_by="asset_category asc, display_order asc, name asc",
+		filters={"is_active": 1},
+		order_by="display_order asc",
+		limit=500,
 	)
-	return {"assets": assets}
+
+	# Batched session_start lookup — one query for all occupied tiles
+	occupied_session_ids = [
+		a["current_session"] for a in assets
+		if a["status"] == "Occupied" and a.get("current_session")
+	]
+	session_starts: dict[str, object] = {}
+	if occupied_session_ids:
+		rows = frappe.get_all(
+			"Venue Session",
+			fields=["name", "session_start"],
+			filters={"name": ["in", occupied_session_ids]},
+		)
+		session_starts = {r["name"]: r["session_start"] for r in rows}
+	for a in assets:
+		a["session_start"] = session_starts.get(a.get("current_session"))
+
+	return {"assets": assets, "settings": _get_hamilton_settings()}
+
+
+def _get_hamilton_settings() -> dict:
+	"""Return the subset of Hamilton Settings the Asset Board needs.
+
+	Uses `frappe.get_cached_doc` so repeated calls within the same request
+	are free. Falls back to sensible defaults per field so the Asset Board
+	still renders on a freshly-installed site where Hamilton Settings may
+	not yet have been filled in.
+	"""
+	s = frappe.get_cached_doc("Hamilton Settings")
+	return {
+		"grace_minutes": s.get("grace_minutes") or 15,
+		"default_stay_duration_minutes": s.get("default_stay_duration_minutes") or 360,
+		"assignment_timeout_minutes": s.get("assignment_timeout_minutes") or 15,
+	}
 
 
 @frappe.whitelist(methods=["POST"])
