@@ -1,0 +1,400 @@
+{
+  "master": {
+    "tasks": [
+      {
+        "id": "1",
+        "title": "Clean up stale Phase 0 tier names in existing tests",
+        "description": "Replace legacy Phase 0 tier names in existing test fixtures with Phase 1 canonical values so subsequent lifecycle tests start from a clean baseline.",
+        "details": "Plan section: Task 1 (lines 114-177). Files: hamilton_erp/hamilton_erp/hamilton_erp/doctype/venue_asset/test_venue_asset.py.",
+        "testStrategy": "TDD — run existing venue_asset tests, confirm they pass with the renamed tiers.",
+        "status": "done",
+        "dependencies": [],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "2",
+        "title": "Three-layer lock helper (locks.py)",
+        "description": "Create hamilton_erp/locks.py implementing the three-layer lock: Redis asset key + MariaDB FOR UPDATE + version field. Zero I/O inside the lock body.",
+        "details": "Plan section: Task 2 (lines 178-364). Creates hamilton_erp/hamilton_erp/locks.py. Respects DEC-0xx locking rules in docs/decisions_log.md and coding_standards.md §13.",
+        "testStrategy": "TDD — write test_locks.py cases for acquire/release, contention, FOR UPDATE semantics, and version mismatch.",
+        "status": "done",
+        "dependencies": [
+          "1"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "3",
+        "title": "lifecycle.py scaffold with state-machine helpers",
+        "description": "Create hamilton_erp/lifecycle.py with the state-machine helpers that subsequent tasks plug whitelisted methods into.",
+        "details": "Plan section: Task 3 (lines 365-560). Creates hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — failing tests for state transitions and helper guards before implementation.",
+        "status": "done",
+        "dependencies": [
+          "2"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "4",
+        "title": "start_session_for_asset — Available → Occupied",
+        "description": "Implement start_session_for_asset() in lifecycle.py to transition an asset from Available to Occupied inside the three-layer lock.",
+        "details": "Plan section: Task 4 (lines 561-766). Modifies hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — test_lifecycle.py cases for the happy path and the Available-state guard.",
+        "status": "done",
+        "dependencies": [
+          "3"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "5",
+        "title": "vacate_session — Occupied → Dirty",
+        "description": "Implement vacate_session() transitioning Occupied → Dirty, writing Asset Status Log, emitting realtime after_commit.",
+        "details": "Plan section: Task 5 (lines 767-918). Modifies hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — test vacate happy path, rejection on non-Occupied state, status log entry.",
+        "status": "done",
+        "dependencies": [
+          "4"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "6",
+        "title": "mark_asset_clean + bulk reason support",
+        "description": "Implement mark_asset_clean() transitioning Dirty → Available, with bulk reason support for the 'Mark All Clean' flow.",
+        "details": "Plan section: Task 6 (lines 919-1042). Modifies hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — test_lifecycle.py cases for single clean, bulk clean, and guard on non-Dirty state.",
+        "status": "done",
+        "dependencies": [
+          "5"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "7",
+        "title": "set_asset_out_of_service (any → OOS)",
+        "description": "Implement set_asset_out_of_service() transitioning any state to OOS, including forced termination of any active session.",
+        "details": "Plan section: Task 7 (lines 1043-1173). Modifies hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — test transitions from Available, Occupied (with active session), and Dirty.",
+        "status": "done",
+        "dependencies": [
+          "6"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "8",
+        "title": "return_asset_to_service (OOS → Available)",
+        "description": "Implement return_asset_to_service() transitioning OOS → Available with audit entry.",
+        "details": "Plan section: Task 8 (lines 1174-1303). Modifies hamilton_erp/hamilton_erp/lifecycle.py.",
+        "testStrategy": "TDD — happy path plus guard rejecting non-OOS assets.",
+        "status": "done",
+        "dependencies": [
+          "7"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "9",
+        "title": "_next_session_number() — Redis INCR with DB fallback",
+        "description": "Implement _next_session_number() using Redis INCR as primary source with MariaDB fallback when Redis is unavailable.",
+        "details": "Plan section: Task 9 (lines 1304-1454). Modifies hamilton_erp/hamilton_erp/lifecycle.py. 3-AI review checkpoint after this task.",
+        "testStrategy": "TDD — test Redis-up path, Redis-down fallback, and monotonic uniqueness.",
+        "status": "done",
+        "dependencies": [
+          "8"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "10",
+        "title": "Wire _next_session_number into VenueSession.before_insert + read-only lockdown",
+        "description": "Hook _next_session_number into VenueSession.before_insert and make session_number read-only so it cannot be set from the UI.",
+        "details": "Plan section: Task 10 (lines 1455-1567). Modifies venue_session.py and venue_session.json.",
+        "testStrategy": "TDD — assert session_number is populated on insert and rejected when supplied manually.",
+        "status": "done",
+        "dependencies": [
+          "9"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "11",
+        "title": "Seed migration patch (seed_hamilton_env.py)",
+        "description": "Create seed migration patch that sets up the 59 Hamilton assets (26 rooms + 33 lockers) on fresh installs.",
+        "details": "Plan section: Task 11 (lines 1568-1778). Creates hamilton_erp/hamilton_erp/patches/v0_1/seed_hamilton_env.py. 3-AI review checkpoint after this task.",
+        "testStrategy": "TDD — migration test: fresh site ends with 26 rooms + 33 lockers in Available state.",
+        "status": "done",
+        "dependencies": [
+          "10"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "12",
+        "title": "Realtime publishers (realtime.py)",
+        "description": "Implement hamilton_erp/realtime.py publishers that emit events after_commit for asset board cross-tab sync.",
+        "details": "Plan section: Task 12 (lines 1779-1915). Modifies hamilton_erp/hamilton_erp/realtime.py. Must run outside the lock section per coding_standards §13.",
+        "testStrategy": "TDD — test that publishers are called only after_commit and with correct payload shape.",
+        "status": "done",
+        "dependencies": [
+          "11"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "13",
+        "title": "Venue Asset whitelisted methods delegate to lifecycle.py",
+        "description": "Rewrite Venue Asset whitelisted methods as thin entry points that delegate into hamilton_erp/lifecycle.py.",
+        "details": "Plan section: Task 13 (lines 1916-2036). Modifies venue_asset.py.",
+        "testStrategy": "TDD — existing venue_asset tests continue passing; verify no business logic lives in the controller.",
+        "status": "done",
+        "dependencies": [
+          "12"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "14",
+        "title": "api.py — get_asset_board_data with session enrichment + performance baseline",
+        "description": "Implement get_asset_board_data() returning assets with enriched session info and record an initial performance baseline.",
+        "details": "Plan section: Task 14 (lines 2037-2200). Modifies hamilton_erp/hamilton_erp/api.py.",
+        "testStrategy": "TDD — test payload shape, enrichment correctness, and baseline p95 latency assertion.",
+        "status": "done",
+        "dependencies": [
+          "13"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "15",
+        "title": "api.py — bulk mark_all_clean_rooms / mark_all_clean_lockers",
+        "description": "Implement bulk API endpoints mark_all_clean_rooms() and mark_all_clean_lockers() for the operator 'Mark All Clean' flow.",
+        "details": "Plan section: Task 15 (lines 2201-2337). Modifies hamilton_erp/hamilton_erp/api.py.",
+        "testStrategy": "TDD — test bulk happy path, partial failures, and audit log coverage for every asset touched.",
+        "status": "done",
+        "dependencies": [
+          "14"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "16",
+        "title": "Asset Board page scaffold (empty Frappe Page)",
+        "description": "Create empty Frappe Page at /app/asset-board as the container for the vanilla JS hamilton_erp.AssetBoard class.",
+        "details": "Plan section: Task 16 (lines 2338-2514). Creates hamilton_erp/hamilton_erp/hamilton_erp/page/asset_board/ scaffold.",
+        "testStrategy": "Manual — page loads at /app/asset-board with empty container, no JS errors in console.",
+        "status": "done",
+        "dependencies": [
+          "15"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "17",
+        "title": "Asset Board — tile rendering (Rooms zone + Lockers zone)",
+        "description": "Render the Asset Board as two zones (Rooms, Lockers) using data from get_asset_board_data, producing one tile per asset with state styling.",
+        "details": "Plan section: Task 17 (lines 2515-2697). Modifies asset_board.js.",
+        "testStrategy": "TDD where feasible — test tile render count matches API, state classes map correctly. Manual QA for visual layout on tablet.",
+        "status": "in-progress",
+        "dependencies": [
+          "16"
+        ],
+        "priority": "high",
+        "subtasks": [
+          {
+            "id": 1,
+            "title": "Analyze current implementation state and verify data flow",
+            "description": "Review existing asset_board.js implementation and verify that get_asset_board_data API returns correctly structured data with all required fields for tile rendering.",
+            "dependencies": [],
+            "details": "Read asset_board.js (already implemented with render() and render_tile() methods from Task 16), verify the assets array structure from get_asset_board_data includes: name, asset_code, asset_name, asset_category, asset_tier, status, current_session, session_start. Confirm that the CSS file exists and contains all necessary status color classes. This is a verification step to ensure the foundation is correct before testing.",
+            "status": "done",
+            "testStrategy": "Manual verification: check that assets array from API contains expected fields, verify CSS classes exist for all four status values (available, occupied, dirty, out-of-service)",
+            "parentId": "undefined",
+            "updatedAt": "2026-04-11T14:31:32.538Z"
+          },
+          {
+            "id": 2,
+            "title": "Create test file for tile rendering verification",
+            "description": "Create a new test module test_asset_board_rendering.py to verify tile count, zone separation, and CSS class mapping.",
+            "dependencies": [
+              1
+            ],
+            "details": "Create hamilton_erp/test_asset_board_rendering.py with tests that: (1) verify total tile count matches asset count from seed data (26 rooms + 33 lockers = 59 tiles), (2) verify rooms are separated from lockers in the rendered HTML, (3) verify tier grouping for rooms (Single Standard, Deluxe Single, Glory Hole, Double Deluxe), (4) verify status CSS classes map correctly (Available→hamilton-status-available, Occupied→hamilton-status-occupied, Dirty→hamilton-status-dirty, Out of Service→hamilton-status-out-of-service). Use Frappe's test client to call get_asset_board_data and validate the response structure.",
+            "status": "done",
+            "testStrategy": "TDD — write tests first that validate: (1) API returns 59 assets, (2) 26 have asset_category=Room, (3) 33 have asset_category=Locker, (4) all rooms have one of the four tier values, (5) CSS class name generation matches expected pattern for each status",
+            "parentId": "undefined",
+            "updatedAt": "2026-04-11T14:42:05.594Z"
+          },
+          {
+            "id": 3,
+            "title": "Manual QA: verify tile rendering in browser",
+            "description": "Rebuild Frappe assets, clear cache, start bench, and manually verify that 59 tiles render correctly on the Asset Board page with proper grouping and colors.",
+            "dependencies": [
+              2
+            ],
+            "details": "Run: cd ~/frappe-bench-hamilton && bench build --app hamilton_erp && bench --site hamilton-test.localhost clear-cache, then bench start. Open http://hamilton-test.localhost:8000/app/asset-board in browser. Verify: (1) 59 tiles are visible, (2) Rooms section shows 26 tiles grouped by tier with tier labels (Single Standard, Deluxe Single, Glory Hole, Double Deluxe), (3) Lockers section shows 33 tiles in a single grid, (4) All tiles are green (status=Available after seed), (5) Bulk action buttons visible above each zone ('Mark All Dirty Rooms Clean' and 'Mark All Dirty Lockers Clean'), (6) Tile layout is responsive and readable. Take screenshot for documentation if needed.",
+            "status": "pending",
+            "testStrategy": "Manual QA checklist: count tiles visually, verify tier grouping labels appear, verify all tiles show green background, verify bulk buttons are visible and labeled correctly, verify layout is clean on tablet-sized viewport",
+            "parentId": "undefined"
+          },
+          {
+            "id": 4,
+            "title": "Verify tile data attributes and accessibility",
+            "description": "Inspect rendered HTML to confirm each tile has correct data attributes (data-asset-name, data-asset-code, data-status) for future event binding.",
+            "dependencies": [
+              3
+            ],
+            "details": "Use browser DevTools to inspect at least 5 tiles (2 rooms of different tiers, 3 lockers). Verify each tile div has: (1) data-asset-name with the Venue Asset docname, (2) data-asset-code with the asset's code (H10, H11, L01, etc.), (3) data-status with the current status value, (4) correct CSS class based on status. These data attributes are critical for Task 18 (popover interaction) where click events will need to identify which asset was clicked. Verify tier abbreviations render correctly: STD for Single Standard, DLX for Deluxe Single, GH for Glory Hole, 2DLX for Double Deluxe, and empty for Locker tier.",
+            "status": "pending",
+            "testStrategy": "Manual inspection in browser DevTools — check at least 5 tiles across both zones to verify all data attributes are populated correctly and tier abbreviations match the expected mapping",
+            "parentId": "undefined"
+          },
+          {
+            "id": 5,
+            "title": "Commit and push tile rendering implementation",
+            "description": "Run all tests to confirm no regressions, then commit the tile rendering work (asset_board.js and asset_board.css) with descriptive message and push to GitHub.",
+            "dependencies": [
+              4
+            ],
+            "details": "Run the full test suite using /run-tests to ensure no regressions were introduced (all 7 modules must pass). If all tests pass, commit with message 'feat(asset_board): card-based tile rendering for Rooms + Lockers' and include both asset_board.js and asset_board.css. Push to origin/main. If tests fail, diagnose and fix before committing. Note: asset_board.js and asset_board.css were already modified in Task 16, so this commit captures the completed tile rendering functionality.",
+            "status": "pending",
+            "testStrategy": "Pre-commit: run /run-tests and verify all 197+ tests pass with 11 skipped. Post-commit: verify GitHub shows the new commit on main branch with correct files changed",
+            "parentId": "undefined"
+          }
+        ],
+        "updatedAt": "2026-04-11T14:42:05.594Z"
+      },
+      {
+        "id": "18",
+        "title": "Asset Board — popover interaction + action dispatch",
+        "description": "Add popover interaction to tiles; dispatch lifecycle actions (start/vacate/clean/OOS/return) to whitelisted methods.",
+        "details": "Plan section: Task 18 (lines 2698-2996). Modifies asset_board.js.",
+        "testStrategy": "Manual QA on tablet for touch targets; unit tests for action dispatch wiring.",
+        "status": "pending",
+        "dependencies": [
+          "17"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "19",
+        "title": "Asset Board — overtime ticker (2-stage visual)",
+        "description": "Add 2-stage overtime ticker that visually flags Occupied sessions exceeding configured time thresholds.",
+        "details": "Plan section: Task 19 (lines 2997-3134). Modifies asset_board.js.",
+        "testStrategy": "Unit tests for threshold math; manual verification of stage transitions on test sessions.",
+        "status": "pending",
+        "dependencies": [
+          "18"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "20",
+        "title": "Asset Board — realtime listeners (cross-tab sync)",
+        "description": "Subscribe to realtime events from realtime.py and update tiles live across multiple operator tablets.",
+        "details": "Plan section: Task 20 (lines 3135-3229). Modifies asset_board.js.",
+        "testStrategy": "Manual multi-tab test — change triggered in one tab reflects in another within 1-2s.",
+        "status": "pending",
+        "dependencies": [
+          "19"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "21",
+        "title": "Asset Board — bulk Mark All Clean confirmation dialog",
+        "description": "Upgrade bulk 'Mark All Clean' to use a proper Frappe dialog for confirmation (replaces any placeholder confirm).",
+        "details": "Plan section: Task 21 (lines 3230-3320). Modifies asset_board.js. 3-AI review checkpoint after this task.",
+        "testStrategy": "Manual QA — confirm dialog fires, cancellation works, accept triggers bulk API.",
+        "status": "pending",
+        "dependencies": [
+          "20"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "22",
+        "title": "H10 E2E — Vacate and Turnover",
+        "description": "Write end-to-end test test_e2e_phase1.py covering scenario H10: vacate + turnover flow across API + lifecycle + realtime.",
+        "details": "Plan section: Task 22 (lines 3321-3451). Creates hamilton_erp/hamilton_erp/test_e2e_phase1.py.",
+        "testStrategy": "E2E — start → vacate → mark clean → available, with assertion on Asset Status Log and realtime events.",
+        "status": "pending",
+        "dependencies": [
+          "21"
+        ],
+        "priority": "high",
+        "subtasks": []
+      },
+      {
+        "id": "23",
+        "title": "H11 E2E — Out of Service",
+        "description": "E2E test for scenario H11: taking an asset out of service (from each valid source state) and returning it.",
+        "details": "Plan section: Task 23 (lines 3452-3543). Modifies test_e2e_phase1.py.",
+        "testStrategy": "E2E — any state → OOS → Available, asserting audit trail and that active sessions are force-closed.",
+        "status": "pending",
+        "dependencies": [
+          "22"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "24",
+        "title": "H12 E2E — Occupied Asset Rejection",
+        "description": "E2E test for scenario H12: attempting to start a session on an already-Occupied asset must be rejected with the three-layer lock intact.",
+        "details": "Plan section: Task 24 (lines 3544-3631). Modifies test_e2e_phase1.py.",
+        "testStrategy": "E2E — concurrent start attempts on same asset, only one succeeds, other fails cleanly with LockContentionError.",
+        "status": "pending",
+        "dependencies": [
+          "23"
+        ],
+        "priority": "medium",
+        "subtasks": []
+      },
+      {
+        "id": "25",
+        "title": "Deploy to Frappe Cloud + manual QA on real hardware",
+        "description": "Deploy Phase 1 to hamilton-erp.v.frappe.cloud and perform manual QA on the operator tablet and assets. No code changes.",
+        "details": "Plan section: Task 25 (lines 3632-end). Deployment + manual QA only. 3-AI review checkpoint after this task.",
+        "testStrategy": "Pre-deploy checklist (CLAUDE.md) + manual QA of the full H10/H11/H12 flows on production hardware.",
+        "status": "pending",
+        "dependencies": [
+          "24"
+        ],
+        "priority": "high",
+        "subtasks": []
+      }
+    ],
+    "metadata": {
+      "version": "1.0.0",
+      "lastModified": "2026-04-11T14:42:05.595Z",
+      "taskCount": 25,
+      "completedCount": 16,
+      "tags": [
+        "master"
+      ]
+    }
+  }
+}
