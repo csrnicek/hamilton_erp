@@ -1,22 +1,28 @@
-# Hamilton ERP — Smart Deploy
+# Hamilton ERP — Deploy to Frappe Cloud
 # Usage: /deploy
-# Deploys to Frappe Cloud after running tests.
-# Always runs tests first — never deploys broken code.
+# Fully autonomous. Runs all 7 test modules, fixes any failures, then pushes.
+# Never stops to ask Chris unless a STOP condition is hit.
 
-Step 1 — Run full test suite first:
-cd ~/frappe-bench-hamilton && source env/bin/activate && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_locks && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_additional_expert && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_checklist_complete
+## STOP conditions (only these pause for Chris):
+# 1. A fix requires changing a DEC-0XX design decision
+# 2. bench migrate is required before deploy
+# 3. More than 5 tests fail with the same root cause
 
-Step 2 — If ALL tests pass, push to GitHub:
+## Step 1 — Pull latest and refresh context
+git pull origin main
+
+## Step 2 — Run /fix-and-test autonomously
+Run all 7 modules. Fix every failure using the decision tree in fix-and-test.md.
+Do not stop. Do not ask Chris. Fix and rerun until all 7 modules are green.
+
+## Step 3 — Push to GitHub
 cd ~/hamilton_erp && git push origin main
 
-Step 3 — Confirm deploy:
-Tell Chris: "All X tests passed. Pushed to GitHub. Frappe Cloud will auto-deploy to hamilton-erp.v.frappe.cloud within 2-3 minutes."
+## Step 4 — Confirm and report
+Tell Chris:
+"All X tests passing. Pushed to GitHub. Frappe Cloud will auto-deploy to
+hamilton-erp.v.frappe.cloud within 2-3 minutes."
 
-Step 4 — If ANY tests fail:
-Stop immediately. Do NOT push. Tell Chris exactly which tests failed and why.
-Do not deploy broken code under any circumstances.
+## Step 5 — If ANY tests still failing after fix attempts
+Stop. Tell Chris exactly which tests failed, what was tried, and why it could
+not be fixed autonomously. This is the only time Chris needs to be involved.
