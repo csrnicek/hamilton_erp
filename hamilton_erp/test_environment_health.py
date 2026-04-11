@@ -304,6 +304,86 @@ class TestEnvironmentHealth(IntegrationTestCase):
 			"match the new authoritative source before proceeding.",
 		)
 
+	def test_regression_desktop_home_page_not_setup_wizard(self):
+		"""Pin: ``tabDefaultValue.desktop:home_page`` must not equal ``setup-wizard``.
+
+		REGRESSION — 2026-04-11: Asset Board in Chrome flashed/refreshed
+		~40 times per second. Every loop iteration: browser loaded
+		``/desk``, desk JS read ``frappe.boot.home_page``, found
+		``"setup-wizard"``, loaded the setup-wizard page, which ran
+		``frappe.pages["setup-wizard"].on_page_load`` — and the first
+		thing that handler does is::
+
+		    if (frappe.boot.setup_complete) {
+		        window.location.href = frappe.boot.apps_data.default_path || "/desk";
+		    }
+
+		So setup-wizard immediately full-page-redirected back to
+		``/desk``, which re-read ``home_page=setup-wizard``, and round
+		and round. Two Frappe code paths disagreed — one said "your
+		home page is setup-wizard" and another said "bounce out of
+		setup-wizard when setup is complete" — producing an infinite
+		redirect storm.
+
+		The root cause was a stale row in ``tabDefaultValue``::
+
+		    parent   defkey              defvalue
+		    __default desktop:home_page   setup-wizard
+
+		This row is written by ERPNext's ``setup_complete()`` flow under
+		some conditions and is NEVER cleared by subsequent bootstraps,
+		test teardowns, or ``bench migrate``. It survives Redis flushes,
+		session deletions, and full bench restarts — because it's just
+		a MariaDB row. ``frappe/boot.py:add_home_page()`` reads this
+		exact default to build ``bootinfo.home_page``.
+
+		The contract pinned here: IF ``frappe.is_setup_complete()`` is
+		True THEN no row in ``tabDefaultValue`` may have
+		``defkey='desktop:home_page' AND defvalue='setup-wizard'``. The
+		two conditions cannot coexist without reproducing the flash loop.
+
+		If this test fails, the fix is::
+
+		    DELETE FROM `tabDefaultValue`
+		     WHERE defkey='desktop:home_page' AND defvalue='setup-wizard';
+
+		Do NOT paper over it by clearing Redis or deleting sessions —
+		those are symptoms; the MariaDB row is the cause.
+		"""
+		if not frappe.is_setup_complete():
+			# Setup hasn't completed yet, so the setup-wizard home_page
+			# is legitimate. The loop only triggers once setup_complete
+			# flips True — which is what the OTHER regression test above
+			# verifies must be the case on a dev site.
+			self.skipTest(
+				"frappe.is_setup_complete() is False — the bad home_page "
+				"row is not a loop trigger in that state. The "
+				"is_setup_complete regression test covers the other half."
+			)
+
+		bad_rows = frappe.db.sql(
+			"""
+			SELECT parent, defkey, defvalue
+			  FROM `tabDefaultValue`
+			 WHERE defkey = 'desktop:home_page'
+			   AND defvalue = 'setup-wizard'
+			""",
+			as_dict=True,
+		)
+		self.assertEqual(
+			bad_rows, [],
+			f"tabDefaultValue has {len(bad_rows)} row(s) setting "
+			f"desktop:home_page='setup-wizard' while "
+			"frappe.is_setup_complete() is True. This is the 2026-04-11 "
+			"Asset Board flash-loop regression. frappe/boot.py:"
+			"add_home_page() will embed this value in bootinfo.home_page, "
+			"pageview.show() will load the setup-wizard page as the desk "
+			"home, and setup_wizard.js:34 will window.location.href back "
+			"to /desk — infinite loop. Fix: DELETE FROM `tabDefaultValue` "
+			"WHERE defkey='desktop:home_page' AND defvalue='setup-wizard'. "
+			f"Offending rows: {bad_rows}"
+		)
+
 	def test_all_redis_keys_use_hamilton_namespace(self):
 		"""Every Redis key written by hamilton_erp must start with ``hamilton:``.
 
