@@ -73,9 +73,28 @@ def restore_dev_state():
 	from hamilton_erp.patches.v0_1 import seed_hamilton_env
 	seed_hamilton_env.execute()
 
+	# 4. Clear the desktop:home_page default if a prior bootstrap set
+	#    it to 'setup-wizard'. When this coexists with
+	#    frappe.is_setup_complete()=True it produces a browser-side
+	#    infinite redirect loop: /desk -> pageview.show() uses
+	#    bootinfo.home_page ('setup-wizard') -> setup_wizard.js:34
+	#    sees setup_complete=true and window.location.href's back to
+	#    /desk -> round and round at ~40 requests/sec.
+	#    Pinned by test_regression_desktop_home_page_not_setup_wizard.
+	#    The row survives Redis flushes, session deletes, and bench
+	#    restarts because it lives in MariaDB. Heal it here so every
+	#    test teardown leaves a loop-free dev state.
+	frappe.db.sql(
+		"""
+		DELETE FROM `tabDefaultValue`
+		 WHERE defkey = 'desktop:home_page'
+		   AND defvalue = 'setup-wizard'
+		"""
+	)
+
 	frappe.db.commit()
 
-	# 4. Flush Redis so the next browser request doesn't hit stale
+	# 5. Flush Redis so the next browser request doesn't hit stale
 	#    role/default caches. clear_cache() is a no-op if Redis is
 	#    unreachable (e.g., during a crashed test run).
 	try:
