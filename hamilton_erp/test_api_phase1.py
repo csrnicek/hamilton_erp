@@ -427,6 +427,131 @@ class TestAssetBoardAPI(IntegrationTestCase):
 		self.assertEqual(len(data["assets"]), 59)
 
 
+# ---------------------------------------------------------------------------
+# HTTP verb allowlist regression (DEC-058)
+# ---------------------------------------------------------------------------
+
+
+class TestAssetBoardHTTPVerb(IntegrationTestCase):
+	"""Pin the HTTP verb contract for ``get_asset_board_data``.
+
+	Why this class exists: on 2026-04-11 we discovered the Asset Board
+	had NEVER successfully rendered in a browser, despite every
+	``test_api_phase1.py`` case passing for weeks. The reason was
+	invisible to direct-Python tests:
+
+	* ``api.py`` decorates ``get_asset_board_data`` with
+	  ``@frappe.whitelist(methods=["GET"])``.
+	* ``asset_board.js`` calls ``frappe.call({method: ...})`` with no
+	  ``type`` parameter. ``frappe.call`` defaults to **POST**.
+	* ``frappe.handler.is_valid_http_method`` rejects that POST and
+	  raises ``frappe.PermissionError("Not permitted")``.
+	* Every existing test called ``api.get_asset_board_data()`` directly
+	  as a Python function, bypassing ``frappe.handler`` entirely. No
+	  test ever exercised the verb gate.
+	* ``curl`` defaults to GET, so curl verification consistently
+	  reported 200 — masking the bug for weeks.
+
+	These two tests drive the request through ``frappe.handler.execute_cmd``
+	with a spoofed ``frappe.local.request``, which is the exact code path
+	the web server uses. A verb mismatch between the decorator and any
+	caller (JS ``frappe.call`` type, curl, external API client) will fail
+	one of these tests within a single bench run.
+
+	Contract pinned:
+	  * GET  → 200, ``frappe.response["message"]`` contains 59 assets
+	  * POST → raises ``frappe.PermissionError``
+
+	If a future task legitimately needs POST on this endpoint, update
+	BOTH the ``methods=[...]`` decorator in ``api.py`` AND this test
+	in the same commit.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# Seed is cheap and idempotent. Gives us 59 assets so we can
+		# assert the happy-path GET returned a real board, not an
+		# accidental empty response.
+		frappe.db.delete("Venue Session")
+		frappe.db.delete("Venue Asset")
+		seed_hamilton_env.execute()
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.db.delete("Venue Session")
+		frappe.db.delete("Venue Asset")
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		frappe.cache().delete(f"hamilton:session_seq:{prefix}")
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def _run_execute_cmd_with_verb(self, verb: str):
+		"""Invoke ``frappe.handler.execute_cmd`` with a spoofed request verb.
+
+		Returns the value ``execute_cmd`` returns — which is the direct
+		return value of the target method. Note: the outer ``handle()``
+		wrapper is what normally copies this into
+		``frappe.response["message"]`` for the HTTP response body; we
+		bypass that wrapper because the gate we care about is
+		``is_valid_http_method``, which runs inside ``execute_cmd`` itself.
+
+		Restores the prior ``frappe.local.request`` state in a ``finally``
+		block so failure of one test cannot bleed into the next.
+		"""
+		from unittest.mock import MagicMock
+		import frappe.handler
+
+		original_request = getattr(frappe.local, "request", None)
+		original_form_dict = dict(frappe.local.form_dict) if hasattr(
+			frappe.local, "form_dict") else {}
+
+		try:
+			frappe.local.request = MagicMock(method=verb)
+			# execute_cmd passes **frappe.form_dict to the target method.
+			# get_asset_board_data takes no args, so clear form_dict to
+			# avoid unexpected-kwarg errors.
+			frappe.local.form_dict = frappe._dict()
+			return frappe.handler.execute_cmd(
+				"hamilton_erp.api.get_asset_board_data")
+		finally:
+			if original_request is None:
+				try:
+					del frappe.local.request
+				except AttributeError:
+					pass
+			else:
+				frappe.local.request = original_request
+			frappe.local.form_dict = frappe._dict(original_form_dict)
+
+	def test_http_verb_get_returns_full_board(self):
+		"""GET → full board payload — the contract the browser relies on."""
+		data = self._run_execute_cmd_with_verb("GET")
+		self.assertIsNotNone(data,
+			"execute_cmd returned None — is the endpoint returning nothing?")
+		self.assertIn("assets", data)
+		self.assertEqual(
+			len(data["assets"]), 59,
+			f"GET returned {len(data['assets'])} assets, expected 59. "
+			"Seed corruption or verb gate is silently dropping data."
+		)
+		self.assertIn("settings", data)
+		self.assertIn("grace_minutes", data["settings"])
+
+	def test_http_verb_post_rejected_with_permission_error(self):
+		"""POST → PermissionError — pins the @whitelist(methods=["GET"]) gate.
+
+		This is the exact failure asset_board.js produced every time Chris
+		opened the page before 2026-04-11. If this test ever starts
+		passing without raising, either the decorator was relaxed or the
+		framework changed — both warrant a conscious DEC-058 update.
+		"""
+		with self.assertRaises(frappe.PermissionError):
+			self._run_execute_cmd_with_verb("POST")
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

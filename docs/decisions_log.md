@@ -659,4 +659,133 @@ This decision is recorded now specifically because the bug it prevents is invisi
 
 ---
 
+## DEC-058 — HTTP Verb Allowlist on Whitelisted Reads: Decorator and Caller MUST Match
+
+**Date:** 2026-04-11
+**Context:** On 2026-04-11 Chris reported the Asset Board returning 403 "Not permitted" in both Chrome and Safari on fresh sessions. Curl tests against `/api/method/hamilton_erp.api.get_asset_board_data` consistently returned 200 with 59 assets, and every Python test in `test_api_phase1.py` was green. The bug was invisible for weeks because:
+
+1. `api.py:51` decorates `get_asset_board_data` with `@frappe.whitelist(methods=["GET"])`.
+2. `hamilton_erp/page/asset_board/asset_board.js` called `frappe.call({method: "hamilton_erp.api.get_asset_board_data", freeze: true, freeze_message: ...})` with no `type` parameter. The `frappe.call` client helper defaults to **POST** when `type` is omitted.
+3. `frappe.handler.is_valid_http_method` (invoked inside `execute_cmd` on every `/api/method/*` request) reads `frappe.local.request.method` and rejects anything not in the `@whitelist(methods=[...])` list by raising `frappe.PermissionError("Not permitted")`.
+4. Every `test_api_phase1.py` case invoked `api.get_asset_board_data()` as a direct Python import, bypassing `frappe.handler` entirely. The verb gate was never exercised in the test suite.
+5. `curl` defaults to GET, so manual curl verification *always* succeeded — masking the bug every time it was checked.
+
+The Asset Board page had therefore **never successfully rendered in a browser session** since its first commit (`7740be9 feat(page): Asset Board scaffold at /app/asset-board`). Every reported sighting of "it worked" was either a curl probe, a realtime update, or a cached screenshot.
+
+**Decision:**
+
+1. **Every `@frappe.whitelist(methods=[...])` decorator MUST be matched by an explicit `type: "<VERB>"` in every `frappe.call` caller.** Read endpoints (`methods=["GET"]`) require `type: "GET"`. Write endpoints (`methods=["POST"]`) require `type: "POST"` or may rely on `frappe.call`'s POST default (but explicit is preferred and reviewers should not flag it as noise). Do NOT omit the allowlist and rely on `frappe.call`'s default — the default is framework-defined behavior that can shift between Frappe versions and hides the caller's intent from reviewers.
+
+2. **Every new or modified whitelisted endpoint MUST be paired with a `TestAssetBoardHTTPVerb`-style test class** that runs the endpoint through `frappe.handler.execute_cmd` with a spoofed `frappe.local.request.method`. One test per allowed verb asserting success, plus one test per **disallowed** verb asserting `frappe.PermissionError`. Direct Python import of the endpoint function is NOT sufficient — it bypasses the exact layer where the bug lives. The `_run_execute_cmd_with_verb` helper in `test_api_phase1.py::TestAssetBoardHTTPVerb` is the reference implementation.
+
+3. **Code review MUST reject any PR that adds or edits `@frappe.whitelist(methods=[...])` without also adding/updating the HTTP-verb pin test.** Treat this as a hard rule, the same way DEC-057 mandates the scrub triple for committing tests. The cost of the test is ~5 lines per verb; the cost of the bug it prevents is Chris losing hours to "curl works, browser doesn't."
+
+4. **Curl verification of whitelisted endpoints MUST be done with an explicit `-X POST` or `-X GET` flag that matches the browser's actual request verb.** A bare `curl /api/method/...` uses GET and can silently mask verb-mismatch bugs. If the endpoint is POST-only, curl verification should send POST.
+
+5. **The `methods=[...]` kwarg is not optional on new endpoints.** Frappe's default (if omitted) is `["GET", "POST", "PUT", "DELETE"]` — every verb is allowed, which defeats the purpose of the guard. Every new `@frappe.whitelist` in `hamilton_erp/` MUST specify `methods=` explicitly, matching the actual semantics of the endpoint (read vs write).
+
+**Rationale:** The bug took hours to diagnose because it looked like a security/session issue (403 in browser, 200 in curl). The real cause was two lines of code in two different files diverging on an implicit default. The fix is one `type: "GET"` in the JS caller (`hamilton_erp/page/asset_board/asset_board.js`), but the preventative structure is what this decision codifies: (a) explicit verbs on both sides, (b) tests that exercise the exact handler layer where the gate runs, (c) curl verification that matches the browser's actual verb, (d) decorator allowlists are mandatory, not optional.
+
+An alternative — relaxing the decorator to `methods=["GET", "POST"]` — was rejected. The decorator is not the bug; it's the only defense against a POS operator triggering a read endpoint with unexpected side effects via browser-console POST. Keep the gate; match the caller.
+
+This bug also demonstrates why "curl says it works" is not equivalent to "the browser says it works." Curl and the browser use different verb defaults (GET vs POST for `frappe.call`), different cookie handling, and different CSRF expectations. Future debugging of "works in curl, fails in browser" symptoms should jump directly to verb comparison before considering session/CSRF/cache explanations.
+
+---
+
+## DEC-059 — Dedicated Test Site (`hamilton-unit-test.localhost`): Rationale and Bootstrap Procedure
+
+**Date:** 2026-04-11
+**Context:** Through Tasks 1–13 the entire test suite ran against `hamilton-test.localhost` — the same site Chris used for manual browser testing. Test teardowns wipe roles, defaults, and User records, which corrupted the dev browser state in three reproducible ways after every `bench run-tests` invocation:
+
+1. `tabDefaultValue.setup_complete` default flipped back to 0 → infinite `/app/setup-wizard` redirect loop on the next browser request. (Later discovered the real source is `tabInstalled Application.is_setup_complete` — see DEC-060.)
+2. The `Hamilton Operator` role got stripped from `Administrator` → Asset Board returned 403 "Not permitted" on `get_asset_board_data`.
+3. All 59 `Venue Asset` rows got deleted → Asset Board rendered an empty grid.
+
+The interim fix was `hamilton_erp/test_helpers.py::restore_dev_state()`, called from every test module's `tearDownModule`. This worked but was fragile: any test author who forgot the `tearDownModule` call left the dev site broken for the rest of the session, and the heal itself took ~200ms per module which was noise in fast TDD loops.
+
+**Decision:**
+
+1. **`hamilton-unit-test.localhost` is the authoritative test site.** All `bench run-tests` invocations, including the `/run-tests` slash command, MUST point at this site. The slash commands in `.claude/commands/run-tests.md` and friends were repointed on 2026-04-11 (commit `0cf1fb1 fix(commands): repoint all remaining commands to dedicated test site`).
+
+2. **`hamilton-test.localhost` is the dev browser site and is NEVER touched by the test runner.** Running tests here is a CLAUDE.md §Testing Rules violation — the top-of-file WARNING in `docs/testing_checklist.md` pins this. If a future contributor accidentally runs `bench --site hamilton-test.localhost run-tests`, recovery is a full `/debug-env` + `restore_dev_state()` + Redis flush + browser hard-refresh.
+
+3. **`restore_dev_state()` is retained as a defense-in-depth heal** for the case where Step 2 is violated despite the rules. It is still called from every test module's `tearDownModule` per the commit history. On `hamilton-unit-test.localhost` it is a no-op in practice (tests wiping a dedicated test site is fine — the heal is just cheap insurance for the cross-site case).
+
+4. **Bootstrap procedure for a fresh `hamilton-unit-test.localhost` site** is a 4-step sequence that MUST be run in order. A fresh `bench new-site` + `install-app hamilton_erp` + `set-config allow_tests true` does NOT leave the site in a state where the suite passes:
+
+   a. **`bench --site hamilton-unit-test.localhost migrate`** — fires the `after_migrate` hook (`hamilton_erp.setup.install.ensure_setup_complete`) which heals `tabInstalled Application.is_setup_complete` for `frappe` and `erpnext`. This is DEC-060's hook path.
+
+   b. **ERPNext `setup_complete()` with a minimal payload** — `language=English, country=Canada, timezone=America/Toronto, currency=CAD, company_name="Club Hamilton", full_name="Administrator", email="admin@example.com"`. This creates the "All Customer Groups" and "All Territories" baseline records that the Walk-in customer depends on. Without this step, `seed_hamilton_env.execute()` fails silently when trying to create the Walk-in customer because the required parent Customer Group and Territory don't exist.
+
+   c. **`seed_hamilton_env.execute()`** — creates the 59 Venue Assets (26 rooms + 33 lockers), the Walk-in customer, and the Hamilton Settings singleton with defaults. Idempotent per DEC-054.
+
+   d. **`hamilton_erp.test_helpers.restore_dev_state()`** — assigns the `Hamilton Operator` role to `Administrator`. The test suite assumes Administrator has this role; most of the Phase 1 tests will fail with permission errors otherwise.
+
+   Steps b–d MUST be wrapped in `frappe.flags.in_test = False` + `frappe.db.commit()` so the setup wizard completion sticks — the test runner otherwise rolls them back.
+
+5. **`bench execute hamilton_erp.test_helpers.restore_dev_state` does NOT work** — `bench execute`'s eval scope does not auto-import the app package, and the call fails with `NameError: hamilton_erp is not defined`. Use `bench console <<'PY' ... PY` with explicit `from hamilton_erp.test_helpers import restore_dev_state` instead.
+
+**Rationale:** Dev/test site sharing was always a latent bug. It became an active bug in Tasks 13–16 when the test count and committing-test-class count both grew enough that a single `bench run-tests` run reliably corrupted the dev browser. The separate-sites approach is the Frappe community's standard pattern (every upstream Frappe app splits dev and test sites), and the migration cost was one day of slash command updates plus the bootstrap sequence above. The rule is now: dev and test sites are **never** the same site, and `hamilton-test.localhost` is protected by the test runner's site targeting in `.claude/commands/*.md`.
+
+The 4-step bootstrap procedure is non-obvious. It is worth codifying here because a fresh bench clone — from another machine, a new contributor, or a Frappe Cloud staging environment — needs this exact sequence to reach a working test harness. The alternative ("read the source to figure out what state is expected") is what cost the 2026-04-11 debugging session.
+
+---
+
+## DEC-060 — `frappe.is_setup_complete()` Reads `tabInstalled Application`, Not `tabDefaultValue` or `System Settings`
+
+**Date:** 2026-04-11
+**Context:** On 2026-04-11, during a full restart of `hamilton-test.localhost` after a test run wiped dev state, the browser began a ~40-requests-per-second redirect loop on `/app` → `/app/setup-wizard` → `/app`. Three separate heal attempts failed to break the loop because they targeted the wrong source of truth:
+
+1. **`frappe.db.set_default("setup_complete", "1")`** — writes to `tabDefaultValue` with `parent='__default'`. This is what every blog post and Stack Overflow answer recommends. It has **no effect** on `frappe.is_setup_complete()` in Frappe v16. The row is legacy and no boot-flow code reads it.
+
+2. **`frappe.db.set_single_value("System Settings", "setup_complete", 1)`** — writes the `setup_complete` field on the System Settings singleton. This is what the ERPNext setup wizard visibly toggles. It is **also** not read by `frappe.is_setup_complete()` in v16.
+
+3. **Setting `tabDefaultValue.desktop:home_page = 'setup-wizard'`** — was accidentally introduced by an earlier heal attempt. This was the actual cause of the observed `/app/setup-wizard` loop (pinned by `test_regression_desktop_home_page_not_setup_wizard`), not the `setup_complete` flag, but during diagnosis it was assumed to be a setup_complete issue and the heal attempts above were tried first.
+
+The authoritative source, revealed by reading `frappe/__init__.py::is_setup_complete()` directly on 2026-04-11, is a query against `tabInstalled Application` filtered to `app_name IN ('frappe', 'erpnext')`. Other installed apps — including `hamilton_erp` — are irrelevant to this check. The row for `hamilton_erp` can have `is_setup_complete=0` forever and the boot flow will not care.
+
+**Decision:**
+
+1. **Any code that needs to mark setup as complete on a dev or test site MUST target `tabInstalled Application.is_setup_complete` for `frappe` AND `erpnext`.** Do NOT use `frappe.db.set_default("setup_complete", ...)`, `frappe.db.set_single_value("System Settings", "setup_complete", ...)`, or any variant. Those writes are cosmetic in v16 and serve only as legacy-caller syncs.
+
+2. **The canonical heal pattern is in `hamilton_erp/setup/install.py::ensure_setup_complete`** (wired as the `after_migrate` hook in `hooks.py:60`):
+
+   ```python
+   for app_name in ("frappe", "erpnext"):
+       if frappe.db.exists("Installed Application", {"app_name": app_name}):
+           current = frappe.db.get_value("Installed Application",
+               {"app_name": app_name}, "is_setup_complete")
+           if current != 1:
+               frappe.db.set_value("Installed Application",
+                   {"app_name": app_name}, "is_setup_complete", 1)
+   ```
+
+   The same pattern is duplicated in `hamilton_erp/test_helpers.py::restore_dev_state` step 1. Both are idempotent.
+
+3. **`frappe.db.set_default("setup_complete", "1")` and `frappe.db.set_single_value("System Settings", "setup_complete", ...)` are still called alongside the authoritative heal** as defense-in-depth for any legacy code path that might read from those sources. They are cheap, idempotent, and their presence makes the heal robust to future Frappe version drift that might re-introduce a legacy reader.
+
+4. **The `after_migrate` hook in `hooks.py` is load-bearing.** Frappe's `InstalledApplications.update_versions()` runs on every `bench migrate` and CAN flip `is_setup_complete` back to 0 on single-admin dev sites where it cannot auto-detect a non-Administrator System User. Without the `ensure_setup_complete` after_migrate hook, every `bench migrate` invocation is a potential re-trigger of the setup-wizard redirect loop. Commit `7c866a6 fix(setup): target tabInstalled Application.is_setup_complete + add after_migrate self-heal` introduced this on 2026-04-11 and the hook MUST NOT be removed.
+
+5. **Diagnosing "am I in setup-wizard-loop land?" on any Hamilton site starts with:**
+
+   ```
+   bench --site <site> console <<'PY'
+   import frappe
+   print(frappe.is_setup_complete())
+   for a in ("frappe", "erpnext"):
+       print(a, frappe.db.get_value("Installed Application",
+           {"app_name": a}, "is_setup_complete"))
+   PY
+   ```
+
+   If `frappe.is_setup_complete()` is False, the fix is the `ensure_setup_complete` heal pattern above. If it is True but the browser still loops, the bug is elsewhere (typically `tabDefaultValue.desktop:home_page='setup-wizard'` — see the regression pin `test_regression_desktop_home_page_not_setup_wizard` in `test_environment_health.py`).
+
+**Rationale:** The misleading signal — "set_default and set_single_value both accept the write without error" — is what made this bug cost hours. Frappe's data model has three overlapping stores for "is this site set up": `tabDefaultValue`, `System Settings`, and `tabInstalled Application`. Only the third is authoritative in v16. The other two are legacy stores kept for backwards compatibility with apps that still read them (if any). A heal routine that targets only the legacy stores silently accepts the write, reports success, and leaves the real source untouched — which is exactly what happened during initial diagnosis on 2026-04-11.
+
+Codifying this in a DEC entry is valuable because the knowledge cannot be recovered from reading Hamilton code alone — the heal pattern in `install.py` looks like "belt and suspenders" without the context that only the first loop (the `Installed Application` writes) is actually load-bearing. A future contributor cleaning up "cosmetic" code might remove the authoritative write and leave only the legacy cosmetic writes, re-introducing the bug. The inline docstrings in `install.py` and `test_helpers.py` now reference DEC-060 by number to make the codification discoverable from the code.
+
+This decision also completes the triage set for 2026-04-11: DEC-058 (HTTP verb mismatch), DEC-059 (dedicated test site), and DEC-060 (real setup_complete source). Together they document every non-obvious root cause from that day's debugging arc.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*

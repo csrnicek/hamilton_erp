@@ -27,8 +27,15 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	async fetch_board() {
+		// type: "GET" is mandatory. api.get_asset_board_data is decorated
+		// @frappe.whitelist(methods=["GET"]) — frappe.call defaults to POST
+		// when type is omitted, and that mismatch produces a 403
+		// "Not permitted" in every browser session while curl (which
+		// defaults to GET) reports 200. See DEC-058 and the regression
+		// test test_get_asset_board_data_http_verb in test_api_phase1.py.
 		const r = await frappe.call({
 			method: "hamilton_erp.api.get_asset_board_data",
+			type: "GET",
 			freeze: true,
 			freeze_message: __("Loading board..."),
 		});

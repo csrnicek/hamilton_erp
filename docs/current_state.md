@@ -2,8 +2,8 @@
 
 Living tracker of what has been built, what is in progress, and what is blocked.
 
-**Last updated:** 2026-04-10
-**Current phase:** Phase 0 complete on Frappe Cloud and locally. M0 (local bench setup) complete. Phase 1 plan finalized and ready for Task 1 execution via Subagent-Driven Development.
+**Last updated:** 2026-04-11
+**Current phase:** Phase 1 in progress — Tasks 1–16 complete, Task 17 in progress. Dedicated test site live. HTTP verb mismatch on Asset Board identified, fixed, and pinned with a regression test.
 
 ---
 
@@ -18,6 +18,52 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 ---
 
 ## Session Notes
+
+### 2026-04-11 (Phase 1 Tasks 9–16 + full debugging arc)
+
+**Phase 1 progress:**
+- Tasks 1–16 all complete and committed. Task 17 (Asset Board bind_events / interaction handlers) is the next pending item. Taskmaster (`.taskmaster/tasks/tasks.json`) confirms: 16 done, 1 in-progress, 8 pending.
+- Full 12-module test suite green on `hamilton-unit-test.localhost` — 197+ tests, 11 skipped (progressive unlocks per CLAUDE.md §Test Suite).
+
+**Dedicated test site (DEC-059):**
+- Created `hamilton-unit-test.localhost` and repointed every slash command in `.claude/commands/*.md` at it. Commit `0cf1fb1 fix(commands): repoint all remaining commands to dedicated test site`.
+- Bootstrap sequence codified: `bench migrate` → ERPNext `setup_complete()` → `seed_hamilton_env.execute()` → `restore_dev_state()`. Full rationale in DEC-059.
+- Rule: `hamilton-test.localhost` is dev browser site ONLY. `bench run-tests` NEVER touches it. CLAUDE.md §Testing Rules pins this.
+
+**Flash-loop root cause and fix (DEC-060 + regression test):**
+- Browser hit a ~40-requests-per-second redirect loop on `/app` → `/app/setup-wizard` → `/app`. Two root causes:
+  1. `frappe.is_setup_complete()` reads `tabInstalled Application.is_setup_complete` filtered to `app_name IN ('frappe','erpnext')` — NOT `tabDefaultValue.setup_complete`, NOT `System Settings.setup_complete`. Every heal attempt that targeted the legacy stores silently accepted the write and left the real source untouched. Fix: `after_migrate` hook `hamilton_erp.setup.install.ensure_setup_complete` (commit `7c866a6`) + same pattern in `test_helpers.py::restore_dev_state` step 1. Codified in DEC-060.
+  2. `tabDefaultValue.desktop:home_page='setup-wizard'` was set by an earlier heal attempt. When coexisting with `is_setup_complete=True`, `setup_wizard.js:34` redirects `window.location.href` to `/desk` without returning, and `pageview.js:52` reads `bootinfo.home_page='setup-wizard'` — the loop. Fix: `test_helpers.py::restore_dev_state` step 4 deletes the row on every teardown. Pinned by `test_regression_desktop_home_page_not_setup_wizard` in `test_environment_health.py`. Commits `e969091` (test) and `738eaff` (heal).
+
+**HTTP verb mismatch bug (DEC-058):**
+- Chris reported 403 "Not permitted" on Asset Board in both Chrome and Safari on fresh sessions, while curl consistently returned 200. Red herring: assumed CSRF, stale session, Redis cache, role strip. Real cause:
+  - `api.py:51` — `@frappe.whitelist(methods=["GET"])`
+  - `asset_board.js:30` — `frappe.call({method: "..."})` with no `type`, defaulting to POST.
+  - `frappe.handler.is_valid_http_method` rejected the POST with `PermissionError("Not permitted")` before the body ran.
+- Every test in `test_api_phase1.py` called the function as a direct Python import, bypassing `frappe.handler` and the verb gate. Curl defaults to GET, so curl never caught it either. The Asset Board had NEVER successfully rendered in a browser since it was first scaffolded (`7740be9`).
+- **Fix:** one line — added `type: "GET"` to `asset_board.js`. Ran `bench build --app hamilton_erp` + `bench clear-cache`. Curl verification now uses `-X GET` matching the browser verb.
+- **Regression test:** new class `TestAssetBoardHTTPVerb` in `test_api_phase1.py` — invokes `frappe.handler.execute_cmd` with a spoofed `frappe.local.request.method` and asserts both GET→59 assets and POST→`PermissionError`. This is the exact layer where the verb gate runs; direct Python import would not catch it.
+- **Prevention:** DEC-058 mandates a verb-pin test for every `@frappe.whitelist(methods=[...])` endpoint going forward. Explicit `type:` on every `frappe.call`. Code review rejects any PR that edits the decorator without updating the pin.
+
+**Debugging shortcuts documented (CLAUDE.md):**
+- `bench console --autoreload`, `bench request`, `bench doctor` + `show-pending-jobs`, `/debug-env` slash command — MANDATORY first debug step.
+- `bench start` orphan-schedule recovery steps added to `.claude/commands/debug-env.md` (`lsof config/scheduler_process`, `ps -ax -o ppid,pid,command | awk '$1==1 && /frappe|bench/'`, kill PPID=1 orphans). Commit `61c2383`.
+- Model selection guidance added to CLAUDE.md — Sonnet for mechanical/test/doc work, Opus for lifecycle/locks/architectural decisions. Task-opening self-check at top of every response.
+
+**Commits this session (chronological):**
+- `7c866a6` — `tabInstalled Application.is_setup_complete` fix + `after_migrate` heal
+- `63a1f97` — environment health smoke test module
+- `2e348d0` — security audit, schema snapshot, regression, audit trail tests
+- `5d77003` — dedicated test site migration + debugging shortcuts + model selection
+- `0cf1fb1` — repoint remaining commands at dedicated test site
+- `12350de` — cleanup of remaining uncommitted changes
+- `61c2383` — bench start recovery added to `/debug-env`
+- `e969091` — regression pin for `desktop:home_page` flash loop
+- `738eaff` — `test_helpers.py` heals `desktop:home_page` on teardown
+
+**Next actions:**
+- Chris opens `/app/asset-board` in Chrome (hard-refresh ⌘⇧R to bust `localStorage["_page:asset-board"]`) and confirms all 59 tiles render.
+- Resume Task 17 (Asset Board bind_events, popover, overtime, realtime) via Subagent-Driven Development.
 
 ### 2026-04-10 (Phase 1 planning + M0 local bench setup)
 - **Phase 1 design doc finalized** — Asset Board + Session Lifecycle spec committed

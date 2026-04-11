@@ -289,6 +289,22 @@ These are direct analogs to our start_session_for_asset:
 - [ ] **POST method required** — whitelisted methods use `methods=["POST"]`.
       A GET request to a POST-only endpoint must fail.
       `test_http_invalid_method_access` in Frappe tests this pattern.
+- [x] **HTTP verb on whitelisted reads matches decorator allowlist** (DEC-058) —
+      every `@frappe.whitelist(methods=[...])` MUST be exercised through
+      `frappe.handler.execute_cmd` with a spoofed `frappe.local.request.method`,
+      asserting both the allowed verb succeeds AND a disallowed verb raises
+      `frappe.PermissionError`. Direct Python import of the endpoint is
+      INSUFFICIENT — it bypasses `frappe.handler.is_valid_http_method` which is
+      the exact layer where the verb gate runs. This test class exists because
+      on 2026-04-11 the Asset Board JS called `frappe.call` with no `type`
+      parameter (defaulting to POST), while the decorator was `methods=["GET"]`
+      — and every existing test missed it because they bypassed the gate.
+      **Pinned by:** `test_api_phase1.py::TestAssetBoardHTTPVerb` —
+      `test_http_verb_get_returns_full_board` and
+      `test_http_verb_post_rejected_with_permission_error`. Reference implementation
+      of `_run_execute_cmd_with_verb()` in the same class.
+      **Rule:** any new `@frappe.whitelist(methods=[...])` endpoint gets a
+      verb-pin test in the same commit. Code review rejects PRs that don't.
 
 ### 6e. Timestamp and datetime serialization
 *Source: frappe/tests/test_db.py — test_datetime_serialization, test_timestamp_change*
