@@ -77,3 +77,36 @@ class TestVenueSession(IntegrationTestCase):
 			}
 		)
 		self.assertRaises(frappe.ValidationError, doc.insert)
+
+	def test_before_insert_sets_session_number(self):
+		"""Task 10: VenueSession.before_insert must auto-populate session_number
+		via lifecycle._next_session_number() when the caller doesn't pass one.
+
+		Asserts not just presence but full DEC-033 format: `{d}-{m}-{y}---{NNN}`
+		with day/month NOT zero-padded and the trailing sequence IS zero-padded
+		to 3 digits. A naive `"---" in session.session_number` would pass for
+		a value like `"---"` alone; the regex catches that regression class.
+		"""
+		asset = self._make_asset()
+		# Insert via _make_session which does NOT pass session_number — the
+		# before_insert hook should populate it from the Redis INCR generator.
+		session = self._make_session(asset.name)
+		self.assertTrue(
+			session.session_number,
+			"Expected session_number to be auto-populated by before_insert",
+		)
+		# DEC-033 format: one or more digits for d, m, y, then '---', then
+		# exactly 3 digits for the sequence. Day/month are NOT zero-padded.
+		# TODO(task-11): widen the sequence group from {3} to {4} once Task 11
+		# switches the format to :04d per the Task 9 3-AI review.
+		self.assertRegex(
+			session.session_number,
+			r"^\d+-\d+-\d+---\d{3}$",
+			f"session_number {session.session_number!r} does not match DEC-033 format",
+		)
+
+	def test_sales_invoice_field_is_read_only(self):
+		"""DEC-055 §2 — sales_invoice must be read_only on the form."""
+		meta = frappe.get_meta("Venue Session")
+		field = meta.get_field("sales_invoice")
+		self.assertEqual(field.read_only, 1)

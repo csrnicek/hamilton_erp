@@ -130,9 +130,9 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "
 def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	"""Insert a Venue Session row for a freshly-assigned asset. Caller holds the asset lock.
 
-	NOTE: session_number is intentionally unset here — Task 10 wires
-	_next_session_number() into this function. identity_method defaults to
-	'not_applicable' via the controller's _set_defaults hook.
+	NOTE: session_number is NOT set here — VenueSession.before_insert
+	auto-populates it via lifecycle._next_session_number(). identity_method
+	defaults to 'not_applicable' via the controller's _set_defaults hook.
 	"""
 	session = frappe.get_doc({
 		"doctype": "Venue Session",

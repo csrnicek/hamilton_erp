@@ -69,13 +69,15 @@
    "fieldname": "sales_invoice",
    "fieldtype": "Link",
    "label": "Sales Invoice",
-   "options": "Sales Invoice"
+   "options": "Sales Invoice",
+   "read_only": 1
   },
   {
    "fieldname": "admission_item",
    "fieldtype": "Link",
    "label": "Admission Item",
-   "options": "Item"
+   "options": "Item",
+   "read_only": 1
   },
   {
    "fieldname": "column_break_session",
@@ -120,6 +122,7 @@
    "fieldtype": "Link",
    "label": "Operator (Check-in)",
    "options": "User",
+   "read_only": 1,
    "reqd": 1
   },
   {
@@ -142,7 +145,8 @@
    "fieldname": "shift_record",
    "fieldtype": "Link",
    "label": "Shift Record",
-   "options": "Shift Record"
+   "options": "Shift Record",
+   "read_only": 1
   },
   {
    "default": "Walk-in",
@@ -161,20 +165,23 @@
    "description": "Audit trail — which pricing rule was applied to this admission.",
    "fieldname": "pricing_rule_applied",
    "fieldtype": "Data",
-   "label": "Pricing Rule Applied"
+   "label": "Pricing Rule Applied",
+   "read_only": 1
   },
   {
    "default": "0",
    "description": "Audit trail — Under 25 discount was applied.",
    "fieldname": "under_25_applied",
    "fieldtype": "Check",
-   "label": "Under 25 Applied"
+   "label": "Under 25 Applied",
+   "read_only": 1
   },
   {
    "default": "0",
    "fieldname": "comp_flag",
    "fieldtype": "Check",
-   "label": "Comp Flag"
+   "label": "Comp Flag",
+   "read_only": 1
   },
   {
    "collapsible": 1,
