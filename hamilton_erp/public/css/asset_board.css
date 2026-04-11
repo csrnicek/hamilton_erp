@@ -9,3 +9,79 @@
 	text-align: center;
 	color: var(--text-muted);
 }
+
+/* Zones (Rooms / Lockers) */
+.hamilton-zone {
+	margin-bottom: 24px;
+}
+.hamilton-zone-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+}
+.hamilton-zone-header h3 {
+	margin: 0;
+}
+
+/* Tier groups within the Rooms zone */
+.hamilton-tier-group {
+	margin-bottom: 16px;
+}
+.hamilton-tier-label {
+	margin: 8px 0 4px 0;
+	font-size: 12px;
+	font-weight: 600;
+	color: var(--text-muted);
+	text-transform: uppercase;
+}
+.hamilton-tier-grid {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* Individual asset tiles */
+.hamilton-tile {
+	position: relative;
+	min-width: 96px;
+	min-height: 96px;
+	padding: 12px;
+	border-radius: 6px;
+	cursor: pointer;
+	user-select: none;
+	color: #fff;
+	display: flex;
+	flex-direction: column;
+	justify-content: center;
+	box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+	transition: transform 0.1s;
+}
+.hamilton-tile:active {
+	transform: scale(0.97);
+}
+.hamilton-tile-code {
+	position: absolute;
+	top: 4px;
+	left: 6px;
+	font-size: 10px;
+	opacity: 0.8;
+}
+.hamilton-tile-name {
+	font-weight: 600;
+	text-align: center;
+	font-size: 14px;
+}
+.hamilton-tile-tier {
+	position: absolute;
+	bottom: 4px;
+	right: 6px;
+	font-size: 10px;
+	opacity: 0.8;
+}
+
+/* Status colors — phase1_design.md §5.6.3 */
+.hamilton-status-available      { background: #28a745; }
+.hamilton-status-occupied       { background: #495057; }
+.hamilton-status-dirty          { background: #fd7e14; }
+.hamilton-status-out-of-service { background: #dc3545; }
