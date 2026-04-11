@@ -223,3 +223,97 @@ class TestVenueAsset(IntegrationTestCase):
 		asset = self._make_asset("Test Whitelist OOS")
 		with self.assertRaises(frappe.ValidationError):
 			asset.set_out_of_service(reason="")
+
+	# ------------------------------------------------------------------
+	# Audit 2026-04-11 — Group E: Controller guard gaps
+	# ------------------------------------------------------------------
+
+	def test_E1_locker_with_deluxe_tier_rejected(self):
+		"""Lockers must have asset_tier == 'Locker'. A room tier must fail."""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-LOCKER-DELUXE",
+			"asset_name": "Locker With Deluxe Tier",
+			"asset_category": "Locker",
+			"asset_tier": "Deluxe Single",
+			"status": "Available",
+			"display_order": 97,
+		})
+		with self.assertRaises(frappe.ValidationError):
+			doc.insert(ignore_permissions=True)
+
+	def test_E2_locker_with_glory_hole_tier_rejected(self):
+		"""Different bad room tier, same guard. Parameterized coverage so
+		any future addition to the room_tiers set shows up here."""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-LOCKER-GH",
+			"asset_name": "Locker With Glory Hole",
+			"asset_category": "Locker",
+			"asset_tier": "Glory Hole",
+			"status": "Available",
+			"display_order": 97,
+		})
+		with self.assertRaises(frappe.ValidationError):
+			doc.insert(ignore_permissions=True)
+
+	def test_E3_simultaneous_status_and_tier_change_both_validated(self):
+		"""If a save changes BOTH status AND tier, both validators must
+		fire. Guards against an optimization that only checks the changed
+		field via has_value_changed.
+		"""
+		asset = self._make_asset("Test Dual Change")
+		# Switch category → mismatched tier simultaneously
+		asset.asset_category = "Locker"
+		# Leave tier as 'Single Standard' — this is now invalid for a Locker
+		asset.status = "Out of Service"
+		asset.reason = "test"
+		with self.assertRaises(frappe.ValidationError):
+			asset.save(ignore_permissions=True)
+
+	def test_E4_validate_order_tier_before_oos_reason(self):
+		"""validate() runs transition → tier → reason in that order. If a
+		Locker is given a bad tier AND no OOS reason, the tier error
+		should surface first (locker misconfiguration is the root cause).
+		"""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-ORDER",
+			"asset_name": "Test Validate Order",
+			"asset_category": "Locker",
+			"asset_tier": "Deluxe Single",
+			"status": "Available",
+			"display_order": 97,
+		})
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			doc.insert(ignore_permissions=True)
+		# Tier error, not reason error
+		self.assertIn("Locker", str(ctx.exception))
+
+	def test_E5_new_asset_as_oos_with_valid_reason_still_rejected(self):
+		"""The new-asset guard rejects anything except Available, even if
+		a valid OOS reason is supplied. OOS on insert bypasses the
+		lifecycle state machine.
+		"""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": "TEST-NEW-OOS",
+			"asset_name": "Test New OOS",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Out of Service",
+			"reason": "broken on delivery",
+			"display_order": 98,
+		})
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			doc.insert(ignore_permissions=True)
+		self.assertIn("Available", str(ctx.exception))
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

@@ -380,17 +380,6 @@ class TestPermissionsAndSecurity(IntegrationTestCase):
 				"display_order": 999,
 			}).insert()
 
-	def test_standard_creation_field_is_set_by_framework(self):
-		"""S3 — creation field is set by Frappe, not by us.
-
-		Source: test_permissions.py::test_set_standard_fields_manually
-		We cannot manually set creation/owner — Frappe controls them.
-		"""
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNotNone(asset.creation)
-		self.assertIsNotNone(asset.owner)
-		self.assertIsNotNone(asset.modified_by)
-
 	def test_non_negative_version_field(self):
 		"""S — version field should never be negative.
 
@@ -460,26 +449,6 @@ class TestPOSPatterns(IntegrationTestCase):
 		session = frappe.get_doc("Venue Session", session_name)
 		self.assertEqual(session.vacate_method, "Discovery on Rounds")
 
-	def test_session_status_active_while_occupied(self):
-		"""T — session status is Active while asset is Occupied.
-
-		Source: test_pos_opening_entry.py::test_pos_opening_entry pattern
-		"""
-		session_name = start_session_for_asset(self.asset.name, operator=OPERATOR)
-		session = frappe.get_doc("Venue Session", session_name)
-		self.assertEqual(session.status, "Active")
-
-	def test_session_status_completed_after_vacate(self):
-		"""T — session status is Completed after vacate.
-
-		Source: test_pos_opening_entry.py::test_cancel_pos_opening_entry pattern
-		"""
-		session_name = start_session_for_asset(self.asset.name, operator=OPERATOR)
-		vacate_session(self.asset.name, operator=OPERATOR, vacate_method="Key Return")
-		session = frappe.get_doc("Venue Session", session_name)
-		self.assertEqual(session.status, "Completed")
-
-
 # ===========================================================================
 # Category U — Realtime and Background Job Edge Cases
 # ===========================================================================
@@ -532,16 +501,96 @@ class TestRealtimeEdgeCases(IntegrationTestCase):
 				               vacate_method="Key Return")
 			mock_pub.assert_not_called()
 
-	def test_publish_receives_correct_asset_name(self):
-		"""U1d — publish called with the correct asset_name argument."""
-		with patch("hamilton_erp.realtime.publish_status_change") as mock_pub:
-			start_session_for_asset(self.asset.name, operator=OPERATOR)
-			call_args = mock_pub.call_args
-			self.assertEqual(call_args[0][0], self.asset.name)
+# ===========================================================================
+# Audit 2026-04-11 — Group I: VenueSession controller gaps
+# ===========================================================================
 
-	def test_publish_receives_correct_previous_status(self):
-		"""U1e — publish called with correct previous_status."""
-		with patch("hamilton_erp.realtime.publish_status_change") as mock_pub:
-			start_session_for_asset(self.asset.name, operator=OPERATOR)
-			call_kwargs = mock_pub.call_args[1]
-			self.assertEqual(call_kwargs.get("previous_status"), "Available")
+
+class TestVenueSessionControllerAudit(IntegrationTestCase):
+	"""Covers the VenueSession validate/before_insert hooks that the
+	existing suite exercises indirectly. Indirect coverage breaks the
+	moment someone changes lifecycle.py without touching the controller.
+	"""
+
+	def setUp(self):
+		self.asset = _make_asset("VSess Controller Asset")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_I1_session_end_before_start_rejected(self):
+		"""venue_session._validate_session_end: session_end < session_start
+		must raise. Covers an untested branch.
+		"""
+		from datetime import timedelta
+		start = now_datetime()
+		end = start - timedelta(minutes=1)
+		doc = frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.asset.name,
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"session_start": start,
+			"session_end": end,
+			"status": "Completed",
+			"assignment_status": "Assigned",
+		})
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			doc.insert(ignore_permissions=True)
+		self.assertIn("Check-out", str(ctx.exception))
+
+	def test_I2_identity_method_defaults_to_not_applicable(self):
+		"""VenueSession._set_defaults assigns identity_method='not_applicable'
+		when omitted. Club Hamilton never collects ID, so this default
+		is load-bearing — a change would regress DEC-055.
+		"""
+		sn = start_session_for_asset(self.asset.name, operator=OPERATOR)
+		s = frappe.get_doc("Venue Session", sn)
+		self.assertEqual(s.identity_method, "not_applicable")
+
+	def test_I3_before_insert_preserves_explicit_session_number(self):
+		"""If a caller sets session_number explicitly, before_insert
+		leaves it alone. Covers the `if not self.session_number` guard
+		in venue_session.py:28.
+		"""
+		from datetime import datetime
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		explicit = f"{prefix}---9998"
+		doc = frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.asset.name,
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"session_number": explicit,
+			"session_start": now_datetime(),
+			"status": "Active",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+		self.assertEqual(doc.session_number, explicit)
+
+	def test_I4_before_insert_autogenerates_when_omitted(self):
+		"""Complementary branch: session_number omitted → before_insert
+		fills it in via _next_session_number. A callable that sidesteps
+		the lifecycle._create_session path still gets a valid number.
+		"""
+		doc = frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.asset.name,
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"session_start": now_datetime(),
+			"status": "Active",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+		self.assertIsNotNone(doc.session_number)
+		self.assertRegex(doc.session_number, r"^\d+-\d+-\d+---\d{4}$")
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

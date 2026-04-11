@@ -62,6 +62,10 @@ Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lif
 5. **Test before committing** — run the relevant test modules and confirm green before git add
 6. **Explain test results in plain English** — Chris is a beginner; "15/15 passing" needs a one-line explanation of what that means
 
+## Session Startup
+
+At the start of every session, automatically check Taskmaster for the current project status and tell Chris which task is next, what it involves, and what was completed last session. Do this without being asked. Use `/taskmaster:next` to identify the next task and summarize it in plain English before doing anything else.
+
 ## 3-AI review checkpoints (remind Chris at these points)
 Run ChatGPT + Grok + Claude (new tab) review after:
 - Task 9 (all 5 lifecycle methods complete)
@@ -169,7 +173,7 @@ Never update run-tests without committing everything to GitHub.
 
 ## Current Project State
 
-- Tasks 1-10 complete. Task 11 is next.
+- Tasks 1-16 complete. Task 17 is next.
 - Local bench: ~/frappe-bench-hamilton. Python 3.14, Node 24, MariaDB 12.2.2 (root pw: admin), Redis. Site: hamilton-test.localhost.
 - hamilton_erp symlinked into bench from ~/hamilton_erp.
 

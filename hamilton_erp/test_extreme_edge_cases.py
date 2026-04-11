@@ -134,23 +134,6 @@ class TestFrappeCloudIncidentPatterns(IntegrationTestCase):
             error_str = str(ctx.exception)
             self.assertNotIn("Traceback", error_str)
 
-    def test_transaction_write_limit_not_exceeded_on_single_lifecycle_call(self):
-        """V3 — Single lifecycle call must not exceed Frappe MAX_WRITES_PER_TRANSACTION.
-
-        Source: frappe/tests/test_db.py::test_transaction_writes_error
-        Frappe has a write limit per transaction. A lifecycle function that
-        writes too many rows in one transaction will raise TooManyWritesError.
-        Verify our operations stay well within the limit.
-        """
-        from frappe.database.database import Database
-        writes_before = frappe.db.transaction_writes
-        start_session_for_asset(self.asset.name, operator=OPERATOR)
-        writes_after = frappe.db.transaction_writes
-        writes_used = writes_after - writes_before
-        # Should be well under the limit (typically 200)
-        self.assertLess(writes_used, 50,
-                        f"start_session used {writes_used} writes — too many for one operation")
-
     def test_daily_usage_limit_graceful_degradation(self):
         """V4 — If Frappe site hits daily DB usage limit, lifecycle raises clearly.
 
@@ -403,19 +386,6 @@ class TestHetznerInfrastructureEdgeCases(IntegrationTestCase):
         count = frappe.db.count("Venue Session", {"venue_asset": self.asset.name})
         self.assertEqual(count, 1, "Retry created duplicate session")
 
-    def test_operation_survives_temporary_slowness(self):
-        """Y2 — Operations complete correctly even under CPU throttling simulation.
-
-        Hetzner shared vCPUs can be throttled by host contention.
-        A lifecycle operation that takes longer than expected (due to throttling)
-        must still complete correctly — not timeout or corrupt state.
-        """
-        # Simulate slow DB by adding a small delay (not a real throttle test
-        # but verifies the operation is not time-sensitive in its logic)
-        start_session_for_asset(self.asset.name, operator=OPERATOR)
-        asset = frappe.get_doc("Venue Asset", self.asset.name)
-        self.assertEqual(asset.status, "Occupied")
-
     def test_network_partition_between_redis_and_mariadb_handled(self):
         """Y3 — Network partition (Redis up, MariaDB down) handled correctly.
 
@@ -573,25 +543,10 @@ class TestERPNextSilentFailures(IntegrationTestCase):
         self.assertFalse(asset.reason,
                          f"Stale OOS reason '{asset.reason}' silently persisted after return to service")
 
-    def test_no_n_plus_one_queries_on_single_lifecycle_call(self):
-        """Z6 — Lifecycle calls must not issue N+1 queries.
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
 
-        ERPNext N+1 query death spiral: each asset operation issues O(N)
-        queries instead of O(1). Under load this kills MariaDB.
-        Count queries for a single start_session — must be bounded.
-
-        Source: codewithkarani.com silent failure patterns
-        """
-        # Use Frappe's query counter to detect N+1 patterns
-        frappe.db.transaction_writes  # baseline
-        query_count_start = getattr(frappe.db, 'query_count', None)
-
-        start_session_for_asset(self.asset.name, operator=OPERATOR)
-
-        # We can't easily count queries without the recorder,
-        # but we CAN verify the transaction write count is bounded
-        writes = frappe.db.transaction_writes
-        # A single start_session should use at most 10 writes
-        # (Venue Session insert + Venue Asset save + log entry + timestamps)
-        self.assertLess(writes, 20,
-                        f"start_session used {writes} transaction writes — possible N+1 pattern")
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

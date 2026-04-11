@@ -128,3 +128,12 @@ class TestSeedPatch(IntegrationTestCase):
 		for code in expected_codes:
 			count = frappe.db.count("Venue Asset", {"asset_code": code})
 			self.assertEqual(count, 1, f"{code} should exist exactly once")
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

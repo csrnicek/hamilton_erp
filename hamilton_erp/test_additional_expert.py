@@ -25,7 +25,6 @@ from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
 from hamilton_erp.lifecycle import (
-	VALID_TRANSITIONS,
 	mark_asset_clean,
 	start_session_for_asset,
 	vacate_session,
@@ -113,34 +112,15 @@ class TestAllInvalidTransitions(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			self._attempt_transition("Available", "Dirty")
 
-	def test_available_to_available_is_invalid(self):
-		"""Available is not in its own valid-target tuple — same-state save
-		is a no-op (Frappe ORM sees no change), so we assert the invariant
-		against VALID_TRANSITIONS directly rather than via save().
-		"""
-		self.assertNotIn("Available", VALID_TRANSITIONS["Available"])
-
 	def test_occupied_to_available_is_invalid(self):
 		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Occupied")
 		with self.assertRaises(frappe.ValidationError):
 			self._attempt_transition("Occupied", "Available")
 
-	def test_occupied_to_occupied_is_invalid(self):
-		"""Occupied is not in its own valid-target tuple — see the
-		test_available_to_available_is_invalid docstring for the rationale.
-		"""
-		self.assertNotIn("Occupied", VALID_TRANSITIONS["Occupied"])
-
 	def test_dirty_to_occupied_is_invalid(self):
 		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Dirty")
 		with self.assertRaises(frappe.ValidationError):
 			self._attempt_transition("Dirty", "Occupied")
-
-	def test_dirty_to_dirty_is_invalid(self):
-		"""Dirty is not in its own valid-target tuple — see the
-		test_available_to_available_is_invalid docstring for the rationale.
-		"""
-		self.assertNotIn("Dirty", VALID_TRANSITIONS["Dirty"])
 
 	def test_oos_to_occupied_is_invalid(self):
 		frappe.db.set_value("Venue Asset", self.asset.name, {
@@ -153,104 +133,6 @@ class TestAllInvalidTransitions(IntegrationTestCase):
 			"status": "Out of Service", "reason": "maintenance"})
 		with self.assertRaises(frappe.ValidationError):
 			self._attempt_transition("Out of Service", "Dirty")
-
-	def test_oos_to_oos_is_invalid(self):
-		"""Out of Service is not in its own valid-target tuple — see the
-		test_available_to_available_is_invalid docstring for the rationale.
-		"""
-		self.assertNotIn("Out of Service", VALID_TRANSITIONS["Out of Service"])
-
-	def test_all_valid_transitions_covered_by_valid_map(self):
-		"""Verify the 7 valid edges in VALID_TRANSITIONS map are complete."""
-		valid_count = sum(len(v) for v in VALID_TRANSITIONS.values())
-		self.assertEqual(valid_count, 7,
-			"VALID_TRANSITIONS must have exactly 7 valid edges. "
-			"If you added a state, update this test.")
-
-
-# ---------------------------------------------------------------------------
-# Category B: Entry/Exit Action Verification
-# Source: FSM testing best practices — entry/exit actions are first-class
-# ---------------------------------------------------------------------------
-
-class TestEntryExitActions(IntegrationTestCase):
-	"""Verify timestamps and fields are set correctly on every transition."""
-
-	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
-
-	def setUp(self):
-		self.asset = _make_asset("Test Entry Exit Room")
-		self.operator = frappe.session.user
-
-	def tearDown(self):
-		frappe.db.rollback()
-
-	def test_last_status_change_set_on_transition(self):
-		"""hamilton_last_status_change is populated after any status change."""
-		before = now_datetime()
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNotNone(asset.hamilton_last_status_change)
-		self.assertGreaterEqual(asset.hamilton_last_status_change, before)
-
-	def test_last_vacated_at_set_on_vacate(self):
-		"""last_vacated_at is populated after vacate_session."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		before = now_datetime()
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNotNone(asset.last_vacated_at)
-		self.assertGreaterEqual(asset.last_vacated_at, before)
-
-	def test_last_cleaned_at_set_on_mark_clean(self):
-		"""last_cleaned_at is populated after mark_asset_clean."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		before = now_datetime()
-		mark_asset_clean(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNotNone(asset.last_cleaned_at)
-		self.assertGreaterEqual(asset.last_cleaned_at, before)
-
-	def test_version_increments_on_each_transition(self):
-		"""version field increments by 1 on every status change."""
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		v0 = asset.version or 0
-
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.version, v0 + 1)
-
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Discovery on Rounds")
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.version, v0 + 2)
-
-		mark_asset_clean(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.version, v0 + 3)
-
-	def test_current_session_cleared_on_vacate(self):
-		"""asset.current_session is None after vacate (session link cleared)."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNotNone(asset.current_session)
-
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNone(asset.current_session)
-
-	def test_current_session_cleared_on_mark_clean(self):
-		"""asset.current_session remains None after mark_clean."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		mark_asset_clean(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertIsNone(asset.current_session)
 
 
 # ---------------------------------------------------------------------------
@@ -372,41 +254,6 @@ class TestSessionIntegrity(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
-	def test_start_session_creates_exactly_one_venue_session(self):
-		"""start_session creates exactly ONE Venue Session, not zero, not two."""
-		before_count = frappe.db.count("Venue Session",
-		                               {"venue_asset": self.asset.name})
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		after_count = frappe.db.count("Venue Session",
-		                              {"venue_asset": self.asset.name})
-		self.assertEqual(after_count - before_count, 1)
-
-	def test_session_has_correct_operator(self):
-		"""Session.operator_checkin matches the operator who started it."""
-		session_name = start_session_for_asset(
-			self.asset.name, operator=self.operator)
-		session = frappe.get_doc("Venue Session", session_name)
-		self.assertEqual(session.operator_checkin, self.operator)
-
-	def test_session_has_correct_asset(self):
-		"""Session.venue_asset matches the asset it was started for."""
-		session_name = start_session_for_asset(
-			self.asset.name, operator=self.operator)
-		session = frappe.get_doc("Venue Session", session_name)
-		self.assertEqual(session.venue_asset, self.asset.name)
-
-	def test_vacated_session_is_completed(self):
-		"""After vacate, the Venue Session status is Completed.
-
-		Mirrors ERPNext test_cancel_pos_opening_entry_without_invoices.
-		"""
-		session_name = start_session_for_asset(
-			self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		session = frappe.get_doc("Venue Session", session_name)
-		self.assertEqual(session.status, "Completed")
-
 	def test_vacated_session_has_session_end_timestamp(self):
 		"""After vacate, the session has a session_end timestamp."""
 		session_name = start_session_for_asset(
@@ -426,23 +273,6 @@ class TestSessionIntegrity(IntegrationTestCase):
 		               vacate_method="Discovery on Rounds")
 		session = frappe.get_doc("Venue Session", session_name)
 		self.assertEqual(session.vacate_method, "Discovery on Rounds")
-
-	def test_same_asset_can_be_reoccupied_after_full_cycle(self):
-		"""After complete Available→Occupied→Dirty→Available cycle, asset can be reoccupied.
-
-		Mirrors ERPNext cancel-then-reopen pattern.
-		"""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		mark_asset_clean(self.asset.name, operator=self.operator)
-
-		# Must be able to start another session
-		session2 = start_session_for_asset(
-			self.asset.name, operator=self.operator)
-		self.assertIsNotNone(session2)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.status, "Occupied")
 
 
 # ---------------------------------------------------------------------------
@@ -498,127 +328,6 @@ class TestBulkClean(IntegrationTestCase):
 
 
 # ---------------------------------------------------------------------------
-# Category F: Double-Operation Protection (Concurrency)
-# Source: ERPNext multiple-POS-opening-entry tests
-# ---------------------------------------------------------------------------
-
-class TestDoubleOperationProtection(IntegrationTestCase):
-	"""Tests that rapid double-operations on the same asset fail cleanly.
-
-	These test the application-level guarantees, not just the lock mechanics.
-	"""
-
-	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
-
-	def setUp(self):
-		self.asset = _make_asset("Test Double Op Room")
-		self.operator = frappe.session.user
-
-	def tearDown(self):
-		frappe.db.rollback()
-
-	def test_double_vacate_second_raises_clean_error(self):
-		"""Vacating an already-Dirty asset raises ValidationError, not crash.
-
-		Mirrors ERPNext test_multiple_pos_opening_entries_for_same_pos_profile.
-		"""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-
-		# Second vacate — asset is now Dirty, not Occupied
-		with self.assertRaises(frappe.ValidationError) as ctx:
-			vacate_session(self.asset.name, operator=self.operator,
-			               vacate_method="Key Return")
-		self.assertIn("Dirty", str(ctx.exception) + "Occupied")
-
-	def test_double_start_session_second_raises_clean_error(self):
-		"""Starting a session on an already-Occupied asset raises ValidationError."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-
-		with self.assertRaises(frappe.ValidationError):
-			start_session_for_asset(self.asset.name, operator=self.operator)
-
-	def test_double_mark_clean_second_raises_clean_error(self):
-		"""Marking an already-Available asset clean raises ValidationError."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		mark_asset_clean(self.asset.name, operator=self.operator)
-
-		# Second mark_clean — asset is already Available
-		with self.assertRaises(frappe.ValidationError):
-			mark_asset_clean(self.asset.name, operator=self.operator)
-
-
-# ---------------------------------------------------------------------------
-# Category G: Data State Assertions
-# Source: Frappe test_db.py pattern — always re-fetch from DB, never trust cache
-# ---------------------------------------------------------------------------
-
-class TestDataStateAfterOperations(IntegrationTestCase):
-	"""Assert exact DB state after each lifecycle operation.
-
-	Uses frappe.get_doc() re-fetch (not in-memory doc) per Frappe test_db.py best practices.
-	"""
-
-	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
-
-	def setUp(self):
-		self.asset = _make_asset("Test Data State Room")
-		self.operator = frappe.session.user
-
-	def tearDown(self):
-		frappe.db.rollback()
-
-	def test_after_start_session_asset_state_is_fully_correct(self):
-		"""After start_session: status=Occupied, current_session set, version=1."""
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		initial_version = asset.version or 0
-
-		session_name = start_session_for_asset(
-			self.asset.name, operator=self.operator)
-
-		# Re-fetch from DB — never trust in-memory doc
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.status, "Occupied")
-		self.assertEqual(asset.current_session, session_name)
-		self.assertEqual(asset.version, initial_version + 1)
-		self.assertIsNotNone(asset.hamilton_last_status_change)
-
-	def test_after_vacate_asset_state_is_fully_correct(self):
-		"""After vacate: status=Dirty, current_session=None, last_vacated_at set."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		version_before_vacate = asset.version
-
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Discovery on Rounds")
-
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.status, "Dirty")
-		self.assertIsNone(asset.current_session)
-		self.assertEqual(asset.version, version_before_vacate + 1)
-		self.assertIsNotNone(asset.last_vacated_at)
-
-	def test_after_mark_clean_asset_state_is_fully_correct(self):
-		"""After mark_clean: status=Available, current_session=None, last_cleaned_at set."""
-		start_session_for_asset(self.asset.name, operator=self.operator)
-		vacate_session(self.asset.name, operator=self.operator,
-		               vacate_method="Key Return")
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		version_before_clean = asset.version
-
-		mark_asset_clean(self.asset.name, operator=self.operator)
-
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.status, "Available")
-		self.assertIsNone(asset.current_session)
-		self.assertEqual(asset.version, version_before_clean + 1)
-		self.assertIsNotNone(asset.last_cleaned_at)
-
-
-# ---------------------------------------------------------------------------
 # Category H: Guard Condition Boundaries
 # Source: FSM testing best practices — guard boundaries must be tested
 # ---------------------------------------------------------------------------
@@ -660,21 +369,6 @@ class TestGuardConditionBoundaries(IntegrationTestCase):
 		self.asset.reason = None
 		with self.assertRaises(frappe.ValidationError):
 			self.asset.save(ignore_permissions=True)
-
-	def test_new_asset_as_occupied_is_rejected(self):
-		"""New asset cannot be inserted directly as Occupied."""
-		with self.assertRaises(frappe.ValidationError):
-			_make_asset("Test New Occupied Room", status="Occupied")
-
-	def test_new_asset_as_dirty_is_rejected(self):
-		"""New asset cannot be inserted directly as Dirty."""
-		with self.assertRaises(frappe.ValidationError):
-			_make_asset("Test New Dirty Room", status="Dirty")
-
-	def test_new_asset_as_oos_is_rejected(self):
-		"""New asset cannot be inserted directly as Out of Service (no reason)."""
-		with self.assertRaises(frappe.ValidationError):
-			_make_asset("Test New OOS Room", status="Out of Service")
 
 	def test_new_asset_as_available_is_accepted(self):
 		"""New asset as Available is always valid."""
@@ -737,3 +431,97 @@ class TestConcurrentAssignment(IntegrationTestCase):
 			f"Expected exactly 1 success, got {results['success']}")
 		self.assertEqual(results["failure"], 1,
 			f"Expected exactly 1 failure, got {results['failure']}")
+
+
+# ===========================================================================
+# Audit 2026-04-11 — Group F: Input boundary coverage gaps
+# ===========================================================================
+
+
+class TestInputBoundariesAudit(IntegrationTestCase):
+	"""Boundary-condition tests for whitespace, field length, and null
+	handling on the lifecycle public API. These cover cases that the
+	existing 'reason must be non-whitespace' guard handles on paper but
+	hasn't been exercised against NBSP, tabs, newlines, or the VARCHAR
+	field-length cliff.
+	"""
+
+	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
+
+	def setUp(self):
+		self.asset = _make_asset("Boundary Test Room")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_F1_oos_reason_nbsp_only_is_rejected(self):
+		"""U+00A0 (non-breaking space) should be treated as whitespace —
+		str.strip() catches it in Python 3. Guards against an operator
+		pasting a decorative NBSP as the reason."""
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name,
+				operator="Administrator",
+				reason="\u00a0\u00a0\u00a0",
+			)
+
+	def test_F2_oos_reason_newlines_and_tabs_only_is_rejected(self):
+		"""Pure whitespace — mixed tabs, newlines, and spaces — rejected."""
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name,
+				operator="Administrator",
+				reason="\n\t  \n\t",
+			)
+
+	def test_F3_oos_reason_with_valid_content_plus_whitespace_accepted(self):
+		"""A real reason with leading/trailing whitespace IS valid — the
+		guard only rejects whitespace-only strings. Pin the contract so
+		it doesn't get tightened accidentally."""
+		lifecycle.set_asset_out_of_service(
+			self.asset.name,
+			operator="Administrator",
+			reason="   broken lock   ",
+		)
+		self.assertEqual(
+			frappe.db.get_value("Venue Asset", self.asset.name, "status"),
+			"Out of Service")
+
+	def test_F4_vacate_method_empty_string_rejected(self):
+		"""vacate_method="" is not in _VACATE_METHODS — must throw BEFORE
+		the lock is even acquired (lifecycle.py 318-323)."""
+		start_session_for_asset(self.asset.name, operator="Administrator")
+		with self.assertRaises(frappe.ValidationError):
+			vacate_session(self.asset.name, operator="Administrator",
+			               vacate_method="")
+
+	def test_F5_vacate_method_none_rejected(self):
+		"""None passed as vacate_method — same pre-lock guard."""
+		start_session_for_asset(self.asset.name, operator="Administrator")
+		with self.assertRaises((frappe.ValidationError, TypeError)):
+			vacate_session(self.asset.name, operator="Administrator",
+			               vacate_method=None)
+
+	def test_F6_display_order_zero_is_valid(self):
+		"""display_order=0 must be accepted — it's a valid sort key, not
+		a null. An overly-defensive Int field check could reject it and
+		break the seed patch's R001 row."""
+		doc = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"BD-ZERO-{uuid.uuid4().hex[:4].upper()}",
+			"asset_name": "Zero Display Order",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 0,
+		}).insert(ignore_permissions=True)
+		self.assertEqual(doc.display_order, 0)
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

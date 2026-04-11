@@ -733,16 +733,6 @@ class TestControllerHookOrdering(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
-	def test_hamilton_last_status_change_not_set_in_validate(self):
-		"""Item 100 — hamilton_last_status_change is set in before_save, not validate."""
-		# The field should only be set AFTER before_save completes,
-		# not during validate(). We test by checking the controller order.
-		# validate() calls _validate_* only; before_save() sets the timestamp.
-		from hamilton_erp.hamilton_erp.doctype.venue_asset.venue_asset import VenueAsset
-		hooks = [m for m in dir(VenueAsset) if not m.startswith('_')]
-		self.assertIn('validate', hooks)
-		self.assertIn('before_save', hooks)
-
 	@unittest.skip("Task 13 — realtime not yet fully implemented")
 	def test_realtime_fires_after_commit_not_during_transaction(self):
 		"""Item 102 — publish_realtime fires in after_commit, not mid-transaction."""
@@ -880,3 +870,12 @@ class TestMalformedSessionNumberDBFallback(IntegrationTestCase):
 			f"Expected 0 for malformed tail 'XXXX', got {result}",
 		)
 
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()

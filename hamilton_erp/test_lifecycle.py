@@ -1053,3 +1053,499 @@ class TestRealtimePublishers(IntegrationTestCase):
 			"publish_status_change must be a no-op when the asset row "
 			"cannot be read — not emit an empty/bogus event.",
 		)
+
+
+# ===========================================================================
+# Audit 2026-04-11 — Groups B, C, D, J
+# Lifecycle races, session-number edges, version CAS, realtime contracts
+# ===========================================================================
+
+
+def _ensure_walkin_al():
+	"""Idempotent Walk-in customer for audit-added tests below."""
+	if frappe.db.exists("Customer", "Walk-in"):
+		return
+	frappe.get_doc({
+		"doctype": "Customer",
+		"customer_name": "Walk-in",
+		"customer_group": frappe.db.get_value(
+			"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+		"territory": frappe.db.get_value(
+			"Territory", {"is_group": 0}, "name") or "All Territories",
+	}).insert(ignore_permissions=True)
+
+
+def _make_audit_asset(name: str, status: str = "Available",
+                      category: str = "Room", tier: str = "Single Standard"):
+	_ensure_walkin_al()
+	return frappe.get_doc({
+		"doctype": "Venue Asset",
+		"asset_code": f"AL-{uuid.uuid4().hex[:8].upper()}",
+		"asset_name": name,
+		"asset_category": category,
+		"asset_tier": tier if category == "Room" else "Locker",
+		"status": status,
+		"display_order": 950,
+	}).insert(ignore_permissions=True)
+
+
+# ---------------------------------------------------------------------------
+# Group B — Lifecycle races (6 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestLifecycleRaces(IntegrationTestCase):
+	"""Cross-operation races that the lock + state machine must catch.
+
+	The locks serialize status changes on a single asset, so most of these
+	races look linear end-to-end. What we're really verifying is that the
+	second call observes the first call's committed row under FOR UPDATE
+	and throws the expected ValidationError instead of silently corrupting
+	state.
+	"""
+
+	def setUp(self):
+		self.asset = _make_audit_asset("Race Test Asset")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_B1_concurrent_vacate_of_same_session_throws_second(self):
+		"""Two vacate calls on the same Occupied asset — second must fail
+		because the first closes the session and flips the asset to Dirty.
+		"""
+		lifecycle.start_session_for_asset(self.asset.name, operator="Administrator")
+		lifecycle.vacate_session(self.asset.name, operator="Administrator",
+		                         vacate_method="Key Return")
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.vacate_session(self.asset.name, operator="Administrator",
+			                         vacate_method="Key Return")
+
+	def test_B2_concurrent_mark_clean_throws_second(self):
+		"""Dirty → Available on an already-cleaned asset must throw.
+
+		Covers the transition-validation path inside the lock body.
+		"""
+		lifecycle.start_session_for_asset(self.asset.name, operator="Administrator")
+		lifecycle.vacate_session(self.asset.name, operator="Administrator",
+		                         vacate_method="Key Return")
+		lifecycle.mark_asset_clean(self.asset.name, operator="Administrator")
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.mark_asset_clean(self.asset.name, operator="Administrator")
+
+	def test_B3_concurrent_oos_on_already_oos_throws(self):
+		"""`_require_oos_entry` must reject OOS → OOS inside the lock body."""
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="broken 1")
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator", reason="broken 2")
+
+	def test_B4_start_session_then_oos_keeps_session_closed(self):
+		"""Starting a session then immediately OOS-ing the asset must
+		auto-close the session with Discovery on Rounds and leave it in
+		the Completed state — not orphaned Active.
+		"""
+		session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator")
+		lifecycle.set_asset_out_of_service(
+			self.asset.name, operator="Administrator", reason="asset broke")
+		s = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(s.status, "Completed")
+		self.assertEqual(s.vacate_method, "Discovery on Rounds")
+
+	def test_B5_close_session_wrong_asset_link_defensive_guard(self):
+		"""lifecycle._close_current_session throws if the passed session
+		belongs to a different asset (line 376-378). Covers the defensive
+		cross-doctype invariant that protects against manual SQL edits or
+		future double-close bugs.
+		"""
+		other_asset = _make_audit_asset("Race Other Asset")
+		sess_a = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator")
+		lifecycle.start_session_for_asset(
+			other_asset.name, operator="Administrator")
+		# Point sess_a at the WRONG asset in-memory, then call the private
+		# helper directly — lock ordering is not at issue because the
+		# helper itself throws before any write.
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			lifecycle._close_current_session(
+				other_asset.name,
+				current_session=sess_a,
+				operator="Administrator",
+				vacate_method="Key Return",
+			)
+		self.assertIn("belongs to", str(ctx.exception))
+
+	def test_B6_close_already_completed_session_defensive_guard(self):
+		"""lifecycle._close_current_session throws if the session is
+		already Completed (line 379-381). Protects against a bug that
+		would otherwise double-close and overwrite session_end.
+		"""
+		session_name = lifecycle.start_session_for_asset(
+			self.asset.name, operator="Administrator")
+		lifecycle.vacate_session(self.asset.name, operator="Administrator",
+		                         vacate_method="Key Return")
+		# Session is now Completed. Calling the private helper again
+		# must refuse.
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			lifecycle._close_current_session(
+				self.asset.name,
+				current_session=session_name,
+				operator="Administrator",
+				vacate_method="Key Return",
+			)
+		self.assertIn("already", str(ctx.exception))
+
+
+# ---------------------------------------------------------------------------
+# Group C — Session number edges (5 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestSessionNumberEdges(IntegrationTestCase):
+	def setUp(self):
+		# Flush today's session counter to isolate test state
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		frappe.cache().delete(f"hamilton:session_seq:{prefix}")
+
+	def tearDown(self):
+		frappe.db.rollback()
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		frappe.cache().delete(f"hamilton:session_seq:{prefix}")
+
+	def test_C1_sequence_overflow_past_9999_logs_warning(self):
+		"""_next_session_number logs a warning (NOT raises) once the daily
+		sequence exceeds 9999. The format string still renders (Python %d
+		never truncates), so correctness holds — but ops needs to hear
+		about it.
+		"""
+		from unittest.mock import patch
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		key = f"hamilton:session_seq:{prefix}"
+		cache = frappe.cache()
+		# Seed at 9999 so next INCR yields 10000
+		cache.set(key, 9999, px=60_000)
+		warnings: list[str] = []
+
+		class _L:
+			def warning(self, msg):
+				warnings.append(msg)
+
+		with patch("frappe.logger", return_value=_L()):
+			sn = lifecycle._next_session_number()
+		self.assertTrue(
+			any("overflow" in w for w in warnings),
+			f"Expected overflow warning; got: {warnings}",
+		)
+		self.assertTrue(sn.endswith("10000"),
+			f"Expected 10000 tail, got {sn}")
+
+	def test_C2_unique_validation_on_non_session_number_field_reraises(self):
+		"""_create_session catches UniqueValidationError ONLY if the field
+		is session_number. Any other unique-field collision must propagate
+		(lifecycle.py line 221). Without this, a future unique constraint
+		would silently retry 3 times with the wrong field.
+		"""
+		from unittest.mock import patch
+
+		class _FakeExc(frappe.UniqueValidationError):
+			pass
+
+		call_count = {"n": 0}
+
+		def boom_on_insert(self, *a, **k):
+			call_count["n"] += 1
+			# Raise a unique-violation that mentions a DIFFERENT field,
+			# NOT session_number. The scoping guard must let it escape.
+			raise _FakeExc("some_other_field must be unique")
+
+		with patch.object(frappe.model.document.Document, "insert", boom_on_insert):
+			with self.assertRaises(frappe.UniqueValidationError):
+				lifecycle._create_session(
+					"FAKE-ASSET", operator="Administrator", customer="Walk-in")
+		# Must NOT retry 3 times — single raise, single call
+		self.assertEqual(call_count["n"], 1,
+			f"Expected 1 insert attempt; got {call_count['n']} "
+			f"— non-session_number unique error was retried")
+
+	def test_C3_incr_return_value_cast_to_int(self):
+		"""redis-py returns INCR as int, but _next_session_number explicitly
+		casts via `int(cache.incr(key))`. If a future redis wrapper returns
+		bytes/str, the format spec `{seq:04d}` would blow up. Pin the cast
+		as part of the contract.
+		"""
+		from unittest.mock import patch
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		cache = frappe.cache()
+		real_incr = cache.incr
+		def str_incr(key):
+			# Return a string to simulate a misbehaving redis wrapper
+			return str(real_incr(key))
+		# Seed so the cold-path DB query is skipped
+		cache.set(f"hamilton:session_seq:{prefix}", 0, px=60_000)
+		with patch.object(cache, "incr", side_effect=str_incr):
+			sn = lifecycle._next_session_number()
+		# Must contain a 4-digit tail, not a Python repr
+		self.assertRegex(sn, r"---\d{4}$")
+
+	def test_C4_db_max_fallback_handles_multiple_historic_rows(self):
+		"""_db_max_seq_for_prefix must return the MAX trailing sequence,
+		not an arbitrary row. Seed several rows with distinct tails and
+		verify the helper picks the highest.
+		"""
+		_ensure_walkin_al()
+		asset = _make_audit_asset("DB Max Seed Asset")
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		# Seed three historic rows with known tails
+		for tail in ("0005", "0017", "0042"):
+			frappe.get_doc({
+				"doctype": "Venue Session",
+				"venue_asset": asset.name,
+				"operator_checkin": "Administrator",
+				"customer": "Walk-in",
+				"session_number": f"{prefix}---{tail}",
+				"session_start": frappe.utils.now_datetime(),
+				"status": "Active",
+				"assignment_status": "Assigned",
+			}).insert(ignore_permissions=True)
+		self.assertEqual(lifecycle._db_max_seq_for_prefix(prefix), 42)
+
+	def test_C5_cold_start_uses_db_max_not_zero(self):
+		"""When Redis has no key for today's prefix, _next_session_number
+		must seed from `_db_max_seq_for_prefix` + 1, not from 1. Otherwise
+		a mid-day Redis flush would restart the sequence and collide with
+		persisted rows.
+		"""
+		_ensure_walkin_al()
+		asset = _make_audit_asset("Cold Start Asset")
+		year, month, day = frappe.utils.nowdate().split("-")
+		prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		# Seed a historic row at tail 0100 and flush redis
+		frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": asset.name,
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"session_number": f"{prefix}---0100",
+			"session_start": frappe.utils.now_datetime(),
+			"status": "Active",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+		frappe.cache().delete(f"hamilton:session_seq:{prefix}")
+		sn = lifecycle._next_session_number()
+		# Must yield 0101, not 0001
+		self.assertTrue(sn.endswith("0101"),
+			f"Cold-start fallback failed: got {sn}, expected …0101")
+
+
+# ---------------------------------------------------------------------------
+# Group D — Version CAS (3 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestVersionCAS(IntegrationTestCase):
+	"""_set_asset_status reads version UNDER the lock via get_doc(..., for_update=True)
+	then compares to expected_version. Under normal flow they always agree
+	(the caller's row dict came from the same lock), but we simulate drift
+	to pin the CAS invariant."""
+
+	def setUp(self):
+		self.asset = _make_audit_asset("CAS Test Asset")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_D1_start_session_cas_detects_drifted_version(self):
+		"""Call _set_asset_status with an expected_version that doesn't
+		match the row — must throw 'Concurrent update'.
+		"""
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			lifecycle._set_asset_status(
+				self.asset.name,
+				new_status="Occupied",
+				session=None,
+				log_reason=None,
+				operator="Administrator",
+				previous="Available",
+				expected_version=999,  # deliberately wrong
+			)
+		self.assertIn("Concurrent update", str(ctx.exception))
+
+	def test_D2_vacate_cas_detects_drifted_version(self):
+		"""Same CAS invariant on a Dirty transition."""
+		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Occupied")
+		frappe.db.set_value("Venue Asset", self.asset.name, "version", 7)
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle._set_asset_status(
+				self.asset.name,
+				new_status="Dirty",
+				session=None,
+				log_reason=None,
+				operator="Administrator",
+				previous="Occupied",
+				expected_version=0,  # stale
+			)
+
+	def test_D3_mark_clean_cas_bumps_version_on_success(self):
+		"""Happy path — _set_asset_status must bump version by exactly 1
+		when the expected_version matches.
+		"""
+		frappe.db.set_value("Venue Asset", self.asset.name, {
+			"status": "Dirty", "version": 3})
+		lifecycle._set_asset_status(
+			self.asset.name,
+			new_status="Available",
+			session=None,
+			log_reason=None,
+			operator="Administrator",
+			previous="Dirty",
+			expected_version=3,
+		)
+		self.assertEqual(
+			frappe.db.get_value("Venue Asset", self.asset.name, "version"), 4)
+
+
+# ---------------------------------------------------------------------------
+# Group J — Realtime contracts (6 tests)
+# ---------------------------------------------------------------------------
+
+
+class TestRealtimeContracts(IntegrationTestCase):
+	def setUp(self):
+		self.asset = _make_audit_asset("Realtime Contract Asset")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_J1_publish_never_called_inside_lock(self):
+		"""Critical contract: publish_status_change must fire AFTER the
+		lock releases. We instrument both the lock context manager and
+		the publish helper to record ordering, then assert publish lands
+		outside.
+
+		Note: lifecycle.start_session_for_asset imports asset_status_lock
+		and publish_status_change LOCALLY inside the function, so we
+		patch their source modules (hamilton_erp.locks and
+		hamilton_erp.realtime) — patching hamilton_erp.lifecycle.* would
+		miss because the names never live on the lifecycle module.
+		"""
+		from unittest.mock import patch
+		from hamilton_erp import locks, realtime
+		events: list[str] = []
+		real_lock = locks.asset_status_lock
+		real_publish = realtime.publish_status_change
+
+		from contextlib import contextmanager
+
+		@contextmanager
+		def tracking_lock(name, op):
+			events.append("lock_enter")
+			with real_lock(name, op) as row:
+				yield row
+			events.append("lock_exit")
+
+		def tracking_publish(name, previous_status=None):
+			events.append("publish")
+			return real_publish(name, previous_status=previous_status)
+
+		with patch("hamilton_erp.locks.asset_status_lock", tracking_lock), \
+		     patch("hamilton_erp.realtime.publish_status_change", tracking_publish):
+			lifecycle.start_session_for_asset(
+				self.asset.name, operator="Administrator")
+		self.assertEqual(events, ["lock_enter", "lock_exit", "publish"],
+			f"Ordering violation: {events}")
+
+	def test_J2_no_realtime_event_on_rejected_transition(self):
+		"""If a transition is rejected inside the lock, NO realtime event
+		may escape. publish_status_change sits after the `with` block, so
+		an exception propagates before it's reached.
+		"""
+		from unittest.mock import patch
+		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Dirty")
+		with patch("hamilton_erp.realtime.publish_status_change") as mock_pub:
+			with self.assertRaises(frappe.ValidationError):
+				# Dirty → can't start session
+				lifecycle.start_session_for_asset(
+					self.asset.name, operator="Administrator")
+		mock_pub.assert_not_called()
+
+	def test_J3_publish_exception_doesnt_corrupt_asset_state(self):
+		"""If publish_status_change itself raises, the asset state change
+		has already committed (publish is the LAST step). Verify that
+		even in this pathological case, the DB still reflects the new
+		status — the exception propagates but nothing rolls back.
+		"""
+		from unittest.mock import patch
+		with patch("hamilton_erp.realtime.publish_status_change",
+		           side_effect=RuntimeError("realtime broker down")):
+			with self.assertRaises(RuntimeError):
+				lifecycle.start_session_for_asset(
+					self.asset.name, operator="Administrator")
+		# State change survived the publish failure
+		self.assertEqual(
+			frappe.db.get_value("Venue Asset", self.asset.name, "status"),
+			"Occupied",
+		)
+
+	def test_J4_c2_payload_contains_all_required_fields(self):
+		"""Asset Board tile re-render needs all fields in the C2 payload:
+		name, status, version, current_session, last_vacated_at,
+		last_cleaned_at, hamilton_last_status_change, old_status.
+		"""
+		from unittest.mock import patch
+		from hamilton_erp import realtime
+		captured = {}
+		def fake(event, payload, **kwargs):
+			captured.update(payload)
+		with patch.object(frappe, "publish_realtime", side_effect=fake):
+			realtime.publish_status_change(
+				self.asset.name, previous_status="Available")
+		required = {
+			"name", "status", "version", "current_session",
+			"last_vacated_at", "last_cleaned_at",
+			"hamilton_last_status_change", "old_status",
+		}
+		self.assertTrue(required.issubset(set(captured.keys())),
+			f"C2 payload missing: {required - set(captured.keys())}")
+
+	def test_J5_publish_status_change_sets_after_commit_true(self):
+		"""after_commit=True is load-bearing: without it, the client
+		receives an event for state that may still roll back.
+		"""
+		from unittest.mock import patch
+		from hamilton_erp import realtime
+		captured = {}
+		def fake(event, payload, **kwargs):
+			captured["kwargs"] = kwargs
+		with patch.object(frappe, "publish_realtime", side_effect=fake):
+			realtime.publish_status_change(
+				self.asset.name, previous_status="Available")
+		self.assertTrue(captured["kwargs"].get("after_commit"),
+			"publish_status_change MUST use after_commit=True")
+
+	def test_J6_board_refresh_uses_after_commit_true(self):
+		"""publish_board_refresh is the bulk analog — same contract."""
+		from unittest.mock import patch
+		from hamilton_erp import realtime
+		captured = {}
+		def fake(event, payload, **kwargs):
+			captured["kwargs"] = kwargs
+		with patch.object(frappe, "publish_realtime", side_effect=fake):
+			realtime.publish_board_refresh("bulk_clean", 10)
+		self.assertTrue(captured["kwargs"].get("after_commit"),
+			"publish_board_refresh MUST use after_commit=True")
+
+
+def tearDownModule():
+	"""Restore dev state wiped by this module's tests.
+
+	See hamilton_erp/test_helpers.py for why this exists.
+	"""
+	from hamilton_erp.test_helpers import restore_dev_state
+	restore_dev_state()
