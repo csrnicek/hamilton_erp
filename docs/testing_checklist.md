@@ -958,3 +958,50 @@ def test_realtime_fires_outside_lock_not_inside(self):
 | S (Permissions/security) | Tasks 16-20 (UI wiring) | High |
 | T (ERPNext POS patterns) | Phase 2 (billing) | Medium |
 | U (Realtime) | Task 13 (realtime implementation) | High |
+
+
+---
+
+## Category V: Frappe Cloud Real Incident Patterns
+*Source: docs.frappe.io/cloud/recent-issues — actual production outages*
+
+- [ ] Stuck background job leaves asset in original state (not partial) — transaction rollback
+- [ ] Faulty Redis config raises user-friendly error, not raw ConnectionError crash
+- [ ] Single lifecycle call stays under Frappe MAX_WRITES_PER_TRANSACTION limit
+- [ ] Daily usage limit reached — DB unavailable mid-operation raises cleanly
+- [ ] DNS failure during session creation leaves no orphaned Venue Session
+
+## Category W: MariaDB Production Failure Modes
+*Source: Frappe Forum "Aborted connection" errors, connection pool exhaustion*
+
+- [ ] FOR UPDATE lock auto-releases on connection drop (InnoDB behavior)
+- [ ] 5 complete lifecycle cycles do not exhaust connection pool
+- [ ] MariaDB deadlock raises DatabaseError, not hang forever
+- [ ] Asset deleted between Redis acquire and FOR UPDATE raises ValidationError
+- [ ] Full lifecycle cycle completes in under 10 seconds (Gunicorn timeout safety)
+
+## Category X: Redis Production Failure Modes
+*Source: Frappe Forum Redis queue spawn errors, OOM kills*
+
+- [ ] Redis OOM raises user-friendly error (LockContentionError/ValidationError)
+- [ ] Redis keys created in tests are cleaned up — no cross-test pollution
+- [ ] Redis TimeoutError treated same as ConnectionError → LockContentionError
+- [ ] Session counter Redis key has TTL ≤ 48 hours — no memory leak
+
+## Category Y: Hetzner Infrastructure Edge Cases
+*Source: Hacker News Hetzner experience threads, shared vCPU contention reports*
+
+- [ ] Client retry of start_session (network timeout) creates only ONE session
+- [ ] Operations complete correctly under CPU throttling (idempotency)
+- [ ] Network partition (Redis up, MariaDB down) releases Redis key correctly
+- [ ] Bulk clean of 5 assets completes in under 5 seconds (59 assets under 60s Nginx limit)
+
+## Category Z: ERPNext Silent Failure Patterns
+*Source: codewithkarani.com "ERPNext fails silently" — the most dangerous failure class*
+
+- [ ] Failed operations never silently corrupt asset state (atomic or nothing)
+- [ ] Asset Status Log ALWAYS created on transition, never silently skipped
+- [ ] version field ALWAYS increments after transition, never silently stays at 0
+- [ ] current_session NEVER silently left set after vacate (stale Link field)
+- [ ] reason field NEVER silently persists after OOS → Available
+- [ ] start_session uses fewer than 20 transaction writes (N+1 query detection)
