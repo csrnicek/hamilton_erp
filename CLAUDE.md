@@ -138,3 +138,31 @@ Run this before every deploy to hamilton-erp.v.frappe.cloud:
 5. Confirm CLAUDE.md 3-AI review checkpoint is not due (check Task number)
 6. Push to GitHub — Frappe Cloud auto-deploys within 3 minutes
 7. Check hamilton-erp.v.frappe.cloud after 3 minutes to confirm site loads
+
+## Testing Rules (Permanent)
+
+### Always run the full test suite
+Every test run must include ALL 7 modules — never run just one or two:
+```
+cd ~/frappe-bench-hamilton && source env/bin/activate && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_locks && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_additional_expert && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_checklist_complete && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_frappe_edge_cases && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_extreme_edge_cases
+```
+Or use the /run-tests slash command which does this automatically.
+
+### When Chris asks for more code checks
+This is a permanent rule — never skip any of these steps:
+1. Add the new tests to `docs/testing_checklist.md`
+2. Immediately convert them to running Python tests in the appropriate file
+   (test_checklist_complete.py, test_additional_expert.py, or a new test_*.py file)
+3. Update `.claude/commands/run-tests.md` to include any new test module
+4. Commit all files to GitHub
+
+Never add to the checklist without also writing the Python tests.
+Never write Python tests without updating the run-tests command.
+Never update run-tests without committing everything to GitHub.
