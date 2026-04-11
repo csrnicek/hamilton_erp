@@ -69,30 +69,41 @@ class VenueAsset(Document):
 			frappe.throw(_("Please provide a reason for marking this asset Out of Service."))
 
 	# ------------------------------------------------------------------
-	# Whitelisted methods — stubs for Phase 0, implemented in Phase 1
+	# Whitelisted methods — Phase 1 real bodies (delegate to lifecycle.py)
 	# ------------------------------------------------------------------
 
 	@frappe.whitelist(methods=["POST"])
-	def assign_to_session(self, session_name: str):
-		"""Assign this asset to a Venue Session. Full locking logic in Phase 1."""
-		frappe.throw(_("assign_to_session is not yet implemented (Phase 1)."))
+	def assign_to_session(self):
+		"""Assign a walk-in session to this asset. Available → Occupied."""
+		frappe.has_permission("Venue Asset", "write", throw=True)
+		from hamilton_erp.lifecycle import start_session_for_asset
+		return {"session": start_session_for_asset(self.name, operator=frappe.session.user)}
 
 	@frappe.whitelist(methods=["POST"])
-	def mark_vacant(self):
-		"""Transition Occupied → Dirty when guest vacates. Full logic in Phase 1."""
-		frappe.throw(_("mark_vacant is not yet implemented (Phase 1)."))
+	def mark_vacant(self, vacate_method: str):
+		"""Close the current session and move to Dirty."""
+		frappe.has_permission("Venue Asset", "write", throw=True)
+		from hamilton_erp.lifecycle import vacate_session
+		vacate_session(self.name, operator=frappe.session.user,
+		               vacate_method=vacate_method)
 
 	@frappe.whitelist(methods=["POST"])
 	def mark_clean(self):
-		"""Transition Dirty → Available after cleaning. Full logic in Phase 1."""
-		frappe.throw(_("mark_clean is not yet implemented (Phase 1)."))
+		"""Dirty → Available."""
+		frappe.has_permission("Venue Asset", "write", throw=True)
+		from hamilton_erp.lifecycle import mark_asset_clean
+		mark_asset_clean(self.name, operator=frappe.session.user)
 
 	@frappe.whitelist(methods=["POST"])
 	def set_out_of_service(self, reason: str):
-		"""Transition any state → Out of Service. Full logic in Phase 1."""
-		frappe.throw(_("set_out_of_service is not yet implemented (Phase 1)."))
+		"""Any state (except OOS) → Out of Service."""
+		frappe.has_permission("Venue Asset", "write", throw=True)
+		from hamilton_erp.lifecycle import set_asset_out_of_service
+		set_asset_out_of_service(self.name, operator=frappe.session.user, reason=reason)
 
 	@frappe.whitelist(methods=["POST"])
 	def return_to_service(self, reason: str):
-		"""Transition Out of Service → Available. Full logic in Phase 1."""
-		frappe.throw(_("return_to_service is not yet implemented (Phase 1)."))
+		"""Out of Service → Available."""
+		frappe.has_permission("Venue Asset", "write", throw=True)
+		from hamilton_erp.lifecycle import return_asset_to_service
+		return_asset_to_service(self.name, operator=frappe.session.user, reason=reason)
