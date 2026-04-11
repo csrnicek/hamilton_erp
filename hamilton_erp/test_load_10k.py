@@ -208,13 +208,18 @@ class TestLoad10k(IntegrationTestCase):
 		null_numbers = [sn for sn in session_numbers if not sn]
 		print(f"  Null/empty session numbers: {len(null_numbers)}")
 
-		# Format validation — must match d-m-yyyy---NNNN
+		# Format validation — must match d-m-yyyy---NNNN (4+ digits;
+		# the trailing sequence is :04d-padded to 4 digits by default,
+		# but overflow past 9999 in a single day renders as 5+ digits
+		# without truncation — production code logs a warning but does
+		# not raise. Allow \d{4,} so a legitimate overflow during a
+		# 10k-cycle load test is not flagged as "bad format".)
 		import re
 		bad_format = [
 			sn for sn in session_numbers
-			if sn and not re.match(r"^\d+-\d+-\d+---\d{4}$", sn)
+			if sn and not re.match(r"^\d+-\d+-\d+---\d{4,}$", sn)
 		]
-		print(f"  Bad format (not d-m-y---NNNN): {len(bad_format)}")
+		print(f"  Bad format (not d-m-y---NNNN+): {len(bad_format)}")
 
 		if failures:
 			print(f"\n  FAILURES (first 5):")
