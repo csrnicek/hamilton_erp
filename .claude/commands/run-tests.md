@@ -1,6 +1,6 @@
 # Run Hamilton ERP FULL test suite
 # Usage: /run-tests
-# Runs ALL tests including expert and checklist tests.
+# 29 lifecycle (Task 9 adds 4 new) + 3 locks + 17 venue_asset + 45 expert + checklist
 # Run each module separately (bench --module only honors the last value):
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
