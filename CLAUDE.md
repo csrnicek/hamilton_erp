@@ -166,3 +166,56 @@ This is a permanent rule — never skip any of these steps:
 Never add to the checklist without also writing the Python tests.
 Never write Python tests without updating the run-tests command.
 Never update run-tests without committing everything to GitHub.
+
+## Current Project State
+
+- Tasks 1-10 complete. Task 11 is next.
+- Local bench: ~/frappe-bench-hamilton. Python 3.14, Node 24, MariaDB 12.2.2 (root pw: admin), Redis. Site: hamilton-test.localhost.
+- hamilton_erp symlinked into bench from ~/hamilton_erp.
+
+## Test Suite — 7 Modules (197+ passing, 11 skipped)
+
+| Module | Tests | Notes |
+|---|---|---|
+| test_lifecycle | 29 | Core lifecycle methods |
+| test_locks | 3 | Redis + FOR UPDATE lock |
+| test_venue_asset | 17 | Doctype controller |
+| test_additional_expert | 45 | Expert edge cases |
+| test_checklist_complete | 43 + 11 skipped | Checklist items as Python |
+| test_frappe_edge_cases | ~30 | Frappe v16 edge cases |
+| test_extreme_edge_cases | ~30 | Frappe Cloud incidents, Hetzner, MariaDB, Redis |
+
+Skipped tests unlock progressively:
+- 3 unlock after Task 10 (session_number wired)
+- 5 unlock after Task 11 (seed patch)
+- 3 unlock after Task 13 / Phase 2
+
+## Slash Commands — All in .claude/commands/
+
+| Command | Purpose |
+|---|---|
+| /run-tests | Run all 7 modules |
+| /fix-and-test | Run all 7 modules + autonomously fix all failures |
+| /deploy | Fix-and-test then push to GitHub |
+| /feature [N] | Full subagent implementation of task N |
+| /task-start | Auto-detect and run next task |
+| /bug-triage | Diagnose and fix a reported bug |
+| /status | Project status report |
+| /coverage | Coverage report |
+| /mutmut | Mutation testing |
+| /hypothesis | Property-based testing |
+| /task9-start | Full refresh + test + dispatch for Task 9 |
+
+## Autonomous Command Rules (Permanent)
+
+All slash commands run autonomously. Opus never stops to ask Chris for input
+unless one of these STOP conditions is hit:
+
+1. A fix would change a DEC-0XX design decision
+2. A fix risks data loss or production data modification
+3. More than 5 tests fail with the same root cause (systemic issue)
+4. bench migrate is required
+
+Everything else — picking fix options, committing, pushing, continuing —
+happens without Chris. Chris does not want to be part of the workflow
+when he is just approving routine decisions.
