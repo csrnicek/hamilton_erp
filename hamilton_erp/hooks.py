@@ -9,6 +9,18 @@ app_version = "0.1.0"
 required_apps = ["frappe", "erpnext"]
 
 # ---------------------------------------------------------------------------
+# Assets — CSS/JS bundled into the Desk app
+# ---------------------------------------------------------------------------
+# asset_board.css is scoped to .hamilton-asset-board / .hamilton-loading
+# selectors so it does not bleed into other Frappe pages. Loaded app-wide
+# (not page-specific) because the Asset Board is a Frappe Page, not a
+# regular Desk view, and page-level css includes were removed in v15.
+
+app_include_css = [
+	"/assets/hamilton_erp/css/asset_board.css",
+]
+
+# ---------------------------------------------------------------------------
 # Fixtures — synced on bench migrate
 # ---------------------------------------------------------------------------
 # Filters limit export/import to only Hamilton fields so bench export-fixtures

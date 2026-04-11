@@ -1,0 +1,11 @@
+/* Hamilton Asset Board — scoped styles. All selectors start with
+   .hamilton-asset-board to avoid bleeding into other Frappe pages. */
+
+.hamilton-asset-board {
+	padding: 16px;
+}
+.hamilton-loading {
+	padding: 24px;
+	text-align: center;
+	color: var(--text-muted);
+}
