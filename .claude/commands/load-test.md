@@ -2,10 +2,10 @@
 # Usage: /load-test
 # WARNING: This takes 5-10 minutes. Do not run during normal dev workflow.
 # Run before major releases or after infrastructure changes.
-# Safe — runs against hamilton-test.localhost only. Zero risk to Frappe Cloud.
+# Safe — runs against hamilton-unit-test.localhost only. Zero risk to Frappe Cloud.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests \
     --app hamilton_erp \
     --module hamilton_erp.test_load_10k \
     --verbose
