@@ -616,4 +616,47 @@ Lock sections must be minimal — validate + save only, no I/O inside lock.
 
 ---
 
+## DEC-057 — Test-Class Isolation: tearDownClass Must Scrub DB + Redis When Committing
+
+**Date:** 2026-04-10
+**Context:** During Task 14 (Asset Board API), a new test module `hamilton_erp/test_api_phase1.py` was added to exercise `get_asset_board_data` and the bulk Mark-All-Clean endpoints. These tests create real `Venue Asset` and `Venue Session` records and must `frappe.db.commit()` so the API under test can read them via a fresh query path. After the commit, a subsequent run of `test_lifecycle.TestSessionNumberGenerator` failed with `AssertionError: '11-4-2026---0095' != '11-4-2026---0006'` — the generator's "first call of the day returns 0001" invariant was destroyed because test_api_phase1 had left ~90 committed `Venue Session` rows bearing today's prefix, and the Redis session-sequence counter `hamilton:session_seq:{d-m-y}` was also still warm from those commits. Frappe's `IntegrationTestCase` auto-rollback does not cover data already committed, and cross-module test ordering is non-deterministic, so any test class that commits bleeds into every test class that runs after it in the same bench process.
+
+Package-root test modules (modules that live in `hamilton_erp/test_*.py` rather than under a doctype folder) compound the problem: they cannot use `IGNORE_TEST_RECORD_DEPENDENCIES`. Frappe v16 raises `NotImplementedError: IGNORE_TEST_RECORD_DEPENDENCIES is only implement for test modules within a doctype folder` because the flag relies on `cls.doctype`, which is only derivable for doctype-scoped tests. The good news is the auto-seed cascade is skipped entirely for package-root modules, so the flag is unnecessary there — but the test author has to know this, and nothing in Frappe's docs warns about the side effect on committed state.
+
+**Decision:**
+
+1. **Any `IntegrationTestCase` subclass that calls `frappe.db.commit()` MUST define `tearDownClass` with the full scrub triple**, in this exact order:
+
+   ```python
+   @classmethod
+   def tearDownClass(cls):
+       frappe.db.delete("Venue Session")
+       frappe.db.delete("Venue Asset")
+       year, month, day = frappe.utils.nowdate().split("-")
+       prefix = f"{int(day)}-{int(month)}-{int(year)}"
+       frappe.cache().delete(f"hamilton:session_seq:{prefix}")
+       frappe.db.commit()
+       super().tearDownClass()
+   ```
+
+   Delete Venue Session FIRST (it has a FK-style link to Venue Asset via `current_session` round-trip), then Venue Asset, then flush the Redis session counter for today's prefix, then `commit()` so the scrub persists, then `super().tearDownClass()`. Missing any step leaves the next test class in a dirty state.
+
+2. **The Redis flush is load-bearing, not decorative.** `_next_session_number()` has a cold-Redis fallback that queries the max existing `session_number` for today's prefix from MariaDB and returns `max + 1`. If the DB is scrubbed but Redis still holds the high-water counter, the next test class's first session will be numbered `{prefix}---{high_water + 1}` instead of `{prefix}---0001`. Both stores must be cleaned together.
+
+3. **`setUpClass` should also scrub the same triple.** `tearDownClass` handles the common case (normal test exit), but a prior run that crashed mid-test leaves uncommitted scrubs undone. Running the scrub at the top of `setUpClass` makes each test class self-healing against bench-process corpse state from previous runs. The cost is negligible (~5 ms for an empty DELETE) compared to the debugging cost of a leaked row.
+
+4. **Package-root test modules (`hamilton_erp/test_*.py`) MUST NOT set `IGNORE_TEST_RECORD_DEPENDENCIES`.** Frappe v16 raises `NotImplementedError` because the flag requires `cls.doctype`, which package-root modules do not define. These modules skip the auto-seed cascade entirely regardless (no `cls.doctype` → no dependency graph to walk), so the flag is unnecessary. Add a comment at the top of every package-root test module noting this, so future authors do not add it back reflexively.
+
+5. **Doctype-scoped test modules (`hamilton_erp/hamilton_erp/doctype/*/test_*.py`) SHOULD continue to set `IGNORE_TEST_RECORD_DEPENDENCIES = True`** at module scope. This is unchanged — they still need the flag to avoid the broken Phase 0 stub cascade. This decision is only about package-root modules and about committed-state scrub.
+
+6. **Code review must reject any new `IntegrationTestCase` subclass that commits without both the `tearDownClass` scrub AND the `setUpClass` scrub**, the same way code review rejects I/O inside a lock body (coding_standards.md §13). Treat this as a hard rule, not a suggestion — the failure mode (non-deterministic cross-module test pollution) is exactly the kind of flaky-test problem that destroys confidence in the suite over time.
+
+**Rationale:** Three alternatives were considered and rejected. **(a) "Just don't commit in tests"** — impossible for Task 14 because `get_asset_board_data` is tested through `frappe.call`, which executes in a fresh request context that cannot see an uncommitted transaction from the test. **(b) "Run each test module against a fresh site"** — would cost minutes per run and break the developer workflow where Chris runs `/run-tests` and expects sub-minute feedback. **(c) "Mock the lifecycle layer so tests don't need real data"** — defeats the purpose of an integration test and would miss exactly the kind of cross-layer race that DEC-056 just fixed.
+
+The scrub triple is cheap (one DELETE, one DELETE, one Redis DEL), deterministic (no dependency on test ordering), and self-documenting (any new test author reading the tearDownClass can see exactly what state their test owns). It also slots cleanly into the existing `IntegrationTestCase` lifecycle without requiring any Frappe framework changes. The rule is simple enough to enforce in review without needing a linter: "does this test class call `commit()`? If yes, does it have the scrub triple in both setUpClass and tearDownClass? If no to either, reject."
+
+This decision is recorded now specifically because the bug it prevents is invisible until a second committing test class exists in the same bench process — which is exactly what happens as Phase 1 adds more API-surface integration tests. Waiting for the next cross-module failure to re-learn the rule would cost hours of bisecting phantom test failures each time.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*
