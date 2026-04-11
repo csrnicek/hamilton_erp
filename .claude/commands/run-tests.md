@@ -1,7 +1,7 @@
 # Run Hamilton ERP FULL test suite
 # Usage: /run-tests
-# All 8 modules — run after every task, no exceptions.
-# For autonomous fixing of failures, use /fix-and-test instead.
+# 208 passing, 6 skipped as of Task 11. All 8 modules run every time.
+# For autonomous fixing of failures use /fix-and-test instead.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle && \
