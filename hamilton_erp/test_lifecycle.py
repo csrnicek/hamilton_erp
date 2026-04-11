@@ -506,3 +506,105 @@ class TestReturnToService(IntegrationTestCase):
 		from hamilton_erp.locks import asset_status_lock
 		with asset_status_lock(self.asset.name, "verify-release") as row:
 			self.assertEqual(row["status"], "Available")
+
+
+class TestSessionNumberGenerator(IntegrationTestCase):
+	"""Task 9: DEC-033 session number generator with Redis INCR + DB fallback.
+
+	Sequence is reset by KEY NAME (the date-based prefix changes at midnight),
+	not by TTL. The 48h TTL just garbage-collects stale keys. When the Redis
+	key is cold, `_next_session_number` falls back to the max trailing sequence
+	for today's prefix in `tabVenue Session` so a mid-day Redis flush cannot
+	restart the daily sequence at 001 and collide with already-persisted rows.
+	"""
+
+	def setUp(self):
+		# No Walk-in Customer fixture needed — the generator is pure (no
+		# Venue Session inserts). The DB-fallback test seeds its own asset
+		# + session directly. If a future change ever gives session_number
+		# a default that inserts a Customer-linked row, a failing test will
+		# flag it and we'll add the fixture then (YAGNI).
+		# Compute today's Redis key up front so setUp/tearDown and tests all
+		# target the same string. nowdate() returns "YYYY-MM-DD".
+		year, month, day = frappe.utils.nowdate().split("-")
+		self._prefix = f"{int(day)}-{int(month)}-{int(year)}"
+		self._key = f"hamilton:session_seq:{self._prefix}"
+		# Flush any leftover Redis key from prior runs or other tests run
+		# earlier in the same day. Uses raw .delete() to match the raw .set()
+		# / .incr() path the generator uses — wrapper methods like
+		# delete_value() prefix the key via make_key() and would miss it.
+		frappe.cache().delete(self._key)
+
+	def tearDown(self):
+		# Rollback DB so seeded Venue Asset / Venue Session rows evaporate,
+		# AND flush the Redis key so other tests in the same day don't see
+		# leftover state from this class.
+		frappe.db.rollback()
+		frappe.cache().delete(self._key)
+
+	def test_first_call_returns_001(self):
+		n = lifecycle._next_session_number()
+		self.assertTrue(
+			n.endswith("---001"),
+			f"Expected first call to end with ---001, got {n}",
+		)
+
+	def test_second_call_returns_002(self):
+		lifecycle._next_session_number()
+		n2 = lifecycle._next_session_number()
+		self.assertTrue(
+			n2.endswith("---002"),
+			f"Expected second call to end with ---002, got {n2}",
+		)
+
+	def test_format_matches_dec_033(self):
+		"""DEC-033: {d}-{m}-{y}---{NNN}. Day/month NOT zero-padded; sequence IS."""
+		n = lifecycle._next_session_number()
+		prefix, seq = n.split("---")
+		parts = prefix.split("-")
+		self.assertEqual(len(parts), 3, f"Prefix should be d-m-y, got {prefix}")
+		# Sequence is always 3 digits, zero-padded.
+		self.assertEqual(len(seq), 3, f"Sequence should be 3 digits, got {seq}")
+		self.assertTrue(seq.isdigit(), f"Sequence should be numeric, got {seq}")
+		# Prefix matches today's computed prefix (guards against off-by-one
+		# timezone or formatting regressions).
+		self.assertEqual(prefix, self._prefix)
+
+	def test_db_fallback_when_redis_cold(self):
+		"""When the Redis key is cold but the DB already has today's rows,
+		resume the sequence at db_max + 1 instead of restarting at 001.
+
+		This is the load-bearing invariant: a mid-day Redis flush must not
+		cause session_number collisions against already-persisted rows.
+		"""
+		suffix = uuid.uuid4().hex[:6]
+		asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"SEQ-TEST-{suffix.upper()}",
+			"asset_name": f"Seq Fallback {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9007,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		# Directly seed a Venue Session with today's prefix + sequence 005.
+		# Only mandatory fields per venue_session.json are populated:
+		# venue_asset, status, session_start, operator_checkin.
+		frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": asset.name,
+			"session_number": f"{self._prefix}---005",
+			"status": "Active",
+			"session_start": frappe.utils.now_datetime(),
+			"operator_checkin": "Administrator",
+		}).insert(ignore_permissions=True)
+		# Ensure the Redis key is cold before the call — simulates the
+		# post-flush scenario that motivated the fallback.
+		frappe.cache().delete(self._key)
+		n = lifecycle._next_session_number()
+		self.assertEqual(
+			n,
+			f"{self._prefix}---006",
+			f"Expected cold-Redis fallback to resume at db_max+1=006, got {n}",
+		)

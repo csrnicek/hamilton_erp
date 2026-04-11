@@ -440,3 +440,113 @@ def return_asset_to_service(asset_name: str, *, operator: str, reason: str) -> N
 		)
 		_set_cleaned_timestamp(asset_name)
 	publish_status_change(asset_name, previous_status="Out of Service")
+
+
+# ---------------------------------------------------------------------------
+# Session number generator (DEC-033 + Q9) — Task 9
+# ---------------------------------------------------------------------------
+#
+# Returns strings in the form `{d}-{m}-{y}---{NNN}`, e.g. "9-4-2026---001".
+# Day and month are NOT zero-padded (per DEC-033); the trailing sequence IS
+# zero-padded to 3 digits. The daily sequence is scoped by KEY NAME — the
+# Redis key's prefix changes at midnight, so a new day starts fresh without
+# relying on TTL-based expiry. The 48h TTL is just garbage collection.
+#
+# Race-safety notes:
+#   - INCR is atomic, so two concurrent callers at steady state always get
+#     consecutive values with no gap.
+#   - On the cold-start path, two callers may both compute db_max and both
+#     call SET with nx=True. Only the first SET wins; the second no-ops
+#     (nx means "only if not exists"). Both callers then INCR, which is
+#     still atomic, so the two callers get consecutive values starting from
+#     db_max + 1.
+#   - The raw .set() / .get() / .incr() / .delete() methods are used directly
+#     (inherited from redis.Redis) instead of frappe.cache() wrappers like
+#     .exists() or .delete_value(), because the wrappers prefix keys via
+#     make_key() while the raw methods do not. locks.py uses the same raw
+#     style — see hamilton_erp/locks.py for the established pattern.
+
+_SESSION_KEY_TTL_MS = 48 * 60 * 60 * 1000  # 48 hours
+
+
+def _next_session_number() -> str:
+	"""Return the next session number for today in DEC-033 format.
+
+	Format: `{d}-{m}-{y}---{NNN}`, e.g. "9-4-2026---001". Day/month are NOT
+	zero-padded; the trailing sequence IS zero-padded to 3 digits.
+
+	Sequence is reset by KEY NAME (the date-based prefix changes at midnight),
+	not by TTL — the 48h TTL is just garbage collection so stale keys evaporate.
+
+	Race-safety: when the Redis key is cold, two callers may both compute
+	`db_max` and both call SET with nx=True. Only the first SET wins; the
+	second no-ops. Both callers then INCR, which is atomic, so the two
+	callers get consecutive values starting from `db_max + 1`.
+	"""
+	# nowdate() returns "YYYY-MM-DD" regardless of local format preferences.
+	year, month, day = frappe.utils.nowdate().split("-")
+	d, m, y = int(day), int(month), int(year)
+	prefix = f"{d}-{m}-{y}"
+	key = f"hamilton:session_seq:{prefix}"
+	cache = frappe.cache()
+	# Raw .get() — no make_key() prefix, matches locks.py's raw usage.
+	# A missing key returns None; we cannot use cache.exists() here because
+	# it prefixes via make_key() and would not match our raw .set() path.
+	if cache.get(key) is None:
+		db_max = _db_max_seq_for_prefix(prefix)
+		# nx=True so only the first cold-start caller seeds the key; later
+		# callers in a tight race no-op the SET and proceed to INCR.
+		# px=TTL garbage-collects stale keys (NOT for sequence expiry).
+		cache.set(key, db_max, nx=True, px=_SESSION_KEY_TTL_MS)
+		# TODO(task-11): if this SET silently fails (e.g., Redis connection
+		# blip between the get() above and this set()), the INCR below will
+		# auto-create the key at 1, yielding "---001" and colliding with any
+		# persisted rows. Task 11 wires in the DB uniqueness constraint on
+		# session_number, so an INSERT collision surfaces as DuplicateEntryError;
+		# the assignment caller should catch that and retry _next_session_number.
+		# Document the retry contract in Task 11's start_session_for_asset path.
+	# INCR is atomic — produces consecutive values even under concurrency.
+	# redis-py returns int; cast defensively in case the wrapper ever changes.
+	seq = int(cache.incr(key))
+	return f"{prefix}---{seq:03d}"
+
+
+def _db_max_seq_for_prefix(prefix: str) -> int:
+	"""Return the highest trailing NNN for today's prefix in `tabVenue Session`.
+
+	Used as a cold-Redis fallback so a mid-day Redis flush cannot restart the
+	daily sequence at 001 and collide with already-persisted rows. Returns 0
+	when no rows exist for today's prefix — the subsequent INCR then yields 1,
+	which formats as "001" and matches the first-call-of-the-day invariant.
+
+	The ORDER BY is lexicographic, but because the trailing NNN is always
+	zero-padded to 3 digits, lexicographic ordering matches numeric ordering
+	for sequences 000–999. DEC-033 caps daily sessions well under that ceiling,
+	so no additional numeric sort is needed.
+	"""
+	row = frappe.db.sql(
+		"SELECT session_number FROM `tabVenue Session` "
+		"WHERE session_number LIKE %s "
+		"ORDER BY session_number DESC LIMIT 1",
+		(f"{prefix}---%",),
+		as_dict=True,
+	)
+	if not row:
+		return 0
+	tail = row[0]["session_number"].rsplit("---", 1)[-1]
+	try:
+		return int(tail)
+	except ValueError:
+		# Defensive: if somehow a malformed session_number sneaks through,
+		# fall back to 0 rather than crash the assignment flow. The INCR
+		# path will then start at 1, which may collide with existing rows,
+		# but a DB uniqueness constraint (Task 11's seed/backfill scope)
+		# catches that downstream. Logging here would require import churn
+		# and is deferred to Task 11.
+		# TODO(task-11): add frappe.log_error(...) here so a malformed
+		# session_number in production isn't silently swallowed. Also audit
+		# for NNN > 999 — DEC-033 assumes daily count stays well under the
+		# 3-digit ceiling, but once a "---1000" row exists, lexicographic
+		# "---1000" < "---999" breaks the ORDER BY invariant above; Task 11
+		# should either enforce the 999 ceiling or widen zero-padding.
+		return 0
