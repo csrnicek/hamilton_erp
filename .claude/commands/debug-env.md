@@ -64,6 +64,21 @@ if not ok:
     print(f"  Current roles: {sorted(roles)}")
 PY
 
+## Bench Start Recovery
+# If `bench start` fails immediately with `schedule.1 stopped (rc=0)`,
+# an orphan `bench schedule` process from a prior run is holding the
+# scheduler FileLock. honcho treats schedule.1's clean exit as a
+# reason to kill the whole process group, so web/worker/socketio go
+# down with it.
+#
+# Diagnosis — find the orphan:
+lsof ~/frappe-bench-hamilton/config/scheduler_process
+ps -ax -o ppid,pid,command | awk '$1==1 && /frappe|bench/'
+#
+# Kill the PID that lsof prints, then rerun `bench start`.
+# (PPID=1 in the awk output is the giveaway — those processes were
+# adopted by launchd after honcho died without reaping them.)
+
 ## Step 6 — Report
 # After all checks have run, summarize for Chris in plain English:
 #   - Which layers PASSED
