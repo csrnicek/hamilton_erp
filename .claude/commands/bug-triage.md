@@ -1,18 +1,30 @@
 # Hamilton ERP — Bug Triage
 # Usage: /bug-triage [description of the problem]
-# Use this when something breaks at Club Hamilton or in the ERP system.
+# Fully autonomous diagnosis. Fixes what it can. Only stops for STOP conditions.
 
-For the reported bug: $ARGUMENTS
+## STOP conditions:
+# 1. Fix requires changing a DEC-0XX design decision
+# 2. Fix requires modifying production data on Frappe Cloud
+# 3. Root cause is in Frappe/ERPNext core (not our code)
 
-1. Read CLAUDE.md and docs/current_state.md to understand current project state
-2. Search the codebase for the relevant code section
-3. Check git log for recent changes that might have caused it: git log --oneline -10
-4. Run the full test suite to see if any tests catch it:
-   cd ~/frappe-bench-hamilton && source env/bin/activate && \
-   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle hamilton_erp.test_locks hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset hamilton_erp.test_additional_expert hamilton_erp.test_checklist_complete
-5. Identify root cause with specific file and line number
-6. Propose fix with minimal code change
-7. Estimate severity: Critical (data loss/corruption) / High (feature broken) / Low (cosmetic)
-8. State whether a hotfix to Frappe Cloud is needed immediately or can wait for next task
+## Step 1 — Refresh context
+git pull origin main
+Read CLAUDE.md, docs/decisions_log.md, docs/coding_standards.md
 
-Be specific. Reference file names and line numbers. Plain English explanation for Chris.
+## Step 2 — Diagnose
+Search codebase for code relevant to: $ARGUMENTS
+Check git log for recent changes: git log --oneline -10
+Run the full test suite to find which tests catch it
+
+## Step 3 — Fix autonomously
+Apply the fix. Prefer the most conservative change.
+Do not ask Chris which approach to use — pick the safer option.
+
+## Step 4 — Verify
+Run /fix-and-test. All 7 modules must be green before committing.
+
+## Step 5 — Commit and report
+git add -A && git commit -m "fix: [description]"
+git push origin main
+Tell Chris: "Bug fixed. Root cause: [explanation]. Commit: [SHA]."
+Severity: Critical / High / Low
