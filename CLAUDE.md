@@ -16,15 +16,59 @@
 - When blocked, stop and ask rather than trying workarounds that waste time
 - Surface errors early — do not try to silently fix problems that Chris should know about
 
+## Model Selection
+
+At the start of every task, suggest the appropriate model for the work. Chris pays for both and the wrong choice wastes either money (Opus on trivial tasks) or accuracy (Sonnet on hard reasoning). Do this BEFORE starting the task, so Chris can switch with `/model` before any tool calls burn budget on the wrong tier.
+
+**Use Sonnet for:**
+- Test writing (unit tests, audit tests, regression pins)
+- Security audits (SQL-injection scans, XSS checks, schema snapshots)
+- Documentation updates (CLAUDE.md, testing_checklist.md, slash commands)
+- Repetitive, well-defined, mechanical tasks
+- Running a test suite and reporting pass/fail
+- Small refactors with no design judgment (rename, extract variable)
+
+**Use Opus for:**
+- New business logic (lifecycle methods, locking, state transitions)
+- Architectural decisions (anything that touches `docs/decisions_log.md`)
+- Complex debugging where the root cause is unclear
+- Planning (multi-step features, /feature, /task-start)
+- Any task involving lifecycle / locks / state machine / concurrency
+- Code review of security- or correctness-critical paths
+- Anything where getting it wrong could corrupt data or break an invariant
+
+**What to say at task start:**
+
+If the task is Sonnet-appropriate:
+
+> "This task is Sonnet-appropriate. Type `/model` to switch if you are currently on Opus."
+
+If the task is Opus-appropriate:
+
+> "This task requires Opus reasoning. Type `/model` to switch if you are currently on Sonnet."
+
+Say it ONCE per task, at the top of the response, before the first tool call. Do not repeat it mid-task unless the task scope shifts (e.g. "add a test" becomes "and also redesign the lock helper").
+
+The slash commands in `.claude/commands/` have `# Recommended model: ...` headers — honor those when the user invokes a slash command.
+
 ## Technical environment
 
 - **Machine:** M1 Max MacBook Pro, 64GB RAM ("Chris's laptop")
 - **OS:** macOS
 - **Local bench:** `~/frappe-bench-hamilton` (Frappe v16, ERPNext v16, Python 3.14, Node 24, MariaDB 12.2.2, Redis)
-- **Test site:** `hamilton-test.localhost`
+- **Dev browser site:** `hamilton-test.localhost` — Chris's manual testing site. **NEVER run the test suite here.** Tests corrupt it (setup_wizard loops, 403s, wiped roles).
+- **Unit-test site:** `hamilton-unit-test.localhost` — dedicated Frappe test site. `allow_tests = true`. All `bench run-tests` invocations point here. Safe to wipe/reinstall.
 - **MariaDB root password:** `admin`
 - **App path:** `~/hamilton_erp` (symlinked into bench)
-- **Run tests:** `cd ~/frappe-bench-hamilton && source env/bin/activate && ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp`
+- **Run tests:** `cd ~/frappe-bench-hamilton && source env/bin/activate && ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp`
+
+### Recommended debugging tools
+
+Before writing custom debug scripts or adding `print()` statements, reach for these first. Full usage notes live in `docs/testing_checklist.md` → "Debugging Shortcuts and Workflow Tips".
+
+- **`bench console --autoreload`** — Interactive REPL with Frappe context loaded. The `--autoreload` flag re-imports any `.py` you edit, so you don't have to `exit()` and relaunch between tries. Use for: "what does this ORM query return", poking at real Redis state, inspecting a live Venue Asset row. Always point at `hamilton-unit-test.localhost` or `hamilton-test.localhost` — never production.
+- **`bench request`** — Invokes a Frappe HTTP route with full request lifecycle (auth, permission, hooks) and returns the response in your terminal. Much faster than the browser, and failures show a real stack trace. Use for: reproducing a 403/500 from the Asset Board, verifying a new whitelisted endpoint signature.
+- **`bench doctor` + `show-pending-jobs`** — **MANDATORY first debug step** on any symptom that could be "Redis is down", "the scheduler didn't run", or "a previous test left a stuck job". Run these BEFORE writing a repro, BEFORE opening a debugger, BEFORE grepping code. Or just run `/debug-env` which does this plus Redis PING + `is_setup_complete` + role check in one shot.
 
 ## Project: Hamilton ERP
 
@@ -145,19 +189,14 @@ Run this before every deploy to hamilton-erp.v.frappe.cloud:
 
 ## Testing Rules (Permanent)
 
-### Always run the full test suite
-Every test run must include ALL 7 modules — never run just one or two:
+### Always run the full test suite — on the dedicated test site only
+Every test run must include every module — never run just one or two — and **always** point at `hamilton-unit-test.localhost`. Tests on `hamilton-test.localhost` corrupt the dev browser state (setup_wizard loops, 403s, wiped roles). See `docs/testing_checklist.md` top-of-file WARNING.
+
+Use the `/run-tests` slash command — it runs all 12 modules against `hamilton-unit-test.localhost` automatically. If you must run a single module by hand:
 ```
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_locks && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_additional_expert && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_checklist_complete && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_frappe_edge_cases && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_extreme_edge_cases
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.<module>
 ```
-Or use the /run-tests slash command which does this automatically.
 
 ### When Chris asks for more code checks
 This is a permanent rule — never skip any of these steps:

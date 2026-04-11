@@ -1,3 +1,5 @@
+# Recommended model: Opus — new task implementation requires architectural judgment
+#
 # Hamilton ERP — Start Next Task
 # Usage: /task-start
 # Autonomous task kickoff. Reads current state, identifies next task, runs it.

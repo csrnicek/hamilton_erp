@@ -1,3 +1,5 @@
+# Recommended model: Opus — debugging requires deep reasoning
+#
 # Hamilton ERP — Bug Triage
 # Usage: /bug-triage [description of the problem]
 # Fully autonomous diagnosis. Fixes what it can. Only stops for STOP conditions.

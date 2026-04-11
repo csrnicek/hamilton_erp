@@ -1,7 +1,41 @@
 # Hamilton ERP — Expert Testing Checklist
+
+> ## ⚠️ WARNING — Test Site vs Dev Browser Site
+>
+> **All tests must run on `hamilton-unit-test.localhost`, NOT on
+> `hamilton-test.localhost` which is the dev browser site. Running tests on
+> the dev site causes setup_wizard loops, 403 errors, and session
+> corruption. This is a Frappe framework requirement. The dedicated test
+> site has now been created.**
+>
+> Why: Frappe's `IntegrationTestCase` teardown wipes user roles, defaults,
+> and (historically) the `tabInstalled Application.is_setup_complete` row.
+> On a site you use for browser testing, this means the next `/app`
+> request hits a loop, or the Administrator loses the Hamilton Operator
+> role, or the Asset Board silently 403s. The only safe workflow is to
+> keep the two sites separate.
+>
+> **Correct site for tests:**
+>
+> ```
+> bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.<module>
+> ```
+>
+> **Wrong site for tests (NEVER run this):**
+>
+> ```
+> bench --site hamilton-test.localhost run-tests ...   # will corrupt dev browser state
+> ```
+>
+> `/run-tests` and `/fix-and-test` already point at
+> `hamilton-unit-test.localhost`. If you find yourself typing a `bench`
+> test command by hand, stop and double-check the `--site` flag.
+
+---
+
 **Source:** Research from Redis.io, Martin Kleppmann (Designing Data-Intensive Applications),
 FSM testing literature, and project-specific gaps identified during 3-AI reviews.
-**Updated:** 2026-04-10 after Tasks 1-5
+**Updated:** 2026-04-11 after the security-audit + workflow-hardening sweep
 
 ---
 
@@ -1166,3 +1200,126 @@ fails if the delta is not exactly 1:
       — a broken matcher would silently pass otherwise. Pins the
       existing `hamilton:asset_lock:{name}` and
       `hamilton:session_seq:{prefix}` patterns.
+
+---
+
+## Debugging Shortcuts and Workflow Tips
+
+*Added 2026-04-11. Every tool in this section is already installed on
+Chris's bench — you do not need to `pip install` anything. Use these
+FIRST before writing custom debug scripts or spamming `print()`
+statements into production paths.*
+
+### `bench console --autoreload`
+
+Interactive REPL with the full Frappe context loaded (site, user,
+DocTypes, ORM, cache). The `--autoreload` flag means any `.py` file you
+edit in your editor is re-imported on the next call — no `exit()`
+and re-launch cycle.
+
+```bash
+bench --site hamilton-unit-test.localhost console --autoreload
+```
+
+**Use for:** quick "what does this ORM query return" questions, poking
+at real Redis state, inspecting a live Venue Asset row, trying out a
+new helper function without writing a test harness.
+
+**Do not use for:** anything that modifies production data on
+`hamilton-erp.v.frappe.cloud`.  Always stay pointed at the unit-test
+or local dev site.
+
+### `bench request`
+
+Invokes a Frappe HTTP route with the full request lifecycle (auth,
+permission, hooks) but returns the response in your terminal. Much
+faster than clicking through the browser, and the stack trace is
+visible on failure.
+
+```bash
+bench --site hamilton-unit-test.localhost request --method GET --path /api/method/hamilton_erp.api.get_asset_board_data
+```
+
+**Use for:** reproducing a 403 or 500 from the Asset Board without
+opening a browser, verifying a new whitelisted endpoint signature,
+profiling a slow page-load hook.
+
+### `bench run-tests --profile`
+
+Adds a `cProfile` pass over the test run. Output is the classic
+`ncalls / tottime / cumtime` table — great for spotting an accidental
+N+1 or a slow fixture.
+
+```bash
+bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_api_phase1 --profile
+```
+
+**Use for:** chasing why a test module got slower after a refactor.
+
+### `bench run-tests --junit-xml-output`
+
+Emits a JUnit-format XML file alongside the normal output. Useful for
+CI dashboards or for diffing two runs — an XML diff is much easier to
+read than a terminal log diff.
+
+```bash
+bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --junit-xml-output /tmp/hamilton.junit.xml
+```
+
+**Use for:** producing a before/after artifact when a reviewer asks
+"did this actually change the test count?"
+
+### `bench doctor` and `show-pending-jobs` — MANDATORY FIRST DEBUG STEP
+
+Before asking "why is my code broken" always ask the site first.
+`bench doctor` reports on Redis connectivity, scheduler health, and
+pending/failed background jobs; `show-pending-jobs` lists every job
+currently queued or stuck.
+
+```bash
+bench doctor
+bench --site hamilton-unit-test.localhost show-pending-jobs
+```
+
+**Use for:** any symptom that could be "Redis is down" or
+"the scheduler didn't run the after_migrate hook" or "a previous test
+left a stuck background job that's now blocking the current one".
+
+**Do this BEFORE writing a repro, BEFORE opening the debugger, BEFORE
+grepping the code.** If `bench doctor` is unhealthy, fix that first
+or the rest of your investigation is chasing ghosts.
+
+### `bench reinstall --yes` — reset a dirty test site
+
+If `hamilton-unit-test.localhost` is in a broken state after a
+crashed test run (orphaned sessions, half-applied migration, role
+spam from a failed teardown), the fastest path back to green is a
+full reinstall:
+
+```bash
+bench --site hamilton-unit-test.localhost reinstall --yes --admin-password admin
+```
+
+This drops and re-creates the site DB, reinstalls `frappe`,
+`erpnext`, and `hamilton_erp`, and runs every migration fresh. Takes
+~2 minutes. **Never run on `hamilton-test.localhost`** — that's the
+dev browser site and a reinstall would wipe whatever Chris is
+actively working on there. **Never run on Frappe Cloud.**
+
+### `--skip-test-records` and `--skip-before-tests` — quick local diagnosis
+
+```bash
+bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle --skip-test-records --skip-before-tests
+```
+
+These flags skip Frappe's auto-generated test record cascade and the
+`before_tests` hook. They cut setup time significantly and can help
+you pin down whether a failure is in your test or in the
+framework-provided fixtures.
+
+**ONLY for quick local diagnosis.** Never commit a CI config or a
+`/run-tests` command that uses these flags — the test records and
+`before_tests` hook exist for a reason, and skipping them hides bugs
+that the full run would have caught. If your test passes with
+`--skip-test-records` and fails without it, the bug is in a test
+record dependency, not in your code.

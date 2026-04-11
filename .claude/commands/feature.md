@@ -1,3 +1,5 @@
+# Recommended model: Opus — new feature work requires complex reasoning
+#
 # Hamilton ERP — Complete Feature Implementation
 # Usage: /feature [task number or feature name]
 # Fully autonomous. Implements the task end-to-end using Subagent-Driven Development.
