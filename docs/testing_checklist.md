@@ -683,3 +683,278 @@ The Python equivalent approach for our stack:
    - Asset Status Log has exactly N entries (one per transition)
 
 This is the "linearizability check" — the gold standard for distributed systems correctness.
+
+
+---
+
+## Category Q: Frappe v16 Document Lifecycle Edge Cases
+*Source: Direct analysis of frappe/frappe v16 test_document.py, test_document_locks.py*
+
+### Q1. TimestampMismatchError — concurrent save conflict
+*Source: test_document.py::test_conflict_validation*
+
+Frappe raises `TimestampMismatchError` when two instances of the same doc
+are saved concurrently. Our version field does this manually — but Frappe
+also has its own built-in conflict detection via the `modified` timestamp.
+
+```python
+def test_frappe_timestamp_conflict_on_venue_asset(self):
+    """Two instances of the same asset saved concurrently raises TimestampMismatchError.
+    This tests Frappe's own conflict detection, which runs BEFORE our version CAS.
+    """
+    asset1 = frappe.get_doc("Venue Asset", self.asset.name)
+    asset2 = frappe.get_doc("Venue Asset", self.asset.name)
+    asset1.save(ignore_permissions=True)
+    with self.assertRaises(frappe.TimestampMismatchError):
+        asset2.save(ignore_permissions=True)
+```
+
+### Q2. UpdateAfterSubmitError — immutable fields
+*Source: test_document.py::test_update_after_submit*
+
+Fields marked `allow_on_submit=0` cannot be changed after docstatus=1.
+Our `session_number` (read-only) must be tested for this.
+
+```python
+def test_session_number_cannot_be_changed_after_submit(self):
+    """session_number is read-only — changing it after submission raises UpdateAfterSubmitError."""
+    session = frappe.get_doc("Venue Session", session_name)
+    session.session_number = "FAKE-NUMBER"
+    with self.assertRaises(frappe.UpdateAfterSubmitError):
+        session.validate_update_after_submit()
+```
+
+### Q3. CharacterLengthExceededError — field length validation
+*Source: test_document.py::test_varchar_length*
+
+```python
+def test_oos_reason_length_limit(self):
+    """OOS reason field has a varchar length limit — test it is enforced."""
+    self.asset.status = "Out of Service"
+    self.asset.reason = "X" * 10000  # way over any reasonable limit
+    # Should raise CharacterLengthExceededError if field has a length defined
+    # Documents current behavior — if no limit set, this passes and we should set one
+```
+
+### Q4. XSS filter on text fields
+*Source: test_document.py::test_xss_filter*
+
+Frappe automatically strips XSS from Data fields.
+
+```python
+def test_xss_stripped_from_oos_reason(self):
+    """XSS in OOS reason field is stripped by Frappe automatically."""
+    xss = '<script>alert("XSS")</script>'
+    self.asset.status = "Out of Service"
+    self.asset.reason = f"Maintenance{xss}"
+    self.asset.save(ignore_permissions=True)
+    self.asset.reload()
+    self.assertNotIn(xss, self.asset.reason)
+    self.assertIn("Maintenance", self.asset.reason)
+```
+
+### Q5. Document lock persistence across instances
+*Source: test_document_locks.py::test_operations_on_locked_documents*
+
+Frappe has a built-in `.lock()` / `.unlock()` pattern separate from our Redis lock.
+These are pessimistic UI locks — if an operator has a form open, it's locked.
+
+```python
+def test_frappe_document_lock_prevents_lifecycle_save(self):
+    """If the Venue Asset is Frappe-locked (UI lock), lifecycle writes should still succeed
+    because they use ignore_permissions=True and bypass the UI lock check.
+    Document this behavior explicitly so it's not accidentally broken.
+    """
+```
+
+### Q6. Auto-expiry of document locks
+*Source: test_document_locks.py::test_locks_auto_expiry with freeze_time*
+
+```python
+def test_frappe_document_lock_expires_after_timeout(self):
+    """Frappe's built-in document lock expires after N days.
+    Test using freeze_time to advance the clock.
+    """
+    from frappe.utils.data import add_to_date, today
+    asset = frappe.get_doc("Venue Asset", self.asset.name)
+    asset.lock()
+    with self.freeze_time(add_to_date(today(), days=3)):
+        asset.lock()  # should succeed after expiry
+```
+
+---
+
+## Category R: Frappe v16 Naming and Sequence Edge Cases
+*Source: frappe/frappe test_naming.py, test_sequence.py — directly relevant to session_number*
+
+### R1. Sequence max_value and cycle
+*Source: test_sequence.py::test_create_sequence — SequenceGeneratorLimitExceeded*
+
+Frappe has native DB sequences. Our Redis INCR is an alternative but the
+DB sequence pattern from Frappe's own tests shows the production pattern.
+
+```python
+def test_session_number_nnnn_ceiling_raises_cleanly(self):
+    """When NNN reaches 9999 (4-digit :04d ceiling), the next call
+    must raise a clear ValidationError, not silently overflow.
+    Test: seed Redis counter at 9999, call _next_session_number,
+    assert frappe.ValidationError with clear message about daily limit.
+    (Implement after Task 11 switches to :04d format)
+    """
+```
+
+### R2. Hash collision in naming
+*Source: test_naming.py::test_hash_collision*
+
+```python
+def test_session_number_uniqueness_under_rapid_creation(self):
+    """Create 100 sessions in rapid succession on the same asset
+    (via sequential start/vacate/clean cycles). All session numbers
+    must be unique — no hash or counter collision.
+    """
+```
+
+### R3. Naming series revert on cancel
+*Source: test_naming.py::test_naming_for_cancelled_and_amended_doc*
+
+```python
+def test_session_number_not_reused_after_session_cancellation(self):
+    """If a Venue Session is somehow cancelled, its session_number
+    must NOT be reused by the next session. The counter must always
+    increment, never decrement or recycle.
+    """
+```
+
+---
+
+## Category S: Frappe v16 Permission and Security Edge Cases
+*Source: frappe/frappe test_permissions.py — permission enforcement patterns*
+
+### S1. set_only_once fields
+*Source: test_permissions.py::test_set_only_once*
+
+Fields marked `set_only_once=1` cannot be changed after insert.
+`session_number` should be set_only_once.
+
+```python
+def test_session_number_is_set_only_once(self):
+    """session_number must be set on insert and never changed.
+    Frappe's set_only_once=1 field property enforces this.
+    Test that saving with a changed session_number raises ValidationError.
+    """
+```
+
+### S2. Guest user cannot call whitelisted lifecycle methods
+*Source: test_permissions.py::test_basic_permission + test_document.py::test_permission*
+
+```python
+def test_guest_cannot_call_assign_to_session(self):
+    """Guest user cannot call whitelisted lifecycle methods.
+    frappe.set_user("Guest") then attempt lifecycle call → PermissionError.
+    (Implement after Tasks 16-20 wire whitelisted methods)
+    """
+```
+
+### S3. Standard fields cannot be set manually
+*Source: test_permissions.py::test_set_standard_fields_manually*
+
+```python
+def test_creation_field_not_manually_settable(self):
+    """Frappe's standard fields (creation, owner, modified_by) cannot be
+    manually set on Venue Asset or Venue Session — Frappe strips them.
+    Documents this behavior so it's not accidentally depended on.
+    """
+```
+
+---
+
+## Category T: ERPNext POS Patterns Applied to Hamilton
+*Source: frappe/erpnext test_pos_invoice.py — POS session and payment patterns*
+
+### T1. Partial payment and outstanding amount
+*Source: test_pos_invoice.py::test_partial_payment, test_partly_paid_invoices*
+
+```python
+def test_cash_reconciliation_with_partial_payment(self):
+    """If an admission is partially paid (e.g., room rate split across cash + card),
+    the Cash Reconciliation must track both payments separately.
+    Outstanding amount must be zero after full payment.
+    """
+```
+
+### T2. Return/refund flow
+*Source: test_pos_invoice.py::test_pos_returns_with_repayment*
+
+```python
+def test_session_cancellation_creates_credit_note(self):
+    """If a session is cancelled after payment (wrong asset assigned),
+    the system must create a credit note or reverse the payment.
+    No double-counting in cash reconciliation.
+    (Phase 2 feature — mark as FUTURE until billing is implemented)
+    """
+```
+
+### T3. Change amount calculation
+*Source: test_pos_invoice.py::test_pos_change_amount*
+
+```python
+def test_cash_change_calculated_correctly(self):
+    """If operator receives $60 for a $55 admission, change is $5.
+    Cash drop records $55 collected, $5 change given.
+    Blind reconciliation total must be $55 not $60.
+    """
+```
+
+### T4. Timestamp change detection
+*Source: test_pos_invoice.py::test_timestamp_change*
+
+```python
+def test_session_start_timestamp_not_changeable(self):
+    """session_start on Venue Session is set on insert.
+    Changing it after insert should raise ValidationError.
+    This prevents backdating sessions.
+    """
+```
+
+---
+
+## Category U: Frappe v16 Realtime and Background Job Edge Cases
+*Source: frappe test_document.py::test_realtime_notify, test_background_jobs.py*
+
+### U1. Realtime notify fires exactly once on save
+*Source: test_document.py::test_realtime_notify using Mock*
+
+```python
+def test_publish_status_change_fires_exactly_once_per_transition(self):
+    """publish_status_change must fire exactly once per lifecycle call,
+    not zero times (silent failure) and not multiple times (duplicate events).
+    Use unittest.mock.Mock() to count calls.
+    """
+    from unittest.mock import Mock, patch
+    with patch("hamilton_erp.realtime.publish_status_change") as mock_publish:
+        start_session_for_asset(self.asset.name, operator=OPERATOR)
+        mock_publish.assert_called_once()
+```
+
+### U2. Realtime does NOT fire inside the lock
+*Source: coding_standards.md §13.3 — publish_realtime must be after_commit only*
+
+```python
+def test_realtime_fires_outside_lock_not_inside(self):
+    """Verify that publish_status_change is called AFTER the lock context
+    manager exits, not inside it. This ensures realtime events don't fire
+    mid-transaction (coding_standards.md §13.3).
+    """
+```
+
+---
+
+## When to add these tests
+
+| Category | Add when | Priority |
+|---|---|---|
+| Q (Document lifecycle) | Task 10 + hardening pass | High |
+| R (Naming/sequence) | Task 11 (:04d format change) | High |
+| S (Permissions/security) | Tasks 16-20 (UI wiring) | High |
+| T (ERPNext POS patterns) | Phase 2 (billing) | Medium |
+| U (Realtime) | Task 13 (realtime implementation) | High |
