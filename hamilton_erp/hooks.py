@@ -48,6 +48,18 @@ fixtures = [
 after_install = "hamilton_erp.setup.install.after_install"
 
 # ---------------------------------------------------------------------------
+# After migrate — heal is_setup_complete for frappe + erpnext
+# ---------------------------------------------------------------------------
+# Frappe's InstalledApplications.update_versions() runs on every bench
+# migrate. On single-admin dev sites it cannot auto-heal a 0 value for
+# is_setup_complete (requires a non-Administrator System User), so dev
+# sites can silently flip into a setup_wizard redirect loop. This hook
+# force-sets is_setup_complete=1 for frappe and erpnext after every
+# migrate. Idempotent and safe on production — see docstring in install.py.
+
+after_migrate = "hamilton_erp.setup.install.ensure_setup_complete"
+
+# ---------------------------------------------------------------------------
 # Override classes — extend standard ERPNext DocType classes
 # ---------------------------------------------------------------------------
 # HamiltonSalesInvoice adds has_admission_item(), get_admission_category(),

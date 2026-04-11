@@ -30,10 +30,31 @@ def restore_dev_state():
 	``/run-tests`` slash command. Idempotent.
 	"""
 	# 1. setup_complete — unblocks the browser from the setup_wizard loop.
-	#    Frappe reads ``frappe.db.get_default("setup_complete")`` at boot,
-	#    NOT the System Settings singleton, so both must be set.
+	#    Frappe's ``is_setup_complete()`` reads from
+	#    ``tabInstalled Application.is_setup_complete`` for app_name in
+	#    ("frappe", "erpnext"). This is the authoritative source — the
+	#    ``tabDefaultValue.setup_complete`` default and
+	#    ``System Settings.setup_complete`` singleton are NOT read by
+	#    the boot flow. Setting them is cosmetic. Force-heal the real
+	#    field here, then sync System Settings for any legacy callers.
+	for app_name in ("frappe", "erpnext"):
+		if frappe.db.exists("Installed Application", {"app_name": app_name}):
+			current = frappe.db.get_value(
+				"Installed Application",
+				{"app_name": app_name},
+				"is_setup_complete",
+			)
+			if current != 1:
+				frappe.db.set_value(
+					"Installed Application",
+					{"app_name": app_name},
+					"is_setup_complete",
+					1,
+				)
 	frappe.db.set_default("setup_complete", "1")
-	frappe.db.set_single_value("System Settings", "setup_complete", 1)
+	frappe.db.set_single_value(
+		"System Settings", "setup_complete", frappe.is_setup_complete()
+	)
 
 	# 2. Hamilton Operator role on Administrator — required for the
 	#    Asset Board page and the ``get_asset_board_data`` API call.
