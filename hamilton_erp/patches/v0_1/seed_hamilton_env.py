@@ -3,7 +3,9 @@ and the Hamilton Settings singleton on any fresh install.
 
 DEC-054 §1 (asset counts) + DEC-055 §1 (Walk-in) + DEC-055 §3 (settings).
 
-Idempotent: re-running is a no-op when all three seeds already exist.
+Idempotent: each seed is guarded per-row (per asset_code for Venue
+Assets, per-name for Walk-in Customer, per-field for Hamilton Settings),
+so re-running is safe even over partial seed state.
 Registered in patches.txt under [post_model_sync].
 """
 import frappe
@@ -63,13 +65,14 @@ def _ensure_venue_assets():
 	  R024-R026 Double Deluxe    (3)
 	  L001-L033 Lockers          (33)
 
-	Idempotent guard: if any Venue Asset exists already, skip entirely.
-	This matches the all-or-nothing spirit of the initial install; partial
-	re-seeding would risk duplicate asset_code errors against the unique
-	index without telling us which asset changed.
+	Idempotent guard (Task 11 code review, I2): per-asset `exists()` check
+	inside the loop. The previous binary guard
+	(`if frappe.db.count("Venue Asset") > 0: return`) was unsafe — a crash
+	mid-seed would leave a permanently half-seeded DB with no recovery path
+	via `bench migrate`, and any Venue Asset fixture from another test
+	class would silently no-op this patch's `execute()` call. Skipping
+	per asset_code makes this safe to call over partial seed state.
 	"""
-	if frappe.db.count("Venue Asset") > 0:
-		return
 	company = frappe.defaults.get_global_default("company")
 	if not company:
 		frappe.logger().warning(
@@ -89,6 +92,8 @@ def _ensure_venue_assets():
 	for code_prefix, count, category, tier, name_prefix, code_start, display_start in plan:
 		for i in range(count):
 			asset_code = f"{code_prefix}{code_start + i:03d}"
+			if frappe.db.exists("Venue Asset", {"asset_code": asset_code}):
+				continue
 			asset_name = f"{name_prefix} {i + 1}"
 			frappe.get_doc({
 				"doctype": "Venue Asset",

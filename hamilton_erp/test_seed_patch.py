@@ -108,9 +108,23 @@ class TestSeedPatch(IntegrationTestCase):
 			self.assertEqual(tiers[f"L{i:03d}"], "Locker")
 
 	def test_seed_is_idempotent(self):
-		"""Running the seed patch twice must not duplicate any rows."""
+		"""Running the seed patch twice must leave every expected asset_code
+		present exactly once.
+
+		Strengthened per Task 11 code review I2: the previous assertion
+		(count1 == count2) trivially passed because the old binary
+		idempotency guard made the second execute() a no-op. With the
+		per-asset exists() guard, execute() now does real work on each
+		call — assert that each of the 59 expected asset_codes appears
+		exactly once after two runs so a regression in the per-row guard
+		surfaces as a duplicate.
+		"""
 		seed_hamilton_env.execute()
-		count1 = frappe.db.count("Venue Asset")
 		seed_hamilton_env.execute()
-		count2 = frappe.db.count("Venue Asset")
-		self.assertEqual(count1, count2)
+		expected_codes = (
+			[f"R{i:03d}" for i in range(1, 27)]
+			+ [f"L{i:03d}" for i in range(1, 34)]
+		)
+		for code in expected_codes:
+			count = frappe.db.count("Venue Asset", {"asset_code": code})
+			self.assertEqual(count, 1, f"{code} should exist exactly once")

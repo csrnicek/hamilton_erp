@@ -137,25 +137,36 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	Retry contract (Task 11(c)): the DB has a UNIQUE constraint on
 	`session_number`. If a Redis hiccup or cold-start race ever produces a
 	duplicate, the INSERT raises UniqueValidationError (field-level unique
-	violation, raised by frappe.model.base_document.show_unique_validation_message)
-	or DuplicateEntryError (primary-key collision on Venue Session.name).
-	We catch both, retry up to 3 times, rebuilding a fresh doc dict each
+	violation, raised by frappe.model.base_document.show_unique_validation_message).
+	We catch it, retry up to 3 times, rebuilding a fresh doc dict each
 	attempt so `before_insert` re-runs and calls `_next_session_number()`
 	again — which hits Redis INCR and yields a fresh value. On the 3rd
 	failure we raise ValidationError with a user-friendly message. The
 	warning log is acceptable inside the lock body (stdlib logging, no
 	network I/O).
+
+	Exception-handling scope (Task 11 code review, I3): only
+	frappe.UniqueValidationError is caught — it is the sole real trigger
+	here because `venue_session.json` uses `"autoname": "hash"`, and
+	frappe.model.base_document._handle_hash_conflict retries `name` hash
+	collisions INTERNALLY. DuplicateEntryError was considered and rejected:
+	it cannot reach this call site under `autoname: hash`, so catching it
+	would be speculative error handling per coding_standards.md. Do not
+	re-add it without first changing autoname away from hash.
+
+	msgprint hygiene (Task 11 code review, I1): Frappe's
+	base_document.show_unique_validation_message appends a
+	`_("{0} must be unique")` toast to `frappe.local.message_log` BEFORE
+	raising UniqueValidationError. Without intervention, a successful
+	retry would still ship that stale toast to the client alongside the
+	success response — the operator would see a confusing
+	"Session Number must be unique" warning for an assignment that
+	actually succeeded. We snapshot `message_log` at the top of each
+	iteration and restore it on the caught exception so the failed
+	attempt's toast is discarded.
 	"""
-	# The two exception types Frappe raises for duplicate inserts:
-	#   - UniqueValidationError: field-level unique index violation (our case
-	#     for session_number). Subclass of ValidationError.
-	#   - DuplicateEntryError: primary-key collision on the `name` column.
-	#     Subclass of NameError, NOT ValidationError.
-	dup_errors = (
-		frappe.exceptions.UniqueValidationError,
-		frappe.exceptions.DuplicateEntryError,
-	)
 	for attempt in range(1, 4):
+		msg_log_snapshot = list(getattr(frappe.local, "message_log", []) or [])
 		try:
 			session = frappe.get_doc({
 				"doctype": "Venue Session",
@@ -167,24 +178,23 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 				"assignment_status": "Assigned",
 			}).insert(ignore_permissions=True)
 			return session.name
-		except dup_errors:
+		except frappe.UniqueValidationError:
+			# Discard the "must be unique" toast left by the failed attempt —
+			# otherwise a successful retry ships it to the client alongside
+			# the success response (operators would see a confusing toast
+			# for an assignment that actually succeeded).
+			frappe.local.message_log = msg_log_snapshot
 			frappe.logger().warning(
-				f"_create_session: duplicate session_number on attempt {attempt} "
-				f"for asset {asset_name} — retrying with fresh session_number."
+				f"_create_session: collision on attempt {attempt} for asset "
+				f"{asset_name} — retrying with fresh session_number."
 			)
-			if attempt == 3:
-				# raise ... from None so the retry wrapper's message surfaces
-				# cleanly instead of being buried by the underlying
-				# UniqueValidationError's args tuple.
-				raise frappe.ValidationError(
-					_("Session number collision — please try again.")
-				) from None
-			# Fall through: next iteration builds a fresh doc dict, so
-			# VenueSession.before_insert runs again and re-calls
-			# _next_session_number() which INCRs Redis for a fresh value.
 			continue
-	# Unreachable — the loop either returns or raises on attempt 3.
-	raise frappe.ValidationError(_("Session number collision — please try again."))
+	# All 3 attempts exhausted — surface a user-friendly message. `from None`
+	# so the retry wrapper's message is not buried by the underlying
+	# UniqueValidationError's args tuple.
+	raise frappe.ValidationError(
+		_("Session number collision — please try again.")
+	) from None
 
 
 def _set_asset_status(
