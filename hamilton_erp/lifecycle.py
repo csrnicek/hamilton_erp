@@ -130,9 +130,9 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "
 def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	"""Insert a Venue Session row for a freshly-assigned asset. Caller holds the asset lock.
 
-	NOTE: session_number is intentionally unset — Task 9 wires the Redis INCR
-	generator. identity_method defaults to 'not_applicable' via the controller's
-	_set_defaults hook.
+	NOTE: session_number is intentionally unset here — Task 10 wires
+	_next_session_number() into this function. identity_method defaults to
+	'not_applicable' via the controller's _set_defaults hook.
 	"""
 	session = frappe.get_doc({
 		"doctype": "Venue Session",
@@ -489,25 +489,42 @@ def _next_session_number() -> str:
 	prefix = f"{d}-{m}-{y}"
 	key = f"hamilton:session_seq:{prefix}"
 	cache = frappe.cache()
+	# Fail-closed on Redis errors — matches locks.py LockContentionError pattern.
+	# A transient Redis fault becomes a user-friendly ValidationError rather than
+	# a bare redis.ConnectionError stack trace surfacing to the operator.
 	# Raw .get() — no make_key() prefix, matches locks.py's raw usage.
 	# A missing key returns None; we cannot use cache.exists() here because
 	# it prefixes via make_key() and would not match our raw .set() path.
-	if cache.get(key) is None:
-		db_max = _db_max_seq_for_prefix(prefix)
-		# nx=True so only the first cold-start caller seeds the key; later
-		# callers in a tight race no-op the SET and proceed to INCR.
-		# px=TTL garbage-collects stale keys (NOT for sequence expiry).
-		cache.set(key, db_max, nx=True, px=_SESSION_KEY_TTL_MS)
-		# TODO(task-11): if this SET silently fails (e.g., Redis connection
-		# blip between the get() above and this set()), the INCR below will
-		# auto-create the key at 1, yielding "---001" and colliding with any
-		# persisted rows. Task 11 wires in the DB uniqueness constraint on
-		# session_number, so an INSERT collision surfaces as DuplicateEntryError;
-		# the assignment caller should catch that and retry _next_session_number.
-		# Document the retry contract in Task 11's start_session_for_asset path.
-	# INCR is atomic — produces consecutive values even under concurrency.
-	# redis-py returns int; cast defensively in case the wrapper ever changes.
-	seq = int(cache.incr(key))
+	try:
+		if cache.get(key) is None:
+			# DB call kept INSIDE the try: the broad except below will wrap
+			# a DB failure in the same user-friendly message. That's a minor
+			# diagnostic loss (DB errors masquerade as "session service
+			# unavailable"), but acceptable — a failing SELECT here means
+			# the subsequent Venue Session INSERT would fail anyway, and
+			# the real error surfaces from that call's stack trace.
+			db_max = _db_max_seq_for_prefix(prefix)
+			# nx=True so only the first cold-start caller seeds the key; later
+			# callers in a tight race no-op the SET and proceed to INCR.
+			# px=TTL garbage-collects stale keys (NOT for sequence expiry).
+			cache.set(key, db_max, nx=True, px=_SESSION_KEY_TTL_MS)
+			# TODO(task-11): if this SET silently fails (e.g., Redis connection
+			# blip between the get() above and this set()), the INCR below will
+			# auto-create the key at 1, yielding "---001" and colliding with any
+			# persisted rows. Task 11 wires in the DB uniqueness constraint on
+			# session_number, so an INSERT collision surfaces as DuplicateEntryError;
+			# the assignment caller should catch that and retry _next_session_number.
+			# Document the retry contract in Task 11's start_session_for_asset path.
+		# INCR is atomic — produces consecutive values even under concurrency.
+		# redis-py returns int; cast defensively in case the wrapper ever changes.
+		seq = int(cache.incr(key))
+	except Exception as exc:
+		frappe.logger().warning(
+			f"_next_session_number: Redis failure for {key}: {exc}"
+		)
+		raise frappe.ValidationError(
+			_("Session number service temporarily unavailable. Please try again.")
+		)
 	return f"{prefix}---{seq:03d}"
 
 
@@ -533,20 +550,29 @@ def _db_max_seq_for_prefix(prefix: str) -> int:
 	)
 	if not row:
 		return 0
-	tail = row[0]["session_number"].rsplit("---", 1)[-1]
+	raw_session_number = row[0]["session_number"]
+	tail = raw_session_number.rsplit("---", 1)[-1]
 	try:
 		return int(tail)
 	except ValueError:
 		# Defensive: if somehow a malformed session_number sneaks through,
 		# fall back to 0 rather than crash the assignment flow. The INCR
-		# path will then start at 1, which may collide with existing rows,
-		# but a DB uniqueness constraint (Task 11's seed/backfill scope)
-		# catches that downstream. Logging here would require import churn
-		# and is deferred to Task 11.
-		# TODO(task-11): add frappe.log_error(...) here so a malformed
-		# session_number in production isn't silently swallowed. Also audit
-		# for NNN > 999 — DEC-033 assumes daily count stays well under the
-		# 3-digit ceiling, but once a "---1000" row exists, lexicographic
-		# "---1000" < "---999" breaks the ORDER BY invariant above; Task 11
-		# should either enforce the 999 ceiling or widen zero-padding.
+		# path will then start at 1, which may collide with existing rows;
+		# Task 11 adds a DB uniqueness constraint on session_number so that
+		# collision surfaces as DuplicateEntryError the caller can retry.
+		#
+		# Log via frappe.log_error so production operators can see the bad
+		# row in the Error Log doctype — silent fallback would otherwise
+		# mask a data-integrity issue indefinitely.
+		frappe.log_error(
+			message=(
+				f"_db_max_seq_for_prefix: malformed session_number "
+				f"{raw_session_number!r} for prefix {prefix!r} — trailing "
+				f"segment {tail!r} did not parse as int. Falling back to 0."
+			),
+			title="Malformed session_number in DB",
+		)
+		# TODO(task-11): once the :04d format change lands, the NNN>999
+		# lexicographic sort bug is gone permanently; remove this TODO when
+		# Task 11's format migration is complete.
 		return 0

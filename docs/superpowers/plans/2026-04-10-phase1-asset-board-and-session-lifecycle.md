@@ -1571,8 +1571,21 @@ For a single test: append `--test <TestClass>.<test_name>`.
 - Create: `hamilton_erp/hamilton_erp/patches/v0_1/seed_hamilton_env.py`
 - Modify: `hamilton_erp/hamilton_erp/patches.txt`
 - Create: `hamilton_erp/hamilton_erp/test_seed_patch.py`
+- Modify: `hamilton_erp/hamilton_erp/lifecycle.py` (session_number format: `:03d` → `:04d`)
+- Modify: `hamilton_erp/hamilton_erp/hamilton_erp/doctype/venue_session/venue_session.json` (unique constraint on `session_number`)
+- Modify: `hamilton_erp/hamilton_erp/test_lifecycle.py` (update format assertions to 4-digit sequence)
 
 **Design reference:** `docs/phase1_design.md` §5.8. Idempotent. Creates Walk-in Customer + Hamilton Settings defaults + all 59 assets.
+
+**Additional Task 11 requirements (from Task 9 3-AI review, 2026-04-10):**
+
+a. **Switch `_next_session_number()` zero-pad from `:03d` to `:04d`.** Also update `len(seq)` / `{seq:03d}` references in `test_lifecycle.py::TestSessionNumberGenerator` (`test_format_matches_dec_033` asserts `len(seq) == 3` — change to `4`). Eliminates the NNN>999 lexicographic sort bug permanently: with 4-digit padding, `ORDER BY session_number DESC` stays correct up to 9999 sessions/day, well beyond Club Hamilton's operational ceiling. DEC-033 must be amended to note the width change.
+
+b. **Add DB uniqueness constraint on `Venue Session.session_number`** in `venue_session.json` (`"unique": 1`). This is the load-bearing guard for the `_next_session_number()` Redis-blip race: if the SET between `get()` and `incr()` silently fails and INCR auto-creates the key at 1, the resulting `---0001` INSERT collides with the persisted row and raises `frappe.exceptions.DuplicateEntryError`, which the caller can catch and retry. Without the unique constraint, the collision would silently persist duplicate session numbers.
+
+c. **Add bounded retry on `DuplicateEntryError` in `_create_session()`** (3 attempts max). If `frappe.get_doc(...).insert()` raises `frappe.exceptions.DuplicateEntryError` on the `session_number` field, call `_next_session_number()` again and retry. After 3 failures, raise `frappe.ValidationError("Session number collision — please try again.")`. Log each retry via `frappe.logger().warning` so production can spot a pathological Redis flap. Test: monkeypatch `_next_session_number` to return a colliding value twice then a fresh value, assert the third attempt succeeds.
+
+Removing the Task 9 `TODO(task-11)` markers in `lifecycle.py` (lines ~500 and ~548) is part of this task's cleanup.
 
 - [ ] **Step 1: Write the failing test**
 
