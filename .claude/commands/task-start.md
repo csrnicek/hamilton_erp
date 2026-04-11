@@ -1,7 +1,13 @@
-# Start a new Phase 1 task
-# Usage: /task-start [task-number]
-# Reads the task from the implementation plan and dispatches the first subagent.
+# Hamilton ERP — Start Next Task
+# Usage: /task-start
+# Autonomous task kickoff. Reads current state, identifies next task, runs it.
+# Never asks Chris which task is next — reads it from CLAUDE.md and the plan.
 
-Read the task details from docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md for Task $ARGUMENTS.
-Then dispatch the implementer subagent using the Subagent-Driven Development workflow.
-Before dispatching, flag any gaps or issues you notice in the task spec.
+## Step 1 — Refresh
+git pull origin main
+Read CLAUDE.md to find current task number.
+Read the plan doc to find the next unchecked task.
+
+## Step 2 — Run /feature [next task number]
+Dispatch the full feature workflow autonomously.
+No confirmation needed from Chris.
