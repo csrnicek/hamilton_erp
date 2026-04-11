@@ -131,3 +131,67 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	frappe.has_permission("Venue Asset", "write", throw=True)
 	# Phase 2 not yet built. This endpoint must not be exposed in any UI until Phase 2 ships.
 	frappe.throw(_("This feature is not yet available. Please contact your manager."))
+
+
+# ---------------------------------------------------------------------------
+# Bulk cleaning (Phase 1, DEC-054)
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_all_clean_rooms() -> dict:
+	"""Bulk-transition every Dirty room to Available.
+
+	Used by the Asset Board's "Mark All Rooms Clean" bulk action after a
+	rush hour reset. Per-asset errors are captured and returned, not raised,
+	so one stuck row can't block a cleanup of 20 others.
+	"""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	return _mark_all_clean(category="Room")
+
+
+@frappe.whitelist(methods=["POST"])
+def mark_all_clean_lockers() -> dict:
+	"""Bulk-transition every Dirty locker to Available. See rooms variant."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	return _mark_all_clean(category="Locker")
+
+
+def _mark_all_clean(category: str) -> dict:
+	"""Loop over all Dirty assets of the given category, cleaning each one.
+
+	Sorted by `name` to establish a deterministic lock ordering across the
+	loop (coding_standards.md §13.4) — concurrent invocations of the two
+	bulk endpoints take locks in the same order every time, so they cannot
+	deadlock against each other.
+
+	Per-asset failures are recorded in the `failed` list and reported to
+	the caller; the loop does not abort. A single `hamilton_asset_board_refresh`
+	realtime event is fired once the loop completes so the Asset Board
+	pulls the canonical state in one request instead of re-rendering each
+	tile individually (DEC-054).
+	"""
+	from hamilton_erp.lifecycle import mark_asset_clean
+	from hamilton_erp.realtime import publish_board_refresh
+
+	dirty = frappe.get_all(
+		"Venue Asset",
+		filters={"status": "Dirty", "asset_category": category, "is_active": 1},
+		fields=["name", "asset_code", "asset_name"],
+		order_by="name asc",
+	)
+	succeeded: list[str] = []
+	failed: list[dict] = []
+	reason = f"Bulk Mark Clean — {category} reset"
+	for asset in dirty:
+		try:
+			mark_asset_clean(
+				asset["name"],
+				operator=frappe.session.user,
+				bulk_reason=reason,
+			)
+			succeeded.append(asset["asset_code"])
+		except Exception as e:
+			failed.append({"code": asset["asset_code"], "error": str(e)})
+	publish_board_refresh("bulk_clean", len(succeeded))
+	return {"succeeded": succeeded, "failed": failed}

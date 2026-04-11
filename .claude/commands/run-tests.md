@@ -1,6 +1,6 @@
 # Run Hamilton ERP FULL test suite
 # Usage: /run-tests
-# 220 passing, 6 skipped as of Task 14. All 9 modules run every time.
+# 222 passing, 6 skipped as of Task 15. All 9 modules run every time.
 # For autonomous fixing of failures use /fix-and-test instead.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
