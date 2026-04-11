@@ -326,16 +326,19 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 		after = frappe.db.count("Venue Session", {"venue_asset": self.asset.name})
 		self.assertEqual(after - before, 1)
 
-	@unittest.skip("Task 9 — session_number not yet implemented")
 	def test_session_number_format_matches_dec033(self):
-		"""Item 36 — session_number format: {d}-{m}-{y}---{NNN}."""
+		"""Item 36 — session_number format: {d}-{m}-{y}---{NNN}.
+
+		Un-skipped as of Task 10: the before_insert hook now auto-populates
+		session_number via lifecycle._next_session_number() on every
+		Venue Session insert.
+		"""
 		import re
 		session_name = start_session_for_asset(self.asset.name, operator=OPERATOR)
 		session = frappe.get_doc("Venue Session", session_name)
 		pattern = r"^\d{1,2}-\d{1,2}-\d{4}---\d{3}$"
 		self.assertRegex(session.session_number, pattern)
 
-	@unittest.skip("Task 9 — session_number not yet implemented")
 	def test_session_numbers_unique_on_same_day(self):
 		"""Item 37 — two sessions on same day get different numbers."""
 		asset2 = _make_asset("CK Session Room 2")
@@ -347,10 +350,18 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 		sess2 = frappe.get_doc("Venue Session", s2)
 		self.assertNotEqual(sess1.session_number, sess2.session_number)
 
-	@unittest.skip("Task 9 — session_number not yet implemented")
+	@unittest.skip("Needs date mocking — deferred to Task 13")
 	def test_session_counter_resets_on_new_day(self):
-		"""Item 38 — session counter resets to 001 on a new day."""
-		pass  # Requires date mocking — implement in Task 9
+		"""Item 38 — session counter resets to 001 on a new day.
+
+		Task 9 + Task 10 landed the generator and auto-population, but
+		this test needs date mocking (via freezegun or unittest.mock.patch
+		on frappe.utils.nowdate) to simulate a date change mid-test. The
+		test body is currently a no-op; the skip marker keeps it visible
+		in the test run without failing. Deferred to Task 13 per the
+		3-AI review follow-up.
+		"""
+		pass  # Requires date mocking — deferred to Task 13
 
 	def test_walkin_customer_default_on_session(self):
 		"""Item 39 — Walk-in customer default set correctly on session."""
