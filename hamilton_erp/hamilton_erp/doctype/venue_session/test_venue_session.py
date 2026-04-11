@@ -96,12 +96,11 @@ class TestVenueSession(IntegrationTestCase):
 			"Expected session_number to be auto-populated by before_insert",
 		)
 		# DEC-033 format: one or more digits for d, m, y, then '---', then
-		# exactly 3 digits for the sequence. Day/month are NOT zero-padded.
-		# TODO(task-11): widen the sequence group from {3} to {4} once Task 11
-		# switches the format to :04d per the Task 9 3-AI review.
+		# exactly 4 digits for the sequence. Day/month are NOT zero-padded.
+		# Task 11 (2026-04-10) widened the sequence from 3 to 4 digits.
 		self.assertRegex(
 			session.session_number,
-			r"^\d+-\d+-\d+---\d{3}$",
+			r"^\d+-\d+-\d+---\d{4}$",
 			f"session_number {session.session_number!r} does not match DEC-033 format",
 		)
 

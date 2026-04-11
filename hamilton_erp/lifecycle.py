@@ -133,17 +133,58 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	NOTE: session_number is NOT set here — VenueSession.before_insert
 	auto-populates it via lifecycle._next_session_number(). identity_method
 	defaults to 'not_applicable' via the controller's _set_defaults hook.
+
+	Retry contract (Task 11(c)): the DB has a UNIQUE constraint on
+	`session_number`. If a Redis hiccup or cold-start race ever produces a
+	duplicate, the INSERT raises UniqueValidationError (field-level unique
+	violation, raised by frappe.model.base_document.show_unique_validation_message)
+	or DuplicateEntryError (primary-key collision on Venue Session.name).
+	We catch both, retry up to 3 times, rebuilding a fresh doc dict each
+	attempt so `before_insert` re-runs and calls `_next_session_number()`
+	again — which hits Redis INCR and yields a fresh value. On the 3rd
+	failure we raise ValidationError with a user-friendly message. The
+	warning log is acceptable inside the lock body (stdlib logging, no
+	network I/O).
 	"""
-	session = frappe.get_doc({
-		"doctype": "Venue Session",
-		"venue_asset": asset_name,
-		"operator_checkin": operator,
-		"customer": customer,
-		"session_start": frappe.utils.now_datetime(),
-		"status": "Active",
-		"assignment_status": "Assigned",
-	}).insert(ignore_permissions=True)
-	return session.name
+	# The two exception types Frappe raises for duplicate inserts:
+	#   - UniqueValidationError: field-level unique index violation (our case
+	#     for session_number). Subclass of ValidationError.
+	#   - DuplicateEntryError: primary-key collision on the `name` column.
+	#     Subclass of NameError, NOT ValidationError.
+	dup_errors = (
+		frappe.exceptions.UniqueValidationError,
+		frappe.exceptions.DuplicateEntryError,
+	)
+	for attempt in range(1, 4):
+		try:
+			session = frappe.get_doc({
+				"doctype": "Venue Session",
+				"venue_asset": asset_name,
+				"operator_checkin": operator,
+				"customer": customer,
+				"session_start": frappe.utils.now_datetime(),
+				"status": "Active",
+				"assignment_status": "Assigned",
+			}).insert(ignore_permissions=True)
+			return session.name
+		except dup_errors:
+			frappe.logger().warning(
+				f"_create_session: duplicate session_number on attempt {attempt} "
+				f"for asset {asset_name} — retrying with fresh session_number."
+			)
+			if attempt == 3:
+				# raise ... from None so the retry wrapper's message surfaces
+				# cleanly instead of being buried by the underlying
+				# UniqueValidationError's args tuple.
+				raise frappe.ValidationError(
+					_("Session number collision — please try again.")
+				) from None
+			# Fall through: next iteration builds a fresh doc dict, so
+			# VenueSession.before_insert runs again and re-calls
+			# _next_session_number() which INCRs Redis for a fresh value.
+			continue
+	# Unreachable — the loop either returns or raises on attempt 3.
+	raise frappe.ValidationError(_("Session number collision — please try again."))
 
 
 def _set_asset_status(
@@ -446,11 +487,13 @@ def return_asset_to_service(asset_name: str, *, operator: str, reason: str) -> N
 # Session number generator (DEC-033 + Q9) — Task 9
 # ---------------------------------------------------------------------------
 #
-# Returns strings in the form `{d}-{m}-{y}---{NNN}`, e.g. "9-4-2026---001".
+# Returns strings in the form `{d}-{m}-{y}---{NNNN}`, e.g. "9-4-2026---0001".
 # Day and month are NOT zero-padded (per DEC-033); the trailing sequence IS
-# zero-padded to 3 digits. The daily sequence is scoped by KEY NAME — the
-# Redis key's prefix changes at midnight, so a new day starts fresh without
-# relying on TTL-based expiry. The 48h TTL is just garbage collection.
+# zero-padded to 4 digits (widened from 3 on 2026-04-10, Task 11, to eliminate
+# the lexicographic>999 sort risk in _db_max_seq_for_prefix). The daily
+# sequence is scoped by KEY NAME — the Redis key's prefix changes at midnight,
+# so a new day starts fresh without relying on TTL-based expiry. The 48h TTL
+# is just garbage collection.
 #
 # Race-safety notes:
 #   - INCR is atomic, so two concurrent callers at steady state always get
@@ -472,8 +515,9 @@ _SESSION_KEY_TTL_MS = 48 * 60 * 60 * 1000  # 48 hours
 def _next_session_number() -> str:
 	"""Return the next session number for today in DEC-033 format.
 
-	Format: `{d}-{m}-{y}---{NNN}`, e.g. "9-4-2026---001". Day/month are NOT
-	zero-padded; the trailing sequence IS zero-padded to 3 digits.
+	Format: `{d}-{m}-{y}---{NNNN}`, e.g. "9-4-2026---0001". Day/month are NOT
+	zero-padded; the trailing sequence IS zero-padded to 4 digits (widened
+	from 3 on 2026-04-10, Task 11, per the Task 9 3-AI review).
 
 	Sequence is reset by KEY NAME (the date-based prefix changes at midnight),
 	not by TTL — the 48h TTL is just garbage collection so stale keys evaporate.
@@ -508,13 +552,6 @@ def _next_session_number() -> str:
 			# callers in a tight race no-op the SET and proceed to INCR.
 			# px=TTL garbage-collects stale keys (NOT for sequence expiry).
 			cache.set(key, db_max, nx=True, px=_SESSION_KEY_TTL_MS)
-			# TODO(task-11): if this SET silently fails (e.g., Redis connection
-			# blip between the get() above and this set()), the INCR below will
-			# auto-create the key at 1, yielding "---001" and colliding with any
-			# persisted rows. Task 11 wires in the DB uniqueness constraint on
-			# session_number, so an INSERT collision surfaces as DuplicateEntryError;
-			# the assignment caller should catch that and retry _next_session_number.
-			# Document the retry contract in Task 11's start_session_for_asset path.
 		# INCR is atomic — produces consecutive values even under concurrency.
 		# redis-py returns int; cast defensively in case the wrapper ever changes.
 		seq = int(cache.incr(key))
@@ -525,21 +562,21 @@ def _next_session_number() -> str:
 		raise frappe.ValidationError(
 			_("Session number service temporarily unavailable. Please try again.")
 		)
-	return f"{prefix}---{seq:03d}"
+	return f"{prefix}---{seq:04d}"
 
 
 def _db_max_seq_for_prefix(prefix: str) -> int:
 	"""Return the highest trailing NNN for today's prefix in `tabVenue Session`.
 
 	Used as a cold-Redis fallback so a mid-day Redis flush cannot restart the
-	daily sequence at 001 and collide with already-persisted rows. Returns 0
+	daily sequence at 0001 and collide with already-persisted rows. Returns 0
 	when no rows exist for today's prefix — the subsequent INCR then yields 1,
-	which formats as "001" and matches the first-call-of-the-day invariant.
+	which formats as "0001" and matches the first-call-of-the-day invariant.
 
-	The ORDER BY is lexicographic, but because the trailing NNN is always
-	zero-padded to 3 digits, lexicographic ordering matches numeric ordering
-	for sequences 000–999. DEC-033 caps daily sessions well under that ceiling,
-	so no additional numeric sort is needed.
+	The ORDER BY is lexicographic, but because the trailing NNNN is always
+	zero-padded to 4 digits, lexicographic ordering matches numeric ordering
+	for sequences 0000–9999. DEC-033 caps daily sessions well under that
+	ceiling, so no additional numeric sort is needed.
 	"""
 	row = frappe.db.sql(
 		"SELECT session_number FROM `tabVenue Session` "
@@ -572,7 +609,4 @@ def _db_max_seq_for_prefix(prefix: str) -> int:
 			),
 			title="Malformed session_number in DB",
 		)
-		# TODO(task-11): once the :04d format change lands, the NNN>999
-		# lexicographic sort bug is gone permanently; remove this TODO when
-		# Task 11's format migration is complete.
 		return 0

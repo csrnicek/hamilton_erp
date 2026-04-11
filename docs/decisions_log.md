@@ -152,9 +152,10 @@ Analysis is powered by the existing Asset Status Log — every transition is alr
 ## DEC-033 — Session Number Format: {day}-{month}-{year}---{sequence}
 
 **Date:** 2026-04-09
-**Context:** Staff need a short human-readable reference to look up specific sessions (e.g. "pull up session 9-4-2026---042") rather than long ERPNext document IDs.
-**Decision:** Add `session_number` (Data, read-only, auto-generated) to Venue Session. Format: `{day}-{month}-{year}---{sequence}` with three dashes separating the date from the sequence. Example: `9-4-2026---001`. Sequence resets to 001 at midnight each day and increments continuously within the day. The sequence portion is displayed in bold in the UI — the stored value is plain text; bold formatting is applied by the frontend (asset board, receipts) on the digits after the `---`.
+**Context:** Staff need a short human-readable reference to look up specific sessions (e.g. "pull up session 9-4-2026---0042") rather than long ERPNext document IDs.
+**Decision:** Add `session_number` (Data, read-only, auto-generated) to Venue Session. Format: `{day}-{month}-{year}---{sequence}` with three dashes separating the date from the sequence. Example: `9-4-2026---0001`. Sequence resets to 0001 at midnight each day and increments continuously within the day. The sequence portion is displayed in bold in the UI — the stored value is plain text; bold formatting is applied by the frontend (asset board, receipts) on the digits after the `---`.
 **Rationale:** Staff reference sessions by number during shifts and investigations. Daily reset keeps numbers short and human-readable. Three-dash separator makes the sequence visually distinct.
+**Addendum (2026-04-10, Task 11):** The trailing sequence was widened from 3 to 4 digits (`:03d` → `:04d`). The cold-Redis DB fallback uses a lexicographic `ORDER BY session_number DESC` that only matches numeric ordering while all sequences share the same width; with 3 digits, a hypothetical `---1000` row would have sorted before `---999` and broken the fallback. 4 digits raises the ceiling to 9999/day — well above any realistic single-day volume at Club Hamilton — and eliminates the sort bug permanently.
 
 ## DEC-034 — Do Not Duplicate Financial Amounts on Venue Session
 

@@ -542,29 +542,29 @@ class TestSessionNumberGenerator(IntegrationTestCase):
 		frappe.db.rollback()
 		frappe.cache().delete(self._key)
 
-	def test_first_call_returns_001(self):
+	def test_first_call_returns_0001(self):
 		n = lifecycle._next_session_number()
 		self.assertTrue(
-			n.endswith("---001"),
-			f"Expected first call to end with ---001, got {n}",
+			n.endswith("---0001"),
+			f"Expected first call to end with ---0001, got {n}",
 		)
 
-	def test_second_call_returns_002(self):
+	def test_second_call_returns_0002(self):
 		lifecycle._next_session_number()
 		n2 = lifecycle._next_session_number()
 		self.assertTrue(
-			n2.endswith("---002"),
-			f"Expected second call to end with ---002, got {n2}",
+			n2.endswith("---0002"),
+			f"Expected second call to end with ---0002, got {n2}",
 		)
 
 	def test_format_matches_dec_033(self):
-		"""DEC-033: {d}-{m}-{y}---{NNN}. Day/month NOT zero-padded; sequence IS."""
+		"""DEC-033: {d}-{m}-{y}---{NNNN}. Day/month NOT zero-padded; sequence IS."""
 		n = lifecycle._next_session_number()
 		prefix, seq = n.split("---")
 		parts = prefix.split("-")
 		self.assertEqual(len(parts), 3, f"Prefix should be d-m-y, got {prefix}")
-		# Sequence is always 3 digits, zero-padded.
-		self.assertEqual(len(seq), 3, f"Sequence should be 3 digits, got {seq}")
+		# Sequence is always 4 digits, zero-padded (Task 11: widened from 3).
+		self.assertEqual(len(seq), 4, f"Sequence should be 4 digits, got {seq}")
 		self.assertTrue(seq.isdigit(), f"Sequence should be numeric, got {seq}")
 		# Prefix matches today's computed prefix (guards against off-by-one
 		# timezone or formatting regressions).
@@ -594,7 +594,7 @@ class TestSessionNumberGenerator(IntegrationTestCase):
 		frappe.get_doc({
 			"doctype": "Venue Session",
 			"venue_asset": asset.name,
-			"session_number": f"{self._prefix}---005",
+			"session_number": f"{self._prefix}---0005",
 			"status": "Active",
 			"session_start": frappe.utils.now_datetime(),
 			"operator_checkin": "Administrator",
@@ -605,6 +605,117 @@ class TestSessionNumberGenerator(IntegrationTestCase):
 		n = lifecycle._next_session_number()
 		self.assertEqual(
 			n,
-			f"{self._prefix}---006",
-			f"Expected cold-Redis fallback to resume at db_max+1=006, got {n}",
+			f"{self._prefix}---0006",
+			f"Expected cold-Redis fallback to resume at db_max+1=0006, got {n}",
 		)
+
+
+class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
+	"""Task 11(c): _create_session retries up to 3 times on DuplicateEntryError.
+
+	The DB has a UNIQUE constraint on Venue Session.session_number. If a
+	Redis hiccup or cold-start race ever produces a duplicate, the INSERT
+	raises DuplicateEntryError. _create_session catches it and retries with
+	a fresh session_number (rebuilt doc dict → before_insert re-runs →
+	_next_session_number() re-runs → fresh Redis INCR).
+	"""
+
+	def setUp(self):
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"RETRY-{suffix.upper()}",
+			"asset_name": f"Retry Test {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9099,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+		# Pre-seed a Venue Session under a far-future prefix so the retry
+		# tests can force collisions without touching today's Redis key
+		# (and without depending on date mocking).
+		self._collide_prefix = "1-1-2099"
+		self._collide_key = f"hamilton:session_seq:{self._collide_prefix}"
+		self._collide_number = f"{self._collide_prefix}---0001"
+
+		# Seed the colliding row on a throwaway asset so the UNIQUE
+		# constraint fires on any subsequent insert with the same number.
+		decoy_suffix = uuid.uuid4().hex[:6]
+		self.decoy_asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"DECOY-{decoy_suffix.upper()}",
+			"asset_name": f"Decoy {decoy_suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9100,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.decoy_asset.name,
+			"session_number": self._collide_number,
+			"status": "Active",
+			"session_start": frappe.utils.now_datetime(),
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+		frappe.cache().delete(self._collide_key)
+
+	def test_retry_succeeds_after_collisions(self):
+		"""If the first 2 attempts collide, the 3rd attempt succeeds with a fresh number."""
+		from unittest.mock import patch
+
+		call_count = {"n": 0}
+
+		# Patch _next_session_number to return the colliding value on the
+		# first 2 calls and a unique value on the 3rd. This simulates a
+		# Redis state where INCR transiently returns a stale/duplicate
+		# sequence before catching up.
+		unique_number = f"{self._collide_prefix}---0099"
+
+		def fake_next():
+			call_count["n"] += 1
+			if call_count["n"] <= 2:
+				return self._collide_number
+			return unique_number
+
+		with patch("hamilton_erp.lifecycle._next_session_number", side_effect=fake_next):
+			session_name = lifecycle._create_session(
+				self.asset.name, operator="Administrator", customer="Walk-in"
+			)
+
+		self.assertEqual(call_count["n"], 3)
+		session = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(session.session_number, unique_number)
+		self.assertEqual(session.venue_asset, self.asset.name)
+
+	def test_retry_exhausted_raises_validation_error(self):
+		"""After 3 collisions in a row, _create_session raises ValidationError."""
+		from unittest.mock import patch
+
+		with patch(
+			"hamilton_erp.lifecycle._next_session_number",
+			return_value=self._collide_number,
+		):
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				lifecycle._create_session(
+					self.asset.name, operator="Administrator", customer="Walk-in"
+				)
+		self.assertIn("Session number collision", str(ctx.exception))
