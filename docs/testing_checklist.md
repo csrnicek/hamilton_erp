@@ -1018,3 +1018,44 @@ production-ready under every failure mode a reviewer could think of".*
 - [x] `_next_session_number` logs an overflow warning via `frappe.logger().warning(...)` when `seq > 9999` but does NOT raise (UNIQUE constraint + retry loop handle correctness; logging preserves ops visibility)
 - [x] `_create_session` retry loop catches `UniqueValidationError` ONLY when `"session_number" in str(exc)`, re-raising for any other unique field so unrelated violations are not masked by three silent retries
 - [x] `venue_session.json` documents on the `session_number` field that the `unique: 1` constraint MUST NOT be dropped — it is the retry-loop contract
+
+## Category ENV: Environment Health Smoke Tests
+
+*Added 2026-04-11 after the Task 17.2 setup_wizard-loop incident. These
+tests are the canary for dev-site regressions — each one catches a class
+of failure that has bitten Chris in the past and is NOT covered by the
+behavioral test modules. They run last in the /run-tests sequence so
+a green suite means "the site is also actually usable".*
+
+What this module protects against:
+
+- **setup_wizard redirect loop** — `tabInstalled Application.is_setup_complete`
+  silently flipping back to 0 on bench migrate (via `update_versions()`
+  auto-heal requiring a non-Administrator System User) or via test
+  teardowns wiping defaults.
+- **Administrator losing Hamilton Operator role** — tests wipe the User
+  table and `restore_dev_state()` has to re-add it. If the restore
+  hook regresses, the Asset Board 403s.
+- **Empty Asset Board** — test teardowns delete Venue Assets; if the
+  post-test restore does not re-run `seed_hamilton_env`, the board
+  renders blank.
+- **Walk-in Customer missing** — blocks `start_session` because every
+  anonymous session invoices against `Customer "Walk-in"` (DEC-055 §1).
+- **403 on `get_asset_board_data`** — regression test for the Task 17.2
+  incident where a stale Redis session cached the pre-restore role list.
+- **Bench serving `/app/setup-wizard` instead of `/login`** — the
+  definitive external symptom of the `is_setup_complete=0` bug. HTTP
+  probe skips gracefully when bench is not running.
+- **Redis cache/queue unreachable** — port 13000 (cache) and 11000
+  (queue) must respond to `PING`. Uses low-level socket connect rather
+  than `frappe.cache()` so each port is tested independently and a
+  misconfigured pool is surfaced as a failure, not a framework error.
+
+- [x] `test_setup_wizard_gate_is_open` — `frappe.is_setup_complete()` returns True (`test_environment_health.py::TestEnvironmentHealth`)
+- [x] `test_administrator_has_hamilton_operator_role` — Administrator still has the Hamilton Operator role after restore
+- [x] `test_59_assets_exist` — exactly 59 Venue Assets in the database
+- [x] `test_asset_board_api_accessible_as_administrator` — `api.get_asset_board_data()` returns 59 assets with no `PermissionError`
+- [x] `test_bench_serves_login_not_wizard` — HTTP probe: `/app` redirects to `/login` and NOT to `/app/setup-wizard`
+- [x] `test_redis_cache_port_reachable` — Redis cache on port 13000 answers `PING`
+- [x] `test_redis_queue_port_reachable` — Redis queue on port 11000 answers `PING`
+- [x] `test_walk_in_customer_exists` — `Customer "Walk-in"` exists in the database
