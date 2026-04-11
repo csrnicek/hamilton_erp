@@ -691,7 +691,10 @@ class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
 		# sequence before catching up.
 		unique_number = f"{self._collide_prefix}---0099"
 
-		def fake_next():
+		def fake_next(*args, **kwargs):
+			# Accept **kwargs because _create_session now passes for_date=
+			# (Fix 10 Part A, DEC-056). We ignore it here — the test only
+			# cares about the sequence of return values.
 			call_count["n"] += 1
 			if call_count["n"] <= 2:
 				return self._collide_number
@@ -739,7 +742,9 @@ class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
 		unique_number = f"{self._collide_prefix}---0077"
 		call_count = {"n": 0}
 
-		def fake_next():
+		def fake_next(*args, **kwargs):
+			# Accept **kwargs because _create_session now passes for_date=
+			# (Fix 10 Part A, DEC-056).
 			call_count["n"] += 1
 			if call_count["n"] <= 2:
 				return self._collide_number
@@ -768,6 +773,162 @@ class TestCreateSessionRetryOnDuplicate(IntegrationTestCase):
 			[],
 			f"Expected message_log clean after retry, but found leaked "
 			f"'must be unique' toasts: {leaked_toasts}",
+		)
+
+
+class TestCreateSessionMidnightBoundary(IntegrationTestCase):
+	"""Fix 10 / DEC-056: _create_session pins session_number date to
+	session_start. Retries that cross midnight MUST reuse the start_date
+	instead of re-deriving it from wall-clock.
+
+	Club Hamilton is open overnight Friday and Saturday — this is a real
+	operational scenario for a 24h venue, not a theoretical race. Without
+	this fix, a collision retry that straddles midnight would emit a
+	session_number whose date prefix does not match session_start's date.
+	"""
+
+	def setUp(self):
+		if not frappe.db.exists("Customer", "Walk-in"):
+			frappe.get_doc({
+				"doctype": "Customer",
+				"customer_name": "Walk-in",
+				"customer_group": frappe.db.get_value(
+					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
+				"territory": frappe.db.get_value(
+					"Territory", {"is_group": 0}, "name") or "All Territories",
+			}).insert(ignore_permissions=True)
+
+		suffix = uuid.uuid4().hex[:6]
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"MIDBND-{suffix.upper()}",
+			"asset_name": f"Midnight Boundary {suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9300,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+
+		# Pre-seed a decoy Venue Session under day X's prefix so the
+		# first insert attempt in _create_session will collide with it
+		# on the UNIQUE (session_number) constraint. This forces the
+		# real retry loop to run end-to-end — the test is NOT a pure
+		# mock: Frappe's insert actually hits the DB and the UNIQUE
+		# index actually fires.
+		self._collide_prefix = "15-3-2099"
+		self._collide_number = f"{self._collide_prefix}---0001"
+		self._collide_key = f"hamilton:session_seq:{self._collide_prefix}"
+
+		decoy_suffix = uuid.uuid4().hex[:6]
+		self.decoy_asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_code": f"MIDDCY-{decoy_suffix.upper()}",
+			"asset_name": f"Midnight Decoy {decoy_suffix}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9301,
+			"version": 0,
+		}).insert(ignore_permissions=True)
+		frappe.get_doc({
+			"doctype": "Venue Session",
+			"venue_asset": self.decoy_asset.name,
+			"session_number": self._collide_number,
+			"status": "Active",
+			"session_start": frappe.utils.now_datetime(),
+			"operator_checkin": "Administrator",
+			"customer": "Walk-in",
+			"assignment_status": "Assigned",
+		}).insert(ignore_permissions=True)
+
+	def tearDown(self):
+		frappe.db.rollback()
+		frappe.cache().delete(self._collide_key)
+
+	def test_midnight_boundary_session_number_matches_session_start(self):
+		"""Simulate a call at 23:59 on day X that collides on the first
+		insert. The retry happens after midnight (day Y wall-clock). The
+		final persisted session MUST have:
+		  - session_number prefix = day X (not day Y)
+		  - session_start date    = day X (not day Y)
+		  - _next_session_number called with for_date=day_X on BOTH attempts
+		"""
+		from datetime import date as date_cls, datetime as datetime_cls
+		from unittest.mock import patch
+
+		day_x_night = datetime_cls(2099, 3, 15, 23, 59, 30)
+		day_y_morning = datetime_cls(2099, 3, 16, 0, 0, 45)
+		day_x_date = date_cls(2099, 3, 15)
+
+		# Fake now_datetime: first call returns day X at 23:59:30 (this
+		# is the session_start capture). Any subsequent call would
+		# return day Y at 00:00:45 — if the implementation re-reads
+		# the wall-clock inside the retry loop (the bug), it would pick
+		# up day Y here.
+		now_calls = {"n": 0}
+
+		def fake_now_datetime():
+			now_calls["n"] += 1
+			return day_x_night if now_calls["n"] == 1 else day_y_morning
+
+		# Fake _next_session_number: capture the for_date parameter on
+		# every call, return the colliding number the first time
+		# (forcing a retry), and a unique number the second time. The
+		# captured for_dates are the primary assertion: both calls MUST
+		# receive day X, not day Y.
+		captured_for_dates = []
+		unique_number = f"{self._collide_prefix}---0077"
+
+		def fake_next(*, for_date=None, **kwargs):
+			captured_for_dates.append(for_date)
+			if len(captured_for_dates) == 1:
+				return self._collide_number
+			return unique_number
+
+		# Also mock the overlapping nowdate path — _next_session_number
+		# only calls nowdate() when for_date is None, which should NOT
+		# happen under the fix. We still patch it to day Y so a buggy
+		# implementation that ignores for_date and falls back to
+		# nowdate would produce visibly-wrong day Y prefixes.
+		with patch("hamilton_erp.lifecycle.now_datetime", side_effect=fake_now_datetime), \
+		     patch("hamilton_erp.lifecycle._next_session_number", side_effect=fake_next), \
+		     patch("frappe.utils.nowdate", return_value="2099-03-16"):
+			session_name = lifecycle._create_session(
+				self.asset.name, operator="Administrator", customer="Walk-in"
+			)
+
+		# Assertion 1: two attempts happened — collision + successful retry.
+		self.assertEqual(
+			len(captured_for_dates), 2,
+			f"Expected exactly 2 attempts (collision + retry), "
+			f"got {len(captured_for_dates)}",
+		)
+
+		# Assertion 2: BOTH attempts passed day X's date to
+		# _next_session_number. The second attempt receiving day Y
+		# would mean the retry loop re-derived the date from wall-clock.
+		for i, fd in enumerate(captured_for_dates, start=1):
+			self.assertEqual(
+				fd, day_x_date,
+				f"Attempt {i}: _next_session_number received for_date={fd!r}, "
+				f"expected {day_x_date!r}. Retries MUST NOT re-derive the "
+				f"date from wall-clock — the midnight boundary bug is back.",
+			)
+
+		# Assertion 3: the final persisted session has day X's
+		# session_number prefix AND day X's session_start.
+		session = frappe.get_doc("Venue Session", session_name)
+		self.assertEqual(session.session_number, unique_number)
+		self.assertTrue(
+			session.session_number.startswith(f"{self._collide_prefix}---"),
+			f"session_number {session.session_number!r} does not start with "
+			f"day X prefix {self._collide_prefix!r} — midnight boundary bug.",
+		)
+		self.assertEqual(
+			session.session_start.date(), day_x_date,
+			f"session_start date {session.session_start.date()} != "
+			f"{day_x_date} — session_start was captured after midnight.",
 		)
 
 

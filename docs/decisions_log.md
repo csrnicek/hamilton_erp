@@ -596,4 +596,24 @@ Lock sections must be minimal — validate + save only, no I/O inside lock.
 
 ---
 
+## DEC-056 — Session Number Prefix Pinned to session_start, Not Retry Wall-Clock
+
+**Date:** 2026-04-10
+**Context:** During the Task 11 3-AI review, reviewers flagged a midnight-boundary race in `lifecycle._create_session`. The original implementation captured `session_start = frappe.utils.now_datetime()` fresh inside each retry attempt, and relied on `VenueSession.before_insert` to auto-populate `session_number` via `_next_session_number()` — which in turn read `frappe.utils.nowdate()` on every call. If a collision retry straddled midnight at a 24-hour venue, the retry would derive a new-day date prefix while the new `session_start` timestamp also advanced to the new day — leaving the operator's actual check-in moment ambiguous and potentially emitting rows whose `session_number` prefix did not match the day the session was physically entered. Club Hamilton is open overnight Friday and Saturday (and overnight hours may expand), so this is a real operational scenario, not a theoretical race.
+**Decision:**
+
+1. **`session_start` is captured ONCE at the top of `lifecycle._create_session`**, before the retry loop begins. All retry attempts reuse the same `session_start` timestamp — the operator's actual check-in moment, not the wall-clock at the time of any particular retry.
+
+2. **`session_number` is generated explicitly in `_create_session`**, not inside `VenueSession.before_insert`, using a new keyword argument `_next_session_number(for_date=start_date)`. `start_date` is derived from `session_start.date()` ONCE, outside the retry loop, and passed unchanged to every retry attempt. `_next_session_number` uses the passed date to build the prefix (e.g. `15-3-2099`), never falling back to `nowdate()` when `for_date` is provided.
+
+3. **`VenueSession.before_insert` retains its fallback generator path** for callers that legitimately omit `session_number` (historic rows, direct-insert tests, future bulk import). It only runs when `self.session_number` is empty, so the explicit value set by `_create_session` bypasses it cleanly.
+
+4. **`_next_session_number()` with no arguments continues to default to today's date via `nowdate()`.** This is the only call path that reads wall-clock. All retry-sensitive callers must pass `for_date=` explicitly.
+
+5. **The test `test_midnight_boundary_session_number_matches_session_start`** (in `test_lifecycle.py::TestCreateSessionMidnightBoundary`) enforces the contract: it patches `hamilton_erp.lifecycle.now_datetime` to return day X on the first call and day Y on any later call, pre-seeds a colliding decoy row under day X's prefix, and asserts that both retry attempts receive `for_date=day_X.date()` and that the final session's `session_number` prefix and `session_start.date()` both equal day X.
+
+**Rationale:** The simpler fix — "just capture session_start once" — is only half the answer. The dangerous half is the session_number prefix, because the prefix encodes the business date and is what operators, managers, and reports group by. An operator who checks a guest in at 23:59:30 on Saturday expects that session's number to read `Saturday-...`, not `Sunday-...`, regardless of how many insert retries the backend burned crossing midnight. Pinning the prefix to `session_start.date()` makes the business-day boundary explicit and immutable from the moment the operator taps the button. The implementation cost is one kwarg on `_next_session_number` and one extra line in `_create_session`; the safety guarantee is absolute and testable end-to-end. Alternative approaches (e.g. "just generate once and reuse") were rejected because retries legitimately need a FRESH sequence number (the old one collided) — only the DATE must stay pinned, not the full session_number.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*

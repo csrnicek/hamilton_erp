@@ -16,10 +16,12 @@ the lock section.
 """
 from __future__ import annotations
 
+from datetime import date as _date_type, datetime as _datetime_type
 from typing import Optional
 
 import frappe
 from frappe import _
+from frappe.utils import now_datetime
 
 
 # ---------------------------------------------------------------------------
@@ -130,20 +132,23 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "
 def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	"""Insert a Venue Session row for a freshly-assigned asset. Caller holds the asset lock.
 
-	NOTE: session_number is NOT set here — VenueSession.before_insert
-	auto-populates it via lifecycle._next_session_number(). identity_method
+	NOTE (post Fix 10): session_number IS set here, explicitly, pinned to
+	the captured session_start date via `_next_session_number(for_date=
+	start_date)`. VenueSession.before_insert still contains fallback
+	generator logic (for callers that legitimately omit session_number),
+	but it detects our explicit value and leaves it alone. identity_method
 	defaults to 'not_applicable' via the controller's _set_defaults hook.
 
 	Retry contract (Task 11(c)): the DB has a UNIQUE constraint on
 	`session_number`. If a Redis hiccup or cold-start race ever produces a
 	duplicate, the INSERT raises UniqueValidationError (field-level unique
 	violation, raised by frappe.model.base_document.show_unique_validation_message).
-	We catch it, retry up to 3 times, rebuilding a fresh doc dict each
-	attempt so `before_insert` re-runs and calls `_next_session_number()`
-	again — which hits Redis INCR and yields a fresh value. On the 3rd
-	failure we raise ValidationError with a user-friendly message. The
-	warning log is acceptable inside the lock body (stdlib logging, no
-	network I/O).
+	We catch it, retry up to 3 times, generating a fresh session_number via
+	`_next_session_number(for_date=start_date)` per attempt so Redis INCR
+	yields a new sequence — but always pinned to the original start date.
+	On the 3rd failure we raise ValidationError with a user-friendly
+	message. The warning log is acceptable inside the lock body (stdlib
+	logging, no network I/O).
 
 	Exception-handling scope (Task 11 code review, I3): only
 	frappe.UniqueValidationError is caught — it is the sole real trigger
@@ -164,16 +169,44 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	actually succeeded. We snapshot `message_log` at the top of each
 	iteration and restore it on the caught exception so the failed
 	attempt's toast is discarded.
+
+	Midnight boundary (Fix 10, DEC-056): session_start and the
+	session_number's date prefix are both captured ONCE, outside the
+	retry loop. session_number is generated explicitly here (not via
+	VenueSession.before_insert) so the retry path passes `for_date=` to
+	`_next_session_number()` and gets a fresh sequence pinned to the
+	original start date. Without this, a retry that crosses midnight at
+	a 24h venue (Club Hamilton, overnight Fri/Sat) would emit a
+	session_number whose date prefix does not match session_start's
+	date — a real operational inconsistency, not theoretical.
 	"""
+	# Capture session_start ONCE so retries reuse the same timestamp.
+	# Deriving the prefix from session_start.date() (not a fresh nowdate())
+	# is the core of the midnight-boundary fix. All retry attempts below
+	# must use this exact date.
+	#
+	# We use the module-level `now_datetime` binding (imported at the top
+	# of this file) instead of `frappe.utils.now_datetime()` so the
+	# midnight-boundary test can patch `hamilton_erp.lifecycle.now_datetime`
+	# without disturbing Frappe's internal usage of the same function.
+	session_start = now_datetime()
+	start_date = session_start.date()
+
 	for attempt in range(1, 4):
 		msg_log_snapshot = list(getattr(frappe.local, "message_log", []) or [])
+		# Generate session_number explicitly here, pinned to start_date.
+		# VenueSession.before_insert detects that session_number is already
+		# set and leaves it alone (see the `if not self.session_number`
+		# guard in venue_session.py).
+		session_number = _next_session_number(for_date=start_date)
 		try:
 			session = frappe.get_doc({
 				"doctype": "Venue Session",
 				"venue_asset": asset_name,
 				"operator_checkin": operator,
 				"customer": customer,
-				"session_start": frappe.utils.now_datetime(),
+				"session_number": session_number,
+				"session_start": session_start,
 				"status": "Active",
 				"assignment_status": "Assigned",
 			}).insert(ignore_permissions=True)
@@ -530,8 +563,8 @@ def return_asset_to_service(asset_name: str, *, operator: str, reason: str) -> N
 _SESSION_KEY_TTL_MS = 48 * 60 * 60 * 1000  # 48 hours
 
 
-def _next_session_number() -> str:
-	"""Return the next session number for today in DEC-033 format.
+def _next_session_number(*, for_date: Optional[_date_type] = None) -> str:
+	"""Return the next session number for a given day in DEC-033 format.
 
 	Format: `{d}-{m}-{y}---{NNNN}`, e.g. "9-4-2026---0001". Day/month are NOT
 	zero-padded; the trailing sequence IS zero-padded to 4 digits (widened
@@ -544,10 +577,22 @@ def _next_session_number() -> str:
 	`db_max` and both call SET with nx=True. Only the first SET wins; the
 	second no-ops. Both callers then INCR, which is atomic, so the two
 	callers get consecutive values starting from `db_max + 1`.
+
+	Midnight boundary (Fix 10, DEC-056): callers that need to pin the
+	session_number prefix to a specific day — e.g. `_create_session` during
+	a retry loop that may straddle midnight at a 24h venue — pass
+	`for_date` explicitly. When `for_date` is None, we default to today's
+	date via `nowdate()`. The passed date wins so retries use the same
+	prefix regardless of wall-clock drift between attempts. Club Hamilton
+	is open overnight Friday and Saturday — this is a real operational
+	scenario, not a theoretical race.
 	"""
-	# nowdate() returns "YYYY-MM-DD" regardless of local format preferences.
-	year, month, day = frappe.utils.nowdate().split("-")
-	d, m, y = int(day), int(month), int(year)
+	if for_date is None:
+		# nowdate() returns "YYYY-MM-DD" regardless of local format preferences.
+		year, month, day = frappe.utils.nowdate().split("-")
+		d, m, y = int(day), int(month), int(year)
+	else:
+		d, m, y = for_date.day, for_date.month, for_date.year
 	prefix = f"{d}-{m}-{y}"
 	key = f"hamilton:session_seq:{prefix}"
 	cache = frappe.cache()
