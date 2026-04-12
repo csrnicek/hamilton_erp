@@ -85,7 +85,7 @@ Custom Frappe/ERPNext v16 app for Club Hamilton — a men's bathhouse in Hamilto
 - Single operator most of the time, anonymous walk-in guests, no membership
 
 ### Key decisions (always respect these)
-- See `docs/decisions_log.md` for DEC-001 through DEC-055
+- See `docs/decisions_log.md` for DEC-001 through DEC-060
 - Locking: `docs/coding_standards.md` §13 — zero I/O inside lock body, realtime after_commit only
 - Redis key is asset-only: `hamilton:asset_lock:{asset_name}` — NOT asset+operation
 - FOR UPDATE (not FOR NO KEY UPDATE) — MariaDB syntax
@@ -216,7 +216,7 @@ Never update run-tests without committing everything to GitHub.
 - Local bench: ~/frappe-bench-hamilton. Python 3.14, Node 24, MariaDB 12.2.2 (root pw: admin), Redis. Site: hamilton-test.localhost.
 - hamilton_erp symlinked into bench from ~/hamilton_erp.
 
-## Test Suite — 7 Modules (197+ passing, 11 skipped)
+## Test Suite — 14 Modules (306+ passing, 15 skipped)
 
 | Module | Tests | Notes |
 |---|---|---|
@@ -227,11 +227,17 @@ Never update run-tests without committing everything to GitHub.
 | test_checklist_complete | 43 + 11 skipped | Checklist items as Python |
 | test_frappe_edge_cases | ~30 | Frappe v16 edge cases |
 | test_extreme_edge_cases | ~30 | Frappe Cloud incidents, Hetzner, MariaDB, Redis |
+| test_api_phase1 | ~10 | API endpoints + HTTP verb regression (DEC-058) |
+| test_seed_patch | ~5 | Seed data integrity |
+| test_security_audit | ~10 | SQL injection, XSS, permission escalation |
+| test_environment_health | ~8 | Setup wizard gate, roles, asset count |
+| test_asset_board_rendering | 7 | Card rendering, tier badges, color coding |
+| test_adversarial | 36 + 8 skipped | 6 attack families (A-F), crash reporter |
+| test_load_10k | ~3 | 10,000 session stress test |
 
 Skipped tests unlock progressively:
-- 3 unlock after Task 10 (session_number wired)
-- 5 unlock after Task 11 (seed patch)
-- 3 unlock after Task 13 / Phase 2
+- 8 in test_adversarial Family F unlock at Phase 2 (financial integration)
+- 3 in test_checklist_complete unlock after Task 13 / Phase 2
 
 ## Slash Commands — All in .claude/commands/
 
