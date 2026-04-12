@@ -23,7 +23,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.wrapper.html(`<div class="hamilton-loading">${__("Loading...")}</div>`);
 		await this.fetch_board();
 		this.render();
-		// Task 17: bind_events, Task 18: popover, Task 19: overtime, Task 20: realtime
+		this.bind_events();
+		// Task 19: overtime, Task 20: realtime
 	}
 
 	async fetch_board() {
@@ -111,5 +112,183 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				${tier_short ? `<div class="hamilton-tile-tier">${tier_short}</div>` : ""}
 			</div>
 		`;
+	}
+
+	bind_events() {
+		this.wrapper.on("click", ".hamilton-tile", (e) => {
+			const name = $(e.currentTarget).data("asset-name");
+			const asset = this.assets.find((a) => a.name === name);
+			if (asset) this.open_popover(asset, e.currentTarget);
+		});
+		this.wrapper.on("click", ".hamilton-bulk-rooms", () =>
+			this.confirm_bulk_clean("Room"));
+		this.wrapper.on("click", ".hamilton-bulk-lockers", () =>
+			this.confirm_bulk_clean("Locker"));
+		// Dismiss popover on outside click
+		$(document).on("click.hamilton-popover", (e) => {
+			if (!$(e.target).closest(".hamilton-tile, .hamilton-popover").length) {
+				this.close_popover();
+			}
+		});
+	}
+
+	close_popover() {
+		$(".hamilton-popover").remove();
+	}
+
+	open_popover(asset, tile_el) {
+		this.close_popover();
+		const buttons = this.popover_buttons_for(asset);
+		const $pop = $(`
+			<div class="hamilton-popover" data-asset-name="${frappe.utils.escape_html(asset.name)}">
+				<div class="hamilton-popover-header">
+					<strong>${frappe.utils.escape_html(asset.asset_name)}</strong>
+					<a class="hamilton-popover-info"
+					   href="/app/venue-asset/${encodeURIComponent(asset.name)}"
+					   target="_blank" rel="noopener">
+					   <i class="fa fa-info-circle"></i>
+					</a>
+				</div>
+				<div class="hamilton-popover-actions">
+					${buttons}
+				</div>
+				<div class="hamilton-popover-reason" style="display:none;">
+					<textarea class="form-control" rows="2"
+					          placeholder="${__("Reason (required)")}"></textarea>
+					<button class="btn btn-primary btn-sm hamilton-popover-confirm">
+						${__("Confirm")}
+					</button>
+				</div>
+				<div class="hamilton-popover-error" style="display:none;"></div>
+			</div>
+		`);
+		$(tile_el).append($pop);
+		this.wire_popover_actions($pop, asset);
+	}
+
+	popover_buttons_for(asset) {
+		switch (asset.status) {
+			case "Available":
+				return `
+					<button class="btn btn-sm btn-success" data-action="assign">
+						${__("Assign Occupant")}
+					</button>
+					<button class="btn btn-sm btn-danger" data-action="oos">
+						${__("Set Out of Service")}
+					</button>
+				`;
+			case "Occupied":
+				return `
+					<button class="btn btn-sm btn-primary" data-action="vacate-key">
+						${__("Vacate — Key Return")}
+					</button>
+					<button class="btn btn-sm btn-warning" data-action="vacate-rounds">
+						${__("Vacate — Discovery on Rounds")}
+					</button>
+					<button class="btn btn-sm btn-danger" data-action="oos">
+						${__("Set Out of Service")}
+					</button>
+				`;
+			case "Dirty":
+				return `
+					<button class="btn btn-sm btn-success" data-action="clean">
+						${__("Mark Clean")}
+					</button>
+					<button class="btn btn-sm btn-danger" data-action="oos">
+						${__("Set Out of Service")}
+					</button>
+				`;
+			case "Out of Service":
+				return `
+					<button class="btn btn-sm btn-success" data-action="return">
+						${__("Return to Service")}
+					</button>
+				`;
+			default:
+				return "";
+		}
+	}
+
+	wire_popover_actions($pop, asset) {
+		const self = this;
+		$pop.on("click", "[data-action]", function (e) {
+			e.stopPropagation();
+			const action = $(this).data("action");
+			if (action === "oos" || action === "return") {
+				$pop.find(".hamilton-popover-actions").hide();
+				$pop.find(".hamilton-popover-reason").show();
+				$pop.find("textarea").focus();
+				$pop.data("pending-action", action);
+			} else {
+				self.run_action(asset, action, $pop);
+			}
+		});
+		$pop.on("click", ".hamilton-popover-confirm", function (e) {
+			e.stopPropagation();
+			const reason = $pop.find("textarea").val().trim();
+			if (!reason) {
+				self.show_popover_error($pop, __("Reason is required"));
+				return;
+			}
+			const action = $pop.data("pending-action");
+			self.run_action(asset, action, $pop, {reason});
+		});
+	}
+
+	async run_action(asset, action, $pop, extra = {}) {
+		const api_map = {
+			"assign":        {method: "hamilton_erp.api.start_walk_in_session",    args: {asset_name: asset.name}},
+			"vacate-key":    {method: "hamilton_erp.api.vacate_asset",             args: {asset_name: asset.name, vacate_method: "Key Return"}},
+			"vacate-rounds": {method: "hamilton_erp.api.vacate_asset",             args: {asset_name: asset.name, vacate_method: "Discovery on Rounds"}},
+			"clean":         {method: "hamilton_erp.api.clean_asset",              args: {asset_name: asset.name}},
+			"oos":           {method: "hamilton_erp.api.set_asset_oos",            args: {asset_name: asset.name, reason: extra.reason}},
+			"return":        {method: "hamilton_erp.api.return_asset_from_oos",    args: {asset_name: asset.name, reason: extra.reason}},
+		};
+		const spec = api_map[action];
+		if (!spec) return;
+		$pop.find("button").prop("disabled", true);
+		try {
+			await frappe.call({
+				method: spec.method,
+				type: "POST",
+				args: spec.args,
+			});
+			this.close_popover();
+			// Refresh the board to reflect the new state
+			await this.fetch_board();
+			this.render();
+		} catch (err) {
+			const msg = (err && err.message) || __("Action failed");
+			this.show_popover_error($pop, msg);
+			$pop.find("button").prop("disabled", false);
+		}
+	}
+
+	show_popover_error($pop, msg) {
+		$pop.find(".hamilton-popover-error").text(msg).show();
+	}
+
+	confirm_bulk_clean(category) {
+		const dirty = this.assets.filter(
+			(a) => a.asset_category === category && a.status === "Dirty"
+		);
+		if (dirty.length === 0) {
+			frappe.show_alert({message: __("No dirty assets to clean"), indicator: "orange"});
+			return;
+		}
+		const names = dirty.map((a) => `${a.asset_code} ${a.asset_name}`).join("\n");
+		if (confirm(`${__("Mark these clean?")}\n\n${names}`)) {
+			const method = category === "Room"
+				? "hamilton_erp.api.mark_all_clean_rooms"
+				: "hamilton_erp.api.mark_all_clean_lockers";
+			frappe.call({method, type: "POST"}).then(async (r) => {
+				frappe.show_alert({
+					message: `${r.message.succeeded.length} ${__("cleaned")}, ${r.message.failed.length} ${__("failed")}`,
+					indicator: r.message.failed.length ? "orange" : "green",
+				});
+				await this.fetch_board();
+				this.render();
+			});
+		}
 	}
 };

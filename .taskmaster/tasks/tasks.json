@@ -213,7 +213,7 @@
         "description": "Render the Asset Board as two zones (Rooms, Lockers) using data from get_asset_board_data, producing one tile per asset with state styling.",
         "details": "Plan section: Task 17 (lines 2515-2697). Modifies asset_board.js.",
         "testStrategy": "TDD where feasible — test tile render count matches API, state classes map correctly. Manual QA for visual layout on tablet.",
-        "status": "in-progress",
+        "status": "done",
         "dependencies": [
           "16"
         ],

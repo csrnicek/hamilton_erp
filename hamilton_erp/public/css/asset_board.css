@@ -85,3 +85,52 @@
 .hamilton-status-occupied       { background: #495057; }
 .hamilton-status-dirty          { background: #fd7e14; }
 .hamilton-status-out-of-service { background: #dc3545; }
+
+/* Popover — appears on tile click (Task 18) */
+.hamilton-popover {
+	position: absolute;
+	top: 100%;
+	left: 0;
+	z-index: 100;
+	min-width: 200px;
+	padding: 12px;
+	background: #fff;
+	color: #333;
+	border-radius: 6px;
+	box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+	border: 1px solid var(--border-color);
+}
+.hamilton-popover-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 8px;
+	font-size: 14px;
+}
+.hamilton-popover-info {
+	color: var(--text-muted);
+	font-size: 14px;
+}
+.hamilton-popover-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+.hamilton-popover-actions .btn {
+	text-align: left;
+}
+.hamilton-popover-reason {
+	margin-top: 8px;
+}
+.hamilton-popover-reason textarea {
+	margin-bottom: 6px;
+	font-size: 13px;
+}
+.hamilton-popover-error {
+	margin-top: 6px;
+	padding: 4px 8px;
+	font-size: 12px;
+	color: #dc3545;
+	background: #fff5f5;
+	border-radius: 4px;
+}

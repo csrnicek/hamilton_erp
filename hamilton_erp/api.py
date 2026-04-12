@@ -195,3 +195,58 @@ def _mark_all_clean(category: str) -> dict:
 			failed.append({"code": asset["asset_code"], "error": str(e)})
 	publish_board_refresh("bulk_clean", len(succeeded))
 	return {"succeeded": succeeded, "failed": failed}
+
+
+# ---------------------------------------------------------------------------
+# Single-asset actions (Phase 1 — called by Asset Board popover)
+# ---------------------------------------------------------------------------
+
+
+@frappe.whitelist(methods=["POST"])
+def start_walk_in_session(asset_name: str) -> dict:
+	"""Assign a walk-in session to an Available asset. Available → Occupied."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	from hamilton_erp.lifecycle import start_session_for_asset
+
+	session_name = start_session_for_asset(asset_name, operator=frappe.session.user)
+	return {"session": session_name}
+
+
+@frappe.whitelist(methods=["POST"])
+def vacate_asset(asset_name: str, vacate_method: str) -> dict:
+	"""Vacate an Occupied asset. Occupied → Dirty."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	from hamilton_erp.lifecycle import vacate_session
+
+	vacate_session(asset_name, operator=frappe.session.user, vacate_method=vacate_method)
+	return {"status": "ok"}
+
+
+@frappe.whitelist(methods=["POST"])
+def clean_asset(asset_name: str) -> dict:
+	"""Mark a single Dirty asset as clean. Dirty → Available."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	from hamilton_erp.lifecycle import mark_asset_clean
+
+	mark_asset_clean(asset_name, operator=frappe.session.user)
+	return {"status": "ok"}
+
+
+@frappe.whitelist(methods=["POST"])
+def set_asset_oos(asset_name: str, reason: str) -> dict:
+	"""Set an asset Out of Service. Reason is mandatory."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	from hamilton_erp.lifecycle import set_asset_out_of_service
+
+	set_asset_out_of_service(asset_name, operator=frappe.session.user, reason=reason)
+	return {"status": "ok"}
+
+
+@frappe.whitelist(methods=["POST"])
+def return_asset_from_oos(asset_name: str, reason: str) -> dict:
+	"""Return an Out of Service asset to Available. Reason is mandatory."""
+	frappe.has_permission("Venue Asset", "write", throw=True)
+	from hamilton_erp.lifecycle import return_asset_to_service
+
+	return_asset_to_service(asset_name, operator=frappe.session.user, reason=reason)
+	return {"status": "ok"}
