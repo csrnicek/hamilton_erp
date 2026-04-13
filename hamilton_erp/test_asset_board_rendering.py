@@ -178,6 +178,93 @@ class TestAssetBoardRendering(IntegrationTestCase):
 			)
 
 
+class TestOvertimeTickerContract(IntegrationTestCase):
+	"""Contract tests for the Task 19 overtime ticker.
+
+	The ticker runs in JavaScript (30-second setInterval), but it depends
+	on server-side data: session_start on occupied assets, expected_stay_duration
+	on every asset, and grace_minutes in settings. These tests verify the API
+	returns all the fields the JS ticker reads.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		frappe.db.delete("Venue Session")
+		frappe.db.delete("Venue Asset")
+		seed_hamilton_env.execute()
+		frappe.db.commit()
+
+	@classmethod
+	def tearDownClass(cls):
+		frappe.db.delete("Venue Session")
+		frappe.db.delete("Venue Asset")
+		frappe.db.commit()
+		super().tearDownClass()
+
+	def test_settings_include_grace_minutes(self):
+		"""The overtime ticker reads settings.grace_minutes to decide
+		when Stage 1 (warning) transitions to Stage 2 (overtime)."""
+		data = api.get_asset_board_data()
+		self.assertIn("settings", data)
+		self.assertIn("grace_minutes", data["settings"])
+		self.assertIsInstance(data["settings"]["grace_minutes"], (int, float))
+		self.assertGreater(data["settings"]["grace_minutes"], 0)
+
+	def test_every_asset_has_expected_stay_duration(self):
+		"""The ticker compares elapsed time against expected_stay_duration
+		to decide warning vs overtime stage."""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			self.assertIn(
+				"expected_stay_duration", a,
+				f"Asset {a.get('asset_code')} missing expected_stay_duration",
+			)
+			self.assertIsNotNone(a["expected_stay_duration"])
+			self.assertGreater(
+				a["expected_stay_duration"], 0,
+				f"Asset {a.get('asset_code')} has non-positive stay duration",
+			)
+
+	def test_occupied_asset_has_session_start(self):
+		"""When a tile is Occupied, the ticker needs session_start to
+		calculate elapsed time. This test creates an occupied session
+		and verifies the API enriches the asset with session_start."""
+		from hamilton_erp.lifecycle import start_session_for_asset
+
+		asset_name = frappe.db.get_value(
+			"Venue Asset", {"status": "Available"}, "name"
+		)
+		if not asset_name:
+			self.skipTest("No Available asset to occupy")
+
+		try:
+			start_session_for_asset(asset_name, operator=frappe.session.user)
+			data = api.get_asset_board_data()
+			occupied = [a for a in data["assets"] if a["name"] == asset_name]
+			self.assertEqual(len(occupied), 1)
+			asset = occupied[0]
+			self.assertEqual(asset["status"], "Occupied")
+			self.assertIsNotNone(
+				asset.get("session_start"),
+				"Occupied asset must have session_start for overtime ticker",
+			)
+		finally:
+			frappe.db.rollback()
+
+	def test_available_asset_has_no_session_start(self):
+		"""Available tiles should not have a truthy session_start — the
+		ticker skips non-Occupied tiles, but stale data could confuse it."""
+		data = api.get_asset_board_data()
+		available = [a for a in data["assets"] if a["status"] == "Available"]
+		self.assertGreater(len(available), 0, "No Available assets found")
+		for a in available:
+			self.assertFalse(
+				a.get("session_start"),
+				f"Available asset {a['asset_code']} should not have session_start",
+			)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

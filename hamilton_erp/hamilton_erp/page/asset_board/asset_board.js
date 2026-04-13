@@ -24,7 +24,9 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		await this.fetch_board();
 		this.render();
 		this.bind_events();
-		// Task 19: overtime, Task 20: realtime
+		this.start_overtime_ticker();
+		this.page.wrapper.on("page-destroyed", () => this.teardown());
+		// Task 20: realtime
 	}
 
 	async fetch_board() {
@@ -290,5 +292,45 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				this.render();
 			});
 		}
+	}
+
+	// ── Task 19: Overtime ticker (2-stage visual) ──────────────
+	start_overtime_ticker() {
+		this.overtime_interval = setInterval(() => this.refresh_overtime_overlays(), 30_000);
+		this.refresh_overtime_overlays();
+	}
+
+	refresh_overtime_overlays() {
+		const grace = this.settings.grace_minutes || 15;
+		const now = new Date();
+		for (const asset of this.assets) {
+			if (asset.status !== "Occupied" || !asset.session_start) continue;
+			const start = new Date(asset.session_start);
+			const elapsed_min = (now - start) / 60000;
+			const stay = asset.expected_stay_duration || 360;
+			const $tile = this.wrapper.find(
+				`.hamilton-tile[data-asset-name="${$.escapeSelector(asset.name)}"]`
+			);
+			$tile.removeClass("hamilton-warning hamilton-overtime");
+			$tile.find(".hamilton-time-badge").remove();
+			if (elapsed_min > stay + grace) {
+				$tile.addClass("hamilton-overtime");
+				const over_min = Math.floor(elapsed_min - stay);
+				$tile.append(
+					`<div class="hamilton-time-badge hamilton-badge-ot">OT +${over_min}m</div>`
+				);
+			} else if (elapsed_min > stay) {
+				$tile.addClass("hamilton-warning");
+				const over_min = Math.floor(elapsed_min - stay);
+				$tile.append(
+					`<div class="hamilton-time-badge hamilton-badge-warn">⏱ +${over_min}m</div>`
+				);
+			}
+		}
+	}
+
+	teardown() {
+		if (this.overtime_interval) clearInterval(this.overtime_interval);
+		$(document).off("click.hamilton-popover");
 	}
 };

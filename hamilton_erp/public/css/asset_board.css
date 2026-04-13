@@ -134,3 +134,40 @@
 	background: #fff5f5;
 	border-radius: 4px;
 }
+
+/* ── Task 19: Overtime ticker — 2-stage visual ────────────── */
+
+/* Stage 1 — warning (past expected stay duration) */
+.hamilton-tile.hamilton-warning {
+	border: 3px solid #f59e0b;
+}
+
+/* Stage 2 — overtime (past stay + grace period) */
+.hamilton-tile.hamilton-overtime {
+	border: 3px solid #ef4444;
+	animation: hamilton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes hamilton-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.6); }
+	50%      { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+}
+
+/* Time badges — top-right corner of tile */
+.hamilton-time-badge {
+	position: absolute;
+	top: 4px;
+	right: 6px;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 1px 4px;
+	border-radius: 3px;
+	line-height: 1.2;
+}
+.hamilton-badge-warn {
+	color: #f59e0b;
+}
+.hamilton-badge-ot {
+	background: #ef4444;
+	color: #fff;
+}
