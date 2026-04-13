@@ -52,6 +52,7 @@ def publish_status_change(
 			"status",
 			"version",
 			"current_session",
+			"expected_stay_duration",
 			"last_vacated_at",
 			"last_cleaned_at",
 			"hamilton_last_status_change",
@@ -61,6 +62,13 @@ def publish_status_change(
 	if not row:
 		return
 	row["old_status"] = previous_status
+	# Enrich Occupied tiles with session_start for the overtime ticker
+	if row["status"] == "Occupied" and row.get("current_session"):
+		row["session_start"] = frappe.db.get_value(
+			"Venue Session", row["current_session"], "session_start"
+		)
+	else:
+		row["session_start"] = None
 	frappe.publish_realtime(
 		"hamilton_asset_status_changed", row, after_commit=True
 	)

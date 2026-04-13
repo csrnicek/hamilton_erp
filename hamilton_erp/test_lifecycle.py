@@ -1495,8 +1495,9 @@ class TestRealtimeContracts(IntegrationTestCase):
 
 	def test_J4_c2_payload_contains_all_required_fields(self):
 		"""Asset Board tile re-render needs all fields in the C2 payload:
-		name, status, version, current_session, last_vacated_at,
-		last_cleaned_at, hamilton_last_status_change, old_status.
+		name, status, version, current_session, expected_stay_duration,
+		last_vacated_at, last_cleaned_at, hamilton_last_status_change,
+		old_status, session_start.
 		"""
 		from unittest.mock import patch
 		from hamilton_erp import realtime
@@ -1508,8 +1509,8 @@ class TestRealtimeContracts(IntegrationTestCase):
 				self.asset.name, previous_status="Available")
 		required = {
 			"name", "status", "version", "current_session",
-			"last_vacated_at", "last_cleaned_at",
-			"hamilton_last_status_change", "old_status",
+			"expected_stay_duration", "last_vacated_at", "last_cleaned_at",
+			"hamilton_last_status_change", "old_status", "session_start",
 		}
 		self.assertTrue(required.issubset(set(captured.keys())),
 			f"C2 payload missing: {required - set(captured.keys())}")
