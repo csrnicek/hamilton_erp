@@ -2,8 +2,8 @@
 
 Living tracker of what has been built, what is in progress, and what is blocked.
 
-**Last updated:** 2026-04-11
-**Current phase:** Phase 1 in progress — Tasks 1–16 complete, Task 17 in progress. Dedicated test site live. HTTP verb mismatch on Asset Board identified, fixed, and pinned with a regression test.
+**Last updated:** 2026-04-13
+**Current phase:** Phase 1 in progress — Tasks 1–17 complete, Task 18 next. Asset board UI design fully approved via interactive mockup V6 on 2026-04-13. Full design spec saved to `docs/design/asset_board_ui.md`. Tasks 17, 18, and 19 have approved visual designs — ready for implementation. New additions beyond original Phase 1 plan captured in spec: tabbed layout, Watch tab, feature flag tabs (Waitlist/Other), grouped status sections with time sorting, attendant name in header.
 
 ---
 
@@ -62,8 +62,17 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 - `738eaff` — `test_helpers.py` heals `desktop:home_page` on teardown
 
 **Next actions:**
-- Chris opens `/app/asset-board` in Chrome (hard-refresh ⌘⇧R to bust `localStorage["_page:asset-board"]`) and confirms all 59 tiles render.
-- Resume Task 17 (Asset Board bind_events, popover, overtime, realtime) via Subagent-Driven Development.
+- Resume Task 18 (tile expand / popover / action buttons) via Subagent-Driven Development.
+- Two new Hamilton Settings fields (`show_waitlist_tab`, `show_other_tab`) must be added to DocType JSON before Task 17 can ship to Frappe Cloud.
+
+### 2026-04-13 (Asset Board UI design approval)
+
+- **Full UI design approved** via interactive mockup V6 — authoritative spec saved to `docs/design/asset_board_ui.md`
+- Tasks 17, 18, and 19 now have approved visual designs — ready for implementation
+- New scope additions captured in spec: tabbed layout (Lockers/Single/Double/VIP/Waitlist/Other/Watch), Watch tab (cross-category alert aggregation), feature flag tabs (Waitlist/Other controlled by Hamilton Settings), grouped status sections with time-based sorting, attendant name in header
+- Two new Hamilton Settings fields required: `show_waitlist_tab` (Check, default 0), `show_other_tab` (Check, default 0)
+- Accessibility standards applied throughout: 56px tab height, 15px font, 3px tile borders (staff aged 50+)
+- Top summary strip deliberately removed from header — footer is sole status count display
 
 ### 2026-04-10 (Phase 1 planning + M0 local bench setup)
 - **Phase 1 design doc finalized** — Asset Board + Session Lifecycle spec committed
@@ -128,7 +137,7 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 | Phase | Status | Notes |
 |---|---|---|
 | Phase 0: Foundation | **Complete — E5 passed** | 9 DocTypes, 3 roles, workspace, fixtures. Live on Frappe Cloud + local bench. |
-| Phase 1: Asset Board & Sessions | **Plan finalized — ready for Task 1** | 25 tasks via Subagent-Driven Development. Test harness running 15 tests locally. |
+| Phase 1: Asset Board & Sessions | **In progress — Tasks 1–17 complete** | 25 tasks via Subagent-Driven Development. 306+ tests passing (14 modules). UI design approved 2026-04-13. |
 | Phase 2: POS Integration & Check-in | Not started | — |
 | Phase 3: Cash Handling & Shifts | Not started | — |
 | Phase 4: Refunds, Polish, Compatibility | Not started | — |
@@ -311,6 +320,8 @@ Naming: `VA-.####`
 | grace_minutes | Int | Extra minutes after stay duration before overtime fires (default 15) |
 | assignment_timeout_minutes | Int | Minutes before paid-but-unassigned session is flagged for cleanup (default 15) |
 | printer_label_template_name | Data | Label template name for Brother QL-820NWB |
+| show_waitlist_tab | Check | "Show Waitlist Tab" — controls whether Waitlist tab appears on Asset Board (default 0) |
+| show_other_tab | Check | "Show Other Tab" — controls whether Other tab appears on Asset Board (default 0) |
 
 ### Hamilton Board Correction (Child DocType for Shift Record)
 | Field | Type | Notes |
@@ -352,7 +363,7 @@ Naming: `VA-.####`
 
 | Page | Status | Phase |
 |---|---|---|
-| Asset Board | Not started | 1 |
+| Asset Board | UI design approved (V6 mockup 2026-04-13). Spec: `docs/design/asset_board_ui.md` | 1 |
 | Asset Assignment Prompt | Not started | 2 |
 | Cash Drop Screen | Not started | 3 |
 | Shift Start | Not started | 3 |

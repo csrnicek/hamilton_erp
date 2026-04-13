@@ -3,7 +3,7 @@
 Persistent reference for Claude Code sessions. Captures best practices, planning notes,
 tooling decisions, and Phase 2 readiness that don't belong in code comments or decisions_log.md.
 
-**Last updated:** 2026-04-12
+**Last updated:** 2026-04-13
 
 ---
 
@@ -292,7 +292,22 @@ Guest pays for admission at POS -> operator assigns a room/locker -> asset moves
 
 ---
 
-## 6. Optimization Opportunities (from 2026-04-12 Code Review)
+## 6. Asset Board UI Design — Approved 2026-04-13
+
+- Full spec in `docs/design/asset_board_ui.md` — approved via interactive mockup V6
+- Two new Hamilton Settings fields required before Task 17 ships: `show_waitlist_tab`, `show_other_tab`
+- Waitlist tab is Phase 2 placeholder only in Phase 1
+- Top summary strip removed from header — footer is sole count display
+- Accessibility standard applied throughout: 56px tab height, 15px font, 3px tile borders (staff aged 50+)
+- Watch tab always visible regardless of venue feature flags
+- Tab badges: green = available count per tab; Watch badge = warning + overtime + OOS combined, pulsing red
+- Tile expand: 1.5x scale (2x was considered and rejected), one tile expanded at a time
+- Tab content layout: four sections per tab (Available → Needs Cleaning → Occupied → Out of Service), empty sections hidden, time-based sorting within each section
+- Watch tab aggregates warning + overtime + OOS across all categories, grouped by category row
+
+---
+
+## 7. Optimization Opportunities (from 2026-04-12 Code Review)
 
 Identified during a full source review. No changes made — these are future improvements.
 
