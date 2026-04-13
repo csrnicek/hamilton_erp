@@ -302,7 +302,7 @@
         "description": "Add 2-stage overtime ticker that visually flags Occupied sessions exceeding configured time thresholds.",
         "details": "Plan section: Task 19 (lines 2997-3134). Modifies asset_board.js.",
         "testStrategy": "Unit tests for threshold math; manual verification of stage transitions on test sessions.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "18"
         ],
