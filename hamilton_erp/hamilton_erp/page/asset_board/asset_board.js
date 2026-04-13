@@ -1,4 +1,5 @@
 frappe.provide("hamilton_erp");
+//
 
 frappe.pages["asset-board"].on_page_load = (wrapper) => {
 	const page = frappe.ui.make_app_page({
