@@ -9,7 +9,8 @@ at scale but E2E tests must verify the real log).
 Task 22 adds H10 (Vacate and Turnover).
 Task 23 adds H11 (Out of Service) — 8 tests covering OOS from all
   entry states, reason validation, return cycle, audit trail, version.
-Task 24 adds H12 (Occupied Asset Rejection).
+Task 24 adds H12 (Occupied Asset Rejection) — 5 tests covering
+  double-assign, invalid-state clean/vacate/return, and OOS-on-OOS.
 """
 import uuid
 from contextlib import contextmanager
@@ -362,6 +363,102 @@ class TestH11OutOfService(IntegrationTestCase):
 			)
 			a = frappe.get_doc("Venue Asset", self.asset.name)
 			self.assertEqual(a.version, 2)
+
+
+class TestH12OccupiedAssetRejection(IntegrationTestCase):
+	"""H12: Invalid transitions are rejected — state and logs unchanged."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		seed_hamilton_env.execute()
+
+	def setUp(self):
+		self.asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"asset_name": f"H12 Asset {uuid.uuid4().hex[:6]}",
+			"asset_code": f"H12-{uuid.uuid4().hex[:6]}",
+			"asset_category": "Room",
+			"asset_tier": "Single Standard",
+			"status": "Available",
+			"display_order": 9102,
+			"version": 0,
+			"expected_stay_duration": 360,
+			"company": frappe.db.get_single_value("Global Defaults", "default_company"),
+		}).insert(ignore_permissions=True)
+		frappe.db.commit()
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def test_h12_cannot_assign_to_occupied(self):
+		"""H12: A second start_session on an Occupied asset is rejected."""
+		with real_logs():
+			lifecycle.start_session_for_asset(
+				self.asset.name, operator="Administrator"
+			)
+			with self.assertRaises(frappe.ValidationError):
+				lifecycle.start_session_for_asset(
+					self.asset.name, operator="Administrator"
+				)
+			# State unchanged — still Occupied with exactly 1 log
+			a = frappe.get_doc("Venue Asset", self.asset.name)
+			self.assertEqual(a.status, "Occupied")
+			logs = frappe.get_all(
+				"Asset Status Log",
+				filters={"venue_asset": self.asset.name},
+			)
+			self.assertEqual(len(logs), 1)
+
+	def test_h12_cannot_mark_clean_if_not_dirty(self):
+		"""H12: mark_asset_clean on an Available asset is rejected."""
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.mark_asset_clean(
+				self.asset.name, operator="Administrator"
+			)
+		a = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(a.status, "Available")
+
+	def test_h12_cannot_vacate_if_not_occupied(self):
+		"""H12: vacate_session on an Available asset is rejected."""
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.vacate_session(
+				self.asset.name, operator="Administrator",
+				vacate_method="Key Return",
+			)
+		a = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(a.status, "Available")
+
+	def test_h12_cannot_return_to_service_if_not_oos(self):
+		"""H12: return_asset_to_service on an Available asset is rejected."""
+		with self.assertRaises(frappe.ValidationError):
+			lifecycle.return_asset_to_service(
+				self.asset.name, operator="Administrator",
+				reason="Shouldn't work",
+			)
+		a = frappe.get_doc("Venue Asset", self.asset.name)
+		self.assertEqual(a.status, "Available")
+
+	def test_h12_cannot_oos_an_already_oos_asset(self):
+		"""H12: set_asset_out_of_service on an OOS asset is rejected."""
+		with real_logs():
+			lifecycle.set_asset_out_of_service(
+				self.asset.name, operator="Administrator",
+				reason="Maintenance",
+			)
+			with self.assertRaises(frappe.ValidationError):
+				lifecycle.set_asset_out_of_service(
+					self.asset.name, operator="Administrator",
+					reason="Double OOS attempt",
+				)
+			a = frappe.get_doc("Venue Asset", self.asset.name)
+			self.assertEqual(a.status, "Out of Service")
+			# Only 1 OOS log, not 2
+			logs = frappe.get_all(
+				"Asset Status Log",
+				filters={"venue_asset": self.asset.name, "new_status": "Out of Service"},
+			)
+			self.assertEqual(len(logs), 1)
 
 
 def tearDownModule():
