@@ -325,3 +325,18 @@ Identified during a full source review. No changes made — these are future imp
 | `utils.py` | **Entirely dead code** — no Python file imports from it. Contains `create_asset_status_log`, `get_current_shift_record`, `get_next_drop_number`. All superseded by `lifecycle._make_asset_status_log`. | Low | None |
 | `lifecycle.py` | `_set_vacated_timestamp` and `_set_cleaned_timestamp` are one-line DB writes that could be folded into `_set_asset_status` | Low | Low |
 | `locks.py` | Extra Redis round-trip in finally block for TTL-expiry logging | Low | Low |
+
+## Claude Code Operating Tips
+
+### /compact Habit
+Run `/compact` when context hits 70%. Context usage shows in the status bar at the bottom of Claude Code. Bloated context leads to worse code decisions — critical on long ERP build sessions.
+
+### Proof Demand Technique
+After Task 25 deploy, never just ask "did it work?" — demand proof:
+> "Prove to me this works — show me the diff in behavior between main and this branch."
+Claude runs both branches, compares outputs, and presents concrete evidence.
+
+### Setup Audit (run after Phase 1)
+Check the full Claude Code setup for gaps using this command inside Claude Code:
+> "Fetch and follow the onboarding instructions from: https://raw.githubusercontent.com/FlorianBruniaux/claude-code-ultimate-guide/main/tools/onboarding-prompt.md"
+Flags missing security hooks, incomplete MCP setup, and CI integration gaps.
