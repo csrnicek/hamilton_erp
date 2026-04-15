@@ -108,7 +108,13 @@ Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lif
 
 ## Session Startup
 
-At the start of every session, automatically check Taskmaster for the current project status and tell Chris which task is next, what it involves, and what was completed last session. Do this without being asked. Use `/taskmaster:next` to identify the next task and summarize it in plain English before doing anything else.
+At the start of every session, do these steps automatically without being asked:
+
+1. Run `/debug-env` to confirm Redis, MariaDB, and the test site are all healthy before touching anything else. If anything is broken, stop and tell Chris in plain English what is wrong.
+2. Run `/run-tests` to confirm the test suite is fully green. If any tests are failing, stop and tell Chris before proceeding.
+3. Check Taskmaster with `/taskmaster:next` to identify the next task and summarize it in plain English — what it involves and what was completed last session.
+
+Do not skip step 1 or 2. A broken environment or failing tests must be resolved before any new work begins.
 
 ## 3-AI review checkpoints (remind Chris at these points)
 Run ChatGPT + Grok + Claude (new tab) review after:
