@@ -7,11 +7,12 @@
 # Never point /run-tests at hamilton-test.localhost — that's the dev
 # browser site and test teardowns corrupt it (setup_wizard loops,
 # 403s, lost roles). See docs/testing_checklist.md top-of-file warning.
-# All 13 modules run every time.
+# All 14 modules run every time.
 # (test_asset_board_rendering added in Task 17.2 — +7 tests.)
 # (test_environment_health added post-Task 17 — +10 smoke tests after security-audit sweep.)
 # (test_security_audit added 2026-04-11 — +5 SQL-injection / XSS audit tests.)
 # (test_database_advanced added 2026-04-14 — +51 DB perf, MariaDB, Redis, Frappe v16, fraud tests.)
+# (test_utils added 2026-04-14 — +9 utils.py gap tests: shift record lookup, drop numbering, empty-string guard.)
 # For autonomous fixing of failures use /fix-and-test instead.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
@@ -27,4 +28,5 @@ cd ~/frappe-bench-hamilton && source env/bin/activate && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_asset_board_rendering && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_security_audit && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_environment_health && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_database_advanced
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_database_advanced && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_utils
