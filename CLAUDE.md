@@ -66,8 +66,8 @@ The slash commands in `.claude/commands/` have `# Recommended model: ...` header
 
 Before writing custom debug scripts or adding `print()` statements, reach for these first. Full usage notes live in `docs/testing_checklist.md` → "Debugging Shortcuts and Workflow Tips".
 
-- **`bench console --autoreload`** — Interactive REPL with Frappe context loaded. The `--autoreload` flag re-imports any `.py` you edit, so you don't have to `exit()` and relaunch between tries. Use for: "what does this ORM query return", poking at real Redis state, inspecting a live Venue Asset row. Always point at `hamilton-unit-test.localhost` or `hamilton-test.localhost` — never production.
-- **`bench request`** — Invokes a Frappe HTTP route with full request lifecycle (auth, permission, hooks) and returns the response in your terminal. Much faster than the browser, and failures show a real stack trace. Use for: reproducing a 403/500 from the Asset Board, verifying a new whitelisted endpoint signature.
+- **`bench console --autoreload`** — Interactive REPL with Frappe context loaded. Use for: "what does this ORM query return", poking at real Redis state, inspecting a live Venue Asset row. Always point at `hamilton-unit-test.localhost` or `hamilton-test.localhost` — never production.
+- **`bench request`** — Invokes a Frappe HTTP route with full request lifecycle and returns the response in your terminal. Use for: reproducing a 403/500 from the Asset Board, verifying a new whitelisted endpoint signature.
 - **`bench doctor` + `show-pending-jobs`** — **MANDATORY first debug step** on any symptom that could be "Redis is down", "the scheduler didn't run", or "a previous test left a stuck job". Run these BEFORE writing a repro, BEFORE opening a debugger, BEFORE grepping code. Or just run `/debug-env` which does this plus Redis PING + `is_setup_complete` + role check in one shot.
 
 ## Project: Hamilton ERP
@@ -171,4 +171,51 @@ The complete testing guide lives at `docs/testing_guide.md`. It includes:
 ### Always run the full test suite — on the dedicated test site only
 Every test run must include every module — never run just one or two — and **always** point at `hamilton-unit-test.localhost`. Tests on `hamilton-test.localhost` corrupt the dev browser state (setup_wizard loops, 403s, wiped roles). See `docs/testing_checklist.md` top-of-file WARNING.
 
-Use the `/run-tests` slash command — it runs all 14 modules against `hamilton-unit-test.localhost` automatically. If you must run a single module by hand:
+Use the `/run-tests` slash command — it runs all 14 modules against `hamilton-unit-test.localhost` automatically.
+
+### When Chris asks for more code checks
+This is a permanent rule — never skip any of these steps:
+1. Add the new tests to `docs/testing_checklist.md`
+2. Immediately convert them to running Python tests in the appropriate file
+3. Update `.claude/commands/run-tests.md` to include any new test module
+4. Commit all files to GitHub
+
+Never add to the checklist without also writing the Python tests.
+Never write Python tests without updating the run-tests command.
+Never update run-tests without committing everything to GitHub.
+
+## Current Project State
+Current task status: see `docs/current_state.md`
+
+## Test Suite
+Run `/status` for current module list and pass counts.
+
+## Slash Commands — All in .claude/commands/
+
+| Command | Purpose |
+|---|---|
+| /run-tests | Run all 14 modules |
+| /fix-and-test | Run all 14 modules + autonomously fix all failures |
+| /deploy | Fix-and-test then push to GitHub |
+| /feature [N] | Full subagent implementation of task N |
+| /task-start | Auto-detect and run next task |
+| /bug-triage | Diagnose and fix a reported bug |
+| /status | Project status report |
+| /coverage | Coverage report |
+| /mutmut | Mutation testing |
+| /hypothesis | Property-based testing |
+| /task9-start | Full refresh + test + dispatch for Task 9 |
+
+## Autonomous Command Rules (Permanent)
+
+All slash commands run autonomously. Opus never stops to ask Chris for input
+unless one of these STOP conditions is hit:
+
+1. A fix would change a DEC-0XX design decision
+2. A fix risks data loss or production data modification
+3. More than 5 tests fail with the same root cause (systemic issue)
+4. bench migrate is required
+
+Everything else — picking fix options, committing, pushing, continuing —
+happens without Chris. Chris does not want to be part of the workflow
+when he is just approving routine decisions.
