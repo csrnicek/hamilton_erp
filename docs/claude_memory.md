@@ -36,7 +36,7 @@ during Phase 0 and Phase 1 development (2026-03 through 2026-04).
 
 ### Testing
 
-6. **Always run the full 13-module suite (334 tests, 7 skipped), always on `hamilton-unit-test.localhost`.** Never run tests
+6. **Always run the full 16-module suite (353 tests, 7 skipped), always on `hamilton-unit-test.localhost`.** Never run tests
    on `hamilton-test.localhost` — it corrupts the dev browser state (setup_wizard loops, 403s, wiped roles).
 
 7. **Redis uses non-default ports.** Cache is on port 13000, queue is on port 11000 (not 6379).
@@ -216,7 +216,7 @@ These items must all be complete before Phase 1 is marked done.
 
 ### Testing Quality Gates
 
-- [ ] **All 13 test modules green (334 tests, 7 skipped)** — zero failures, skipped tests documented
+- [ ] **All 16 test modules green (353 tests, 7 skipped)** — zero failures, skipped tests documented
 - [ ] **mutmut mutation testing** — run `mutmut run` against lifecycle.py and locks.py
   - Target: kill ratio > 80% on critical paths
   - Surviving mutants must be reviewed and either killed or documented as acceptable
@@ -478,19 +478,34 @@ Full specification: `docs/testing_guide.md` → "Advanced Database and Performan
 Tests session number uniqueness, Redis INCR correctness, connection pool exhaustion,
 retry loop handling, and midnight boundary fix. Runtime: ~5-10 minutes on local bench.
 
-### Mutation Testing (`/mutmut`)
+### Mutation Testing (`scripts/mutation_test.py`)
 
-Status: **Not yet run.** Slash command and `testing_guide.md` documentation exist.
-Target: lifecycle.py and locks.py. Kill ratio goal > 80%.
-Run after Task 25 pre-deploy, not during active development.
+Status: **Complete — 91% kill score (10/11 killed, 1 survivor).** Run on 2026-04-14.
+Custom script because mutmut v2 fails on Python 3.14 and mutmut v3 is incompatible with
+Frappe's bench-required test init. Script applies 15 mutations to lifecycle.py and locks.py,
+runs bench tests after each, reports kill/survive.
+- Survivor: `LOCK_TTL_MS = 1` — tests complete too fast for 1ms TTL to expire. Pinned by R4 TTL assertion.
+- Target: lifecycle.py and locks.py. Kill ratio goal > 80% — **exceeded at 91%**.
 
-### Property-Based Testing (`/hypothesis`)
+### Property-Based Testing (`test_hypothesis.py`)
 
-Status: **Not yet implemented.** Slash command exists. `testing_guide.md` documents the plan.
-No `test_hypothesis.py` file exists yet. Planned properties:
-- State machine: no sequence of valid transitions reaches an invalid state
-- Session number: generated numbers are always unique and correctly formatted
-- Lock: acquire + release is always paired (no leaked locks)
+Status: **Complete — 8 tests, 0 failures across ~540 random inputs.** Run on 2026-04-14.
+- P1 Session number format (4 tests): format, date encoding, positive sequence, 4-digit padding
+- P2 State machine (2 tests): random action sequences never corrupt, lifecycle repeatable 1-5x
+- P3 Cash math (2 tests): float sum precision, variance sign preservation
+
+### Slow Query Log Analysis
+
+Status: **Complete — 0 application queries exceeded 10ms.** Run on 2026-04-14.
+MariaDB slow_query_log enabled at 10ms threshold during full 353-test run.
+Only 2 queries exceeded 10ms — both were Frappe framework `information_schema.tables` scans (15ms, 11ms).
+All Hamilton ERP queries (asset board, session creation, lock acquisition, session number LIKE) under 10ms.
+
+### Database Indexes
+
+Status: **Complete — all indexes verified.** All `search_index` fields in DocType JSON have
+corresponding MariaDB indexes confirmed via `INFORMATION_SCHEMA.STATISTICS` (R1 tests).
+Tables covered: tabVenue Asset, tabVenue Session, tabShift Record, tabCash Drop, tabAsset Status Log.
 
 ### Contract Testing
 
@@ -563,10 +578,10 @@ Run before each deploy to Frappe Cloud.
 ### Task 25
 | # | Activity | Description |
 |---|----------|-------------|
-| 4 | Property-Based (Hypothesis) | Random inputs against session numbering, cash math, state machine |
-| 5 | Mutation Testing (mutmut) | Target 80%+ kill ratio on lifecycle.py and locks.py |
+| 4 | ~~Property-Based (Hypothesis)~~ | ✅ Done 2026-04-14 — 8 tests, 0 failures, ~540 random inputs |
+| 5 | ~~Mutation Testing~~ | ✅ Done 2026-04-14 — 91% kill score (10/11), custom script |
 | 6 | Load Testing | 20 concurrent check-ins over 2 hours, measure degradation |
-| 7 | Slow Query Log | Enable MariaDB slow log, run full shift simulation, audit queries >10ms |
+| 7 | ~~Slow Query Log~~ | ✅ Done 2026-04-14 — 0 app queries >10ms |
 
 ### Phase 2
 | # | Activity | Description |

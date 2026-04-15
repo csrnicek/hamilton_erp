@@ -104,4 +104,48 @@ debugging dead-end, or production surprise so the next venue build avoids repeat
 
 ---
 
+## Lesson: mutmut v3 incompatible with Frappe bench environment
+
+- **What happened:** mutmut v3 copies source to a `mutants/` directory and runs pytest from there. Frappe's test infrastructure requires `bench run-tests` which initializes the full bench context (DB connection, Redis, module registry). The copied `mutants/` directory has no bench context, so all tests fail with "Module Hamilton ERP not found."
+- **Time cost:** ~45 minutes trying both v2 and v3 before building a custom solution.
+- **Root cause:** mutmut v3 rewrote its architecture to use file copying instead of in-place mutation. mutmut v2 mutates in-place but crashes on Python 3.14 with a serialization error in the `copy` module.
+- **The fix:** Built `scripts/mutation_test.py` — a lightweight custom mutation script that modifies files in-place, runs `bench run-tests`, and restores originals. 91% kill score on first run.
+- **Prevention for next venue:** Ship `scripts/mutation_test.py` as part of the codebase. Don't install mutmut.
+- **Relevant commit/DEC:** Commit `69c7992`
+
+---
+
+## Lesson: `frappe.flags.in_test` vs `frappe.in_test` — paired change required
+
+- **What happened:** Code using `frappe.flags.in_test` worked under `bench run-tests` but is actually deprecated in Frappe v16. The correct attribute is `frappe.in_test` (a module-level global, not a flags attribute).
+- **Time cost:** ~20 minutes.
+- **Root cause:** Frappe v16 moved the test flag from `frappe.flags.in_test` to `frappe.in_test`. Both exist but `frappe.flags.in_test` may not be reliably set in all contexts (e.g., pytest without bench runner).
+- **The fix:** Update production code (lifecycle.py) to use `frappe.in_test` and update all test scaffolding to match. This is a paired change — updating one without the other silently breaks test-mode detection.
+- **Prevention for next venue:** Grep for `frappe.flags.in_test` during code review. Always use `frappe.in_test`.
+- **Relevant commit/DEC:** N/A — Frappe v16 migration knowledge
+
+---
+
+## Lesson: `property_setter.json` must exist even if empty
+
+- **What happened:** Frappe fixture export creates `property_setter.json`. If the file is missing, `bench migrate` on a new site silently skips Property Setter fixtures — no error, no warning, just silent data loss.
+- **Time cost:** Caught during pre-handoff research, not in production.
+- **Root cause:** Frappe's fixture loader checks for file existence. A missing fixture file is treated as "no fixtures to load" rather than an error.
+- **The fix:** Always include `property_setter.json` in the app's fixtures directory, even if it contains just `[]`. Run `bench export-fixtures` regularly.
+- **Prevention for next venue:** Include in the venue rollout playbook. The fixture export step is now mandatory.
+- **Relevant commit/DEC:** Task 25 checklist
+
+---
+
+## Lesson: `pyproject.toml` must declare `frappe-dependencies` or Frappe Cloud blocks deploys
+
+- **What happened:** Frappe Cloud refused to deploy the app because `pyproject.toml` was missing the `[tool.bench.frappe-dependencies]` section declaring minimum Frappe and ERPNext versions.
+- **Time cost:** ~15 minutes.
+- **Root cause:** Frappe Cloud's deploy pipeline checks `pyproject.toml` for dependency declarations. Without them, it can't determine compatibility and blocks the deploy.
+- **The fix:** Added `[tool.bench.frappe-dependencies]` with `frappe = ">=16.0.0,<17.0.0"` and `erpnext = ">=16.0.0,<17.0.0"`.
+- **Prevention for next venue:** Template `pyproject.toml` with the dependency section pre-filled.
+- **Relevant commit/DEC:** N/A — Frappe Cloud operational requirement
+
+---
+
 *Add new lessons below this line.*
