@@ -1,7 +1,5 @@
 """Scheduled background tasks for Hamilton ERP."""
 
-import frappe
-
 
 def check_overtime_sessions() -> None:
 	"""Check all Active Venue Sessions for overtime and publish realtime alerts.

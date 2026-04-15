@@ -16,7 +16,7 @@ the lock section.
 """
 from __future__ import annotations
 
-from datetime import date as _date_type, datetime as _datetime_type
+from datetime import date as _date_type
 from typing import Optional
 
 import frappe
