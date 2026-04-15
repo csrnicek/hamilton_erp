@@ -22,7 +22,7 @@ import threading
 import time
 from frappe.tests.utils import IntegrationTestCase
 
-IGNORE_TEST_RECORD_DEPENDENCIES = True
+IGNORE_TEST_RECORD_DEPENDENCIES = []
 
 # ---------------------------------------------------------------------------
 # Helpers
