@@ -36,7 +36,7 @@ during Phase 0 and Phase 1 development (2026-03 through 2026-04).
 
 ### Testing
 
-6. **Always run the full 12-module suite, always on `hamilton-unit-test.localhost`.** Never run tests
+6. **Always run the full 13-module suite (334 tests, 7 skipped), always on `hamilton-unit-test.localhost`.** Never run tests
    on `hamilton-test.localhost` — it corrupts the dev browser state (setup_wizard loops, 403s, wiped roles).
 
 7. **Redis uses non-default ports.** Cache is on port 13000, queue is on port 11000 (not 6379).
@@ -216,7 +216,7 @@ These items must all be complete before Phase 1 is marked done.
 
 ### Testing Quality Gates
 
-- [ ] **All 14 test modules green** — zero failures, skipped tests documented
+- [ ] **All 13 test modules green (334 tests, 7 skipped)** — zero failures, skipped tests documented
 - [ ] **mutmut mutation testing** — run `mutmut run` against lifecycle.py and locks.py
   - Target: kill ratio > 80% on critical paths
   - Surviving mutants must be reviewed and either killed or documented as acceptable
@@ -452,6 +452,25 @@ Each venue build should be faster than the last.
 
 Includes a crash reporter that writes JSON results to `/tmp/hamilton_adversarial_report.json`.
 Family F tests unlock when Phase 2 financial integration is built.
+
+### Advanced Database and Performance Tests (`test_database_advanced.py`)
+
+51 tests across 8 categories (R1–R8). Added 2026-04-14. Covers infrastructure beneath the
+application logic — verifies that MariaDB, Redis, and Frappe v16 behave the way Hamilton ERP
+assumes they do.
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| R1 — Database Indexes | 7 | INFORMATION_SCHEMA verification for all search_index fields |
+| R2 — Query Performance | 6 | EXPLAIN plans, SLA timing (<100ms board, <200ms session, <50ms lock) |
+| R3 — MariaDB Edge Cases | 7 | REPEATABLE-READ isolation, row locking, datetime(6), NULL handling, unique constraints |
+| R4 — Redis Edge Cases | 7 | TTL, INCR overflow, Lua CAS release, NX semantics, cold-start DB fallback |
+| R5 — Frappe v16 Behaviour | 9 | in_test flag, override classes, scheduler, roles, track_changes, autoname |
+| R6 — Fraud Detection | 5 | Orphan sessions, duplicate assignment, bulk clean safety, OOS auto-close |
+| R7 — Concurrency | 3 | Sequential lock acquisition, repeatable lifecycle, version monotonicity |
+| R8 — Data Integrity | 7 | Timestamp ordering, field nullability, cleanup after state transitions |
+
+Full specification: `docs/testing_guide.md` → "Advanced Database and Performance Tests".
 
 ### Stress Simulation (`test_load_10k.py`)
 
