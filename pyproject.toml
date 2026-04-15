@@ -17,6 +17,16 @@ erpnext = ">=16.0.0,<17.0.0"
 requires = ["flit_core >=3.4,<4"]
 build-backend = "flit_core.buildapi"
 
+[tool.pytest.ini_options]
+testpaths = ["hamilton_erp"]
+# Skip threading-heavy tests that need bench run-tests (Frappe thread-local init)
+addopts = "-k 'not (test_A4_twenty_threads or test_adversarial or test_load_10k or test_second_acquisition_raises or test_concurrent_start_session or test_stress_simulation or test_only_one_of_two_concurrent or test_frappe_in_test_flag)'"
+
+[tool.mutmut]
+paths_to_mutate = ["hamilton_erp/lifecycle.py", "hamilton_erp/locks.py"]
+tests_dir = ["/Users/chrissrnicek/hamilton_erp/hamilton_erp/"]
+also_copy = ["conftest.py"]
+
 [tool.ruff]
 line-length = 110
 target-version = "py311"
