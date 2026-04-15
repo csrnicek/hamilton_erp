@@ -1,4 +1,4 @@
-Common Issues and Solutions
+## Common Issues and Solutions
 Tests fail with setUpClass errors
 Symptom: Phase 0 stub doctypes (asset_status_log, comp_admission_log, cash_drop, venue_session, shift_record, cash_reconciliation) fail with setUpClass errors. Cause: Pre-existing issue — these doctypes don't set IGNORE_TEST_RECORD_DEPENDENCIES. Action: Ignore these. They are out of scope. Only fix if they appear in the 5 core test modules.
 
