@@ -205,6 +205,13 @@ Run this before every deploy to hamilton-erp.v.frappe.cloud:
 
 ## Testing Rules (Permanent)
 
+### Reference: docs/testing_guide.md
+The complete testing guide lives at `docs/testing_guide.md`. It includes:
+- All 4 testing levels (run-tests, coverage, mutmut, hypothesis)
+- Advanced database/performance test specification (R1–R8)
+- Known test gaps to resolve before Task 25
+- Expert-level testing checklist (10 items with priorities: Before Go-Live / Task 25 / Phase 2)
+
 ### Always run the full test suite — on the dedicated test site only
 Every test run must include every module — never run just one or two — and **always** point at `hamilton-unit-test.localhost`. Tests on `hamilton-test.localhost` corrupt the dev browser state (setup_wizard loops, 403s, wiped roles). See `docs/testing_checklist.md` top-of-file WARNING.
 

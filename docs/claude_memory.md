@@ -549,6 +549,34 @@ Run before each deploy to Frappe Cloud.
 
 ---
 
+## Expert Testing Checklist
+
+10 expert-level testing activities beyond unit/integration tests. Full details in `docs/testing_guide.md` → "Expert-Level Testing — Full Checklist".
+
+### Before Go-Live
+| # | Activity | Description |
+|---|----------|-------------|
+| 1 | Security Penetration | SQL injection, privilege escalation, CSRF bypass, rate limiting |
+| 2 | Chaos Testing | Kill Redis mid-shift, network failure mid-transaction, bench restart mid-session |
+| 3 | Data Migration | Seed 6 months historical data (10k+ sessions), verify patches and performance |
+
+### Task 25
+| # | Activity | Description |
+|---|----------|-------------|
+| 4 | Property-Based (Hypothesis) | Random inputs against session numbering, cash math, state machine |
+| 5 | Mutation Testing (mutmut) | Target 80%+ kill ratio on lifecycle.py and locks.py |
+| 6 | Load Testing | 20 concurrent check-ins over 2 hours, measure degradation |
+| 7 | Slow Query Log | Enable MariaDB slow log, run full shift simulation, audit queries >10ms |
+
+### Phase 2
+| # | Activity | Description |
+|---|----------|-------------|
+| 8 | Contract Tests vs ERPNext | Sales Invoice, POS closing, GL entry hooks after ERPNext updates |
+| 9 | Structured Logging | JSON log entries for session creation, lock acquisition, cash drops |
+| 10 | STRIDE Threat Model | Every entry point, trust boundary, data flow, documented mitigation |
+
+---
+
 ## Claude Code Operating Tips
 
 ### /compact Habit

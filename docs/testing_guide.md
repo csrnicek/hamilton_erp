@@ -356,3 +356,86 @@ None of these have any test coverage. Tests should create a Sales Invoice with a
 
 - `get_current_shift_record()` — returns the active Shift Record for the current operator. Must be tested with: no active shift, one active shift, multiple shifts (should return most recent).
 - `get_next_drop_number()` — returns the next sequential drop number for a shift. Must be tested with: no prior drops (returns 1), existing drops (returns max + 1), and the empty-string guard (a known edge case where an empty string in the `drop_number` field causes `max()` to return `""` instead of an integer).
+
+---
+
+## Expert-Level Testing — Full Checklist
+
+These are the 10 expert-level testing activities that go beyond unit and integration tests. Each one targets a class of failure that basic tests cannot catch. Ordered by priority.
+
+### Before Go-Live (must complete before first real shift)
+
+**1. Security Penetration Testing**
+Raw HTTP API exploitation attempts against all whitelisted endpoints. Includes:
+- SQL injection via `frappe.form_dict` parameters (asset names, session numbers, reasons)
+- Privilege escalation — Guest calling operator-only endpoints, operator calling admin-only endpoints
+- CSRF token bypass attempts
+- Rate limiting / brute force against session creation
+
+**2. Chaos Testing**
+Deliberately break infrastructure mid-operation and verify graceful recovery:
+- Kill Redis mid-shift — verify lock acquisition fails cleanly (not silent corruption)
+- Network failure mid-transaction — verify MariaDB rollback leaves no half-written state
+- `bench restart` mid-session — verify the session is recoverable or cleanly orphaned
+- Redis flush during active operations — verify cold-start fallback in session numbering
+
+**3. Data Migration Testing**
+Seed 6 months of realistic historical data (10,000+ sessions, 500+ shifts, 2,000+ cash drops) and verify:
+- All patches in `hamilton_erp/patches/` run cleanly against the historical data
+- No unique constraint violations from realistic session number patterns
+- Performance does not degrade with historical volume (asset board still <100ms)
+
+### Task 25 (complete before Frappe Cloud deploy)
+
+**4. Property-Based Testing (Hypothesis)**
+Random inputs against critical functions:
+- `_next_session_number()` — random dates, high sequence numbers, midnight boundaries
+- Cash math — random float amounts, verify no floating-point rounding errors
+- State machine — random sequences of valid transitions never reach an invalid state
+- Session number format — all generated numbers match the `DD-M-YYYY---NNNN` pattern
+
+**5. Mutation Testing (mutmut)**
+Verify the test suite catches real bugs by deliberately introducing small mutations:
+- Target: `lifecycle.py` and `locks.py`
+- Goal: 80%+ kill ratio (80% of mutations are caught by at least one test)
+- Any surviving mutant in a critical path (lock acquisition, state transition) must be killed
+
+**6. Load Testing**
+Simulate realistic concurrent usage over an extended period:
+- 20 concurrent check-ins over 2 hours
+- Measure response time degradation over time (should stay flat, not creep up)
+- Monitor MariaDB connection pool, Redis memory, and Python worker RSS
+- Verify session numbering remains unique under sustained load
+
+**7. Slow Query Log Analysis**
+Enable MariaDB slow query log, run a full shift simulation (start shift, 50 check-ins, 50 vacates, bulk clean, cash drops, close shift), then audit:
+- Every query over 10ms — identify missing indexes or bad query plans
+- Any full table scan on tables with >100 rows
+- Any query that locks more than one row
+- Enable with: `SET GLOBAL slow_query_log = 'ON'; SET GLOBAL long_query_time = 0.01;`
+
+### Phase 2 (after go-live, before scaling)
+
+**8. Contract Tests vs ERPNext**
+Verify ERPNext internal APIs that Hamilton ERP depends on still behave correctly:
+- Sales Invoice creation and submission — `HamiltonSalesInvoice` override hooks fire
+- POS Closing Entry — GL entries post correctly with Hamilton admission items
+- ERPNext version upgrade — run full test suite against ERPNext v16.x point releases
+- `frappe.get_meta()` contracts — field types, options, and permissions haven't changed
+
+**9. Structured Logging**
+Add JSON-formatted log entries for every critical operation:
+- Session creation — asset, operator, session_number, duration_ms
+- Lock acquisition — asset, operation, wait_ms, success/fail
+- Cash drop — shift, drop_number, declared_amount, operator
+- Errors — full stack trace, request context, user
+- Output to Frappe Error Log or external (Loki, CloudWatch) — decision pending
+
+**10. Formal STRIDE Threat Model**
+Document every entry point, trust boundary, and data flow with explicit mitigations:
+- **S**poofing — operator identity (Frappe session auth, no anonymous access)
+- **T**ampering — cash drop amounts, session timestamps (audit trail, track_changes)
+- **R**epudiation — operator denies action (Asset Status Log, Version history)
+- **I**nformation Disclosure — guest sees revenue data (role-based field permissions)
+- **D**enial of Service — lock flooding, bulk API abuse (Redis TTL, rate limiting)
+- **E**levation of Privilege — operator accessing admin endpoints (Frappe role check)
