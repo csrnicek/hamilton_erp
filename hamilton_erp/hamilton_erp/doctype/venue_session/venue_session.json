@@ -55,6 +55,7 @@
    "in_list_view": 1,
    "label": "Session Number",
    "read_only": 1,
+   "search_index": 1,
    "unique": 1
   },
   {
