@@ -1,136 +1,86 @@
-# Inbox
-
-## Task 25 Addition — Feature Status JSON
-
-At Task 25, before go-live, create a file at docs/feature_status.json listing every
-user-facing feature of the Asset Board. Each feature starts marked as "passes": false
-and only gets flipped to true after real end-to-end testing. Use JSON format (not
-Markdown) because Claude is less likely to accidentally overwrite or rewrite JSON files.
-
-Example format:
-```json
-{
-  "features": [
-    {
-      "category": "asset_lifecycle",
-      "description": "Operator can start a session on an available room",
-      "passes": false
-    }
-  ]
-}
-```
-
-Do not deploy to Frappe Cloud until every feature shows "passes": true.
-
-Source: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
-
-## Task 25 Addition — Feature Status JSON
-
-At Task 25, before go-live, create a file at docs/feature_status.json listing every
-user-facing feature of the Asset Board. Each feature starts marked as "passes": false
-and only gets flipped to true after real end-to-end testing. Use JSON format (not
-Markdown) because Claude is less likely to accidentally overwrite or rewrite JSON files.
-
-Example format:
-{
-  "features": [
-    {
-      "category": "asset_lifecycle",
-      "description": "Operator can start a session on an available room",
-      "passes": false
-    },
-    {
-      "category": "asset_lifecycle",
-      "description": "Asset moves from Available to Occupied after session start",
-      "passes": false
-    }
-  ]
-}
-
-Do not deploy to Frappe Cloud until every feature shows "passes": true.
-
-Source: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+markdown# docs/inbox.md
+# Bridge file: paste planning summaries here, then at start of next Claude Code session say:
+# "read inbox.md and merge anything relevant into claude_memory.md and appropriate docs, then clear inbox"
 
 ---
 
-## Engineering Blog Action Items — April 15, 2026
+## Entry: 2026-04-11 — Expert Testing Gaps Review
 
-### Immediate setup tasks for Claude Code to complete:
+From claude.ai planning session reviewing expert-level test checklist gaps:
 
-0. CREATE FEATURE STATUS FILE: Create docs/feature_status.json with "passes": false
-   for every user-facing Asset Board feature. Cover these categories at minimum:
-   asset_lifecycle (start session, vacate, mark clean, set out of service, return to
-   service), session_numbering (format is {d}-{m}-{y}---{NNN}), locking (Redis lock
-   prevents double-assignment), and UI (asset board displays correct status after each
-   transition). Commit with message: "chore: add feature_status.json pre-deploy gate"
+**5 Phase 2 testing gaps identified — add to docs/testing_checklist.md under "Phase 2 Testing Gaps":**
 
-1. CLAUDE.md AUDIT: Read the current CLAUDE.md. Delete any line that Claude could
-   already infer from reading the code (standard Python, standard Frappe, standard git).
-   Keep only Hamilton-specific things: test site URL, Redis lock key format, session
-   numbering format, branch/PR naming rules. Add this line at the bottom: "When
-   compacting, always preserve: modified file list, failing test names, and Redis
-   lock key format."
+1. **Dedicated test site** — hamilton-unit-test.localhost should be fully isolated from dev browser sessions. Highest priority for Phase 2 start.
+2. **Role × API permission matrix** — a test covering every Hamilton role against every whitelisted API method. Highest priority for Phase 2 start.
+3. **UI tests (Cypress/Playwright)** — Asset Board tile rendering, popover interactions, and role-based button visibility.
+4. **Background job and scheduler health tests** — using `bench doctor` and scheduler health checks. Important for DC which will have complex accounting flows.
+5. **Frappe Recorder performance profiling** — full SQL trace visibility for N+1 query detection on busiest workflows. Current `test_api_phase1.py` guard is incomplete.
 
-2. CREATE FRAPPE SKILL: Before writing anything, read the file
-   hamilton_erp/hamilton_erp/doctype/bathhouse_asset/bathhouse_asset.py and look for
-   the Redis lock key string used in the locking functions. Also read claude_memory.md
-   for context on the lock key bug that was fixed (the key must NOT include the
-   operation suffix). Use the exact key format you find in the code — do not invent one.
-   Then create .claude/skills/frappe-v16/SKILL.md containing:
-   - Use frappe.in_test not frappe.flags.in_test (36 occurrences across 5 files to fix)
-   - Use extend_doctype_class not override_doctype_class in hooks.py line 69
-   - Always use real type comparisons, never string comparisons like == "1" or == "0"
-   - The correct Redis lock key format is: [read from bathhouse_asset.py as instructed]
-   - Lock key bug history: key previously included operation suffix — this was wrong
-     and was fixed
+**Two critical security items — action required before production go-live:**
 
-3. CREATE TESTING SKILL: Create .claude/skills/hamilton-testing/SKILL.md containing:
-   - Test site: hamilton-unit-test.localhost
-   - Bench location: ~/frappe-bench-hamilton
-   - Run a single test: bench --site hamilton-unit-test.localhost run-tests
-     --app hamilton_erp --module hamilton_erp.tests.[test_file_name]
-   - Run the full suite: bench --site hamilton-unit-test.localhost run-tests
-     --app hamilton_erp
-   - The 5 test files: test_lifecycle.py, test_locks.py, test_venue_asset.py,
-     test_additional_expert.py, test_checklist_complete.py
-   - Baseline is 270 passing / 7 skipped — any drop in passing count is a regression,
-     stop and report it
-   - Always run a single test first before running the full suite
+- **SQL injection audit**: ERPNext published a SQL injection vulnerability in late 2025. Every `frappe.db.sql()` call in `api.py` must be verified to pass parameters as a second argument, never via string formatting. Add a dedicated test for this.
+- **XSS in asset_board.js**: ERPNext published a reflected XSS vulnerability in December 2025. The `render_tile()` function generates HTML dynamically from asset data. All dynamic values must be verified as properly escaped. Add a test.
 
-4. CREATE SECURITY SUBAGENT: Create .claude/agents/security-reviewer.md with this
-   exact content:
+**Paste to Claude Code to action the testing gaps:**
+Please do the following to incorporate the expert test checklist gaps into our documentation and planning:
 
-   ---
-   name: security-reviewer
-   description: Reviews Hamilton ERP code for security and permission vulnerabilities
-   tools: Read, Grep, Glob, Bash
-   model: opus
-   ---
-   You are a senior Frappe/ERPNext security reviewer. Review code for:
-   - Frappe role permission gaps (cancel and amend must be locked to manager roles)
-   - System Manager access that should be restricted to the venue owner only
-   - Hardcoded values that should come from Bathhouse Settings or site config
-   - Silent exceptions: bare except blocks or pass after except with no logging
-   - String comparisons like == "1" or == "0" that should be real type comparisons
-   - Any frappe.flags.in_test usage that should be frappe.in_test
-   Provide specific file name, line number, and a suggested fix for each issue found.
+Add a new section to docs/testing_checklist.md called "Phase 2 Testing Gaps" documenting these 5 items with brief descriptions:
 
-5. CREATE TEST HOOK: Create a Claude Code hook that runs after every Python file edit.
-   The hook should run: bench --site hamilton-unit-test.localhost run-tests --app
-   hamilton_erp and print a pass/fail summary. The hook should warn and report failures
-   but NOT block the edit — tests are intentionally broken during active development.
+Dedicated test site (hamilton-unit-test.localhost) to isolate tests from dev browser
+Role × API permission matrix covering every Hamilton role against every whitelisted API method
+Playwright UI tests for Asset Board tile rendering, popover interactions, and role-based button visibility
+Background job and scheduler health tests using bench doctor
+Frappe Recorder performance profiling for N+1 query detection on busiest workflows
 
-6. Commit items 1 through 5 to GitHub with message:
-   "chore: add skills, subagent, and test hook from engineering blog review"
 
-7. Update claude_memory.md to add the following notes:
-   - .claude/skills/frappe-v16/ and .claude/skills/hamilton-testing/ are now set up
-   - .claude/agents/security-reviewer.md is now set up using opus
-   - Use /clear between every Task 25 sub-item — do not carry context across sub-items
-   - Use Plan Mode before starting any Task 25 item (Ctrl+Shift+P in Claude Code)
-   - The 36 frappe.flags.in_test replacements across 5 files should use the fan-out
-     pattern: loop file by file with claude -p, one clean context per file
-   - Replace the manual 3-AI review with the Writer/Reviewer two-session pattern:
-     Session A writes, Session B reviews from fresh context with no bias
-   - Do not deploy to Frappe Cloud until all entries in docs/feature_status.json
-     show "passes": true
+Add a note that items 1 and 2 are highest priority for Phase 2 start
+Commit to GitHub with message: docs(tests): add Phase 2 testing gaps from expert checklist review
+
+
+---
+
+## Entry: 2026-04-14 — Playwright, Cognee, Karpathy Review
+
+**Playwright (playwright.dev):**
+- Phase 2 only. Not needed now. Phase 1 tests are Python backend tests; Playwright is JavaScript browser automation.
+- Useful in Phase 2 for: check-in form submission, asset board visual updates, POS payment screen after key scan.
+- Has native GitHub Actions integration — aligns with Task 25 CI/CD work.
+- Already saved to memory as Phase 2 reminder.
+
+**Cognee (graph/vector memory tool):**
+- Evaluated and rejected for Hamilton ERP. Overkill — designed for agents querying 50,000+ documents dynamically.
+- Current setup (claude_memory.md + inbox.md + decisions_log.md) is the right fit. No new infrastructure needed.
+- Concept of episodic → semantic consolidation is a useful mental model for designing the Phase 2 inbox auto-commit Python script.
+
+**Karpathy 4 Principles for CLAUDE.md (Task 25):**
+- Already saved to memory/Task 25 checklist.
+- At Task 25, run: `claude -p "Read the entire project and strengthen CLAUDE.md based on Karpathy's four principles — Think Before Coding, Simplicity First, Surgical Changes, Goal-Driven Execution. Adapt to the real architecture you see." --allowedTools Bash,Write,Read`
+
+**"Everything Claude Code" (30+ agent framework):**
+- Evaluated and rejected. Built for large engineering teams with parallel workstreams. Not suitable for a solo developer on a focused Frappe app. Would burn token limits and add management overhead.
+
+---
+
+## Entry: 2026-04-15 — Frappe/ERPNext Mastery Guide Review
+
+Reviewed community guide: github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery
+
+**Important caveat:** Frappe community members flagged parts of this guide as AI-generated without deep verification, with possible errors and misconceptions. Use as a **topic navigation index only** — do not copy code examples without independent verification.
+
+**Chapters directly relevant to Hamilton ERP by phase:**
+
+**Task 25 (immediate):**
+- Ch.12 — Security & Role-Based Access Control → permissions hardening (cancel/amend locked to manager roles)
+- Ch.12.3 — Audit Logs → Document Versioning + Audit Trail task
+- Ch.3 — Automation and Workflows → workflow approval states and transitions with role assignments
+- Ch.13 — Frappe Fixtures → fixtures exported to Git as JSON
+
+**Phase 2:**
+- Ch.13 — Background Jobs / Cron Jobs / Worker Management → Scheduler Jobs (nightly stale asset detection, session reconciliation, cash drop verification)
+- Ch.13 — Real-Time Updates / Synchronizing Data Across Clients → multi-tablet real-time sync for DC/Crew Club
+- Ch.9.1 — Payment Gateways (Stripe) → Phase 2 Stripe Terminal integration
+- Ch.9.5 — Webhooks → tablet-is-truth sync architecture
+
+**Before production go-live (Frappe Cloud not yet set up):**
+- Ch.11 — Frappe Cloud → Git integration, custom app deployment workflows, SSL, environment variables, monitoring, backups. Review this chapter as a checklist before going live.
+- Ch.10.3 — Backup & Restore automation → set up before first real session data hits production.
