@@ -248,8 +248,8 @@ Never update run-tests without committing everything to GitHub.
 | test_security_audit | ~10 | SQL injection, XSS, permission escalation |
 | test_environment_health | ~8 | Setup wizard gate, roles, asset count |
 | test_asset_board_rendering | 7 | Card rendering, tier badges, color coding |
-| test_adversarial | 36 + 8 skipped | 6 attack families (A-F), crash reporter |
-| test_load_10k | ~3 | 10,000 session stress test |
+| test_adversarial | 37 + 8 skipped | 6 attack families (A-F), crash reporter |
+| test_load_10k | 5 | 10,000 session stress test (uniqueness, throughput, pool, retry, midnight) |
 
 Skipped tests unlock progressively:
 - 8 in test_adversarial Family F unlock at Phase 2 (financial integration)

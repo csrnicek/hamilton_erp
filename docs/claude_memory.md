@@ -435,6 +435,101 @@ Each venue build should be faster than the last.
 
 ---
 
+## 11. Testing Strategy — Current Status and Gaps
+
+### Adversarial Test Suite (`test_adversarial.py`)
+
+45 total tests across 6 attack families. 37 active, 8 skipped (Family F — Phase 2 financial).
+
+| Family | Tests | Description |
+|--------|-------|-------------|
+| A — State Machine Violations | 10 | Illegal transitions, double-actions |
+| B — Concurrency & Lock Attacks | 6 | Contention, lock release after failure |
+| C — Session Sequence Attacks | 6 | Format, monotonicity, rollover, cold Redis |
+| D — Input Validation Attacks | 9 | None, empty, whitespace, bad kwargs |
+| E — Bulk Operation Attacks | 5 | Bulk clean, skip-occupied, error isolation |
+| F — Financial & Phase 2 | 9 (all skipped) | Functions don't exist yet |
+
+Includes a crash reporter that writes JSON results to `/tmp/hamilton_adversarial_report.json`.
+Family F tests unlock when Phase 2 financial integration is built.
+
+### Stress Simulation (`test_load_10k.py`)
+
+5 tests. Creates 50 Venue Assets, runs 200 complete check-in cycles each (10,000 total).
+Tests session number uniqueness, Redis INCR correctness, connection pool exhaustion,
+retry loop handling, and midnight boundary fix. Runtime: ~5-10 minutes on local bench.
+
+### Mutation Testing (`/mutmut`)
+
+Status: **Not yet run.** Slash command and `testing_guide.md` documentation exist.
+Target: lifecycle.py and locks.py. Kill ratio goal > 80%.
+Run after Task 25 pre-deploy, not during active development.
+
+### Property-Based Testing (`/hypothesis`)
+
+Status: **Not yet implemented.** Slash command exists. `testing_guide.md` documents the plan.
+No `test_hypothesis.py` file exists yet. Planned properties:
+- State machine: no sequence of valid transitions reaches an invalid state
+- Session number: generated numbers are always unique and correctly formatted
+- Lock: acquire + release is always paired (no leaked locks)
+
+### Contract Testing
+
+Status: **Not applicable for Phase 1.** No external API consumers exist.
+Revisit when a second system (e.g., a mobile app, a kiosk) consumes hamilton_erp APIs.
+
+### Structured Logging
+
+`frappe.log_error()` is used in lifecycle.py for critical path failures.
+No formal logging strategy documented. Phase 2 should define:
+- What events to log (all state transitions? only errors?)
+- Log format and retention (Frappe's built-in Error Log vs external)
+- Alerting thresholds (e.g., >5 lock contentions in 1 minute)
+
+### Observability Dashboard
+
+Status: **Not built.** Belongs in Phase 2 or later.
+Planned components:
+- Asset state distribution (how many Available/Occupied/Dirty/OOS at any time)
+- Session throughput (check-ins per hour, average stay duration)
+- Lock contention rate (how often Redis NX fails)
+- Error rate from Frappe Error Log
+- Frappe Cloud native monitoring may suffice for Phase 1
+
+### Two-Tab Realtime Sync Test
+
+Phase 1 acceptance requirement from `build_phases.md`: two browser tabs viewing the asset
+board must stay in sync within ~1 second of any state change via `frappe.publish_realtime`
+with `after_commit=True`. This is a **manual** QA test — not automated.
+Procedure: open two tabs to `/app/asset-board`, change state in tab A, verify tab B updates.
+
+### Operator Acceptance Testing (Manual QA — H10, H11, H12)
+
+These are manual browser tests on `hamilton-test.localhost`, not automated.
+Run before each deploy to Frappe Cloud.
+
+**H10 — Vacate and Turnover:**
+1. Open Asset Board on tablet/browser
+2. Tap an Available (green) room tile → Assign → tile turns blue (Occupied)
+3. Tap the blue tile → Vacate → select "Key Return" → tile turns orange (Dirty)
+4. Tap the orange tile → Mark Clean → tile turns green (Available)
+5. Verify Asset Status Log shows all 4 transitions with correct timestamps
+
+**H11 — Out of Service:**
+1. Tap any Available tile → Set Out of Service
+2. Verify mandatory reason field appears (cannot submit empty)
+3. Enter reason → Submit → tile turns red (Out of Service)
+4. Tap red tile → Return to Service → enter reason → tile turns green
+5. Verify Asset Status Log shows OOS entry and return with reasons
+
+**H12 — Occupied Asset Rejection:**
+1. Occupy a room (Available → Occupied)
+2. Attempt to occupy the same room again
+3. Verify system rejects with appropriate error message
+4. Verify the first session is unaffected
+
+---
+
 ## Claude Code Operating Tips
 
 ### /compact Habit
