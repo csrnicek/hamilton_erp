@@ -73,7 +73,8 @@
    "fieldname": "venue_session",
    "fieldtype": "Link",
    "label": "Venue Session",
-   "options": "Venue Session"
+   "options": "Venue Session",
+   "search_index": 1
   }
  ],
  "index_web_pages_for_search": 0,
