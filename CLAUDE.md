@@ -64,11 +64,9 @@ The slash commands in `.claude/commands/` have `# Recommended model: ...` header
 
 ### Recommended debugging tools
 
-Before writing custom debug scripts or adding `print()` statements, reach for these first. Full usage notes live in `docs/testing_checklist.md` → "Debugging Shortcuts and Workflow Tips".
-
-- **`bench console --autoreload`** — Interactive REPL with Frappe context loaded. Use for: "what does this ORM query return", poking at real Redis state, inspecting a live Venue Asset row. Always point at `hamilton-unit-test.localhost` or `hamilton-test.localhost` — never production.
-- **`bench request`** — Invokes a Frappe HTTP route with full request lifecycle and returns the response in your terminal. Use for: reproducing a 403/500 from the Asset Board, verifying a new whitelisted endpoint signature.
-- **`bench doctor` + `show-pending-jobs`** — **MANDATORY first debug step** on any symptom that could be "Redis is down", "the scheduler didn't run", or "a previous test left a stuck job". Run these BEFORE writing a repro, BEFORE opening a debugger, BEFORE grepping code. Or just run `/debug-env` which does this plus Redis PING + `is_setup_complete` + role check in one shot.
+See `docs/testing_checklist.md` → "Debugging Shortcuts and Workflow Tips" for full usage.
+- **`bench console --autoreload`** — REPL with Frappe context. Point at test or dev site, never production.
+- **`bench doctor` + `show-pending-jobs`** — MANDATORY first step for Redis/scheduler issues. Or run `/debug-env`.
 
 ## Project: Hamilton ERP
 
@@ -88,8 +86,6 @@ Custom Frappe/ERPNext v16 app for Club Hamilton — a men's bathhouse in Hamilto
 - See `docs/decisions_log.md` for DEC-001 through DEC-060
 - Locking: `docs/coding_standards.md` §13 — zero I/O inside lock body, realtime after_commit only
 - Redis key is asset-only: `hamilton:asset_lock:{asset_name}` — NOT asset+operation
-- FOR UPDATE (not FOR NO KEY UPDATE) — MariaDB syntax
-- Tabs not spaces — all Python files use tabs per coding_standards.md §11
 
 ### Phase 1 implementation plan
 Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md`
@@ -135,14 +131,6 @@ Review files are saved at:
 - Merge targets: `claude_memory.md`, `decisions_log.md`, `lessons_learned.md`, `venue_rollout_playbook.md`, `CLAUDE.md`
 - After merging, clear `inbox.md` to a single heading: `# Inbox`
 
-## Karpathy 4 Principles
-
-Apply these to every task:
-1. **Think Before Coding** — understand the problem fully before writing code
-2. **Simplicity First** — the simplest solution that works is the right one
-3. **Surgical Changes** — change only what needs to change, nothing more
-4. **Goal-Driven Execution** — every action must serve the stated goal
-
 ## Things that frustrate Chris (avoid these)
 - Going in circles with multiple failed attempts before finding the right answer
 - Using browser automation that never works
@@ -151,19 +139,27 @@ Apply these to every task:
 - Vague instructions that don't specify exactly where to type a command
 
 ## Common Issues and Solutions
-Troubleshooting guide for known issues: `docs/troubleshooting.md`
+
+### Tests fail with setUpClass errors
+Phase 0 stub doctypes fail with setUpClass — ignore unless they appear in the 5 core test modules.
+
+### Redis lock contention during tests
+A previous crash left a Redis key. Wait 15s for TTL expiry, or `redis-cli FLUSHDB` (test site ONLY).
+
+### TimestampMismatchError on asset save
+Always re-fetch with `frappe.get_doc()` inside the lock — never use a cached instance.
+
+### session_number not populated
+Check Redis (`bench doctor`), check VenueSession controller has before_insert, run `bench migrate` if doctype JSON changed.
 
 ## Pre-Deploy Checklist (before pushing to Frappe Cloud)
 
-Run this before every deploy to hamilton-erp.v.frappe.cloud:
-
-1. Run /run-tests — all 14 modules must pass, zero failures
-2. Run bench migrate locally to verify migrations are clean
-3. Check git log --oneline -5 — commit messages must be descriptive
-4. Verify no debug print() statements or frappe.log() left in code
-5. Confirm CLAUDE.md 3-AI review checkpoint is not due (check Task number)
-6. Push to GitHub — Frappe Cloud auto-deploys within 3 minutes
-7. Check hamilton-erp.v.frappe.cloud after 3 minutes to confirm site loads
+1. All entries in `docs/feature_status.json` must show `"passes": true`
+2. Run /run-tests — zero failures
+3. Run `bench migrate` locally — clean
+4. No debug `print()` or `frappe.log()` in code
+5. Check 3-AI review checkpoint (Task 9, 11, 21, 25)
+6. Push to GitHub — auto-deploys in ~3 minutes
 
 ## Testing Rules (Permanent)
 
@@ -194,23 +190,13 @@ Never update run-tests without committing everything to GitHub.
 Current task status: see `docs/current_state.md`
 
 ## Test Suite
-Run `/status` for current module list and pass counts.
 
-## Slash Commands — All in .claude/commands/
+14 modules, 306+ passing, 15 skipped. See `.claude/commands/run-tests.md` for the full list.
+Baseline: any drop in passing count is a regression — stop and report.
 
-| Command | Purpose |
-|---|---|
-| /run-tests | Run all 14 modules |
-| /fix-and-test | Run all 14 modules + autonomously fix all failures |
-| /deploy | Fix-and-test then push to GitHub |
-| /feature [N] | Full subagent implementation of task N |
-| /task-start | Auto-detect and run next task |
-| /bug-triage | Diagnose and fix a reported bug |
-| /status | Project status report |
-| /coverage | Coverage report |
-| /mutmut | Mutation testing |
-| /hypothesis | Property-based testing |
-| /task9-start | Full refresh + test + dispatch for Task 9 |
+## Slash Commands
+
+All in `.claude/commands/`. Run `/run-tests` for the full suite.
 
 ## Autonomous Command Rules (Permanent)
 
@@ -225,3 +211,7 @@ unless one of these STOP conditions is hit:
 Everything else — picking fix options, committing, pushing, continuing —
 happens without Chris. Chris does not want to be part of the workflow
 when he is just approving routine decisions.
+
+## Context Compaction Rule
+
+When compacting, always preserve: modified file list, failing test names, and Redis lock key format (`hamilton:asset_lock:{asset_name}`).
