@@ -622,3 +622,30 @@ Flags missing security hooks, incomplete MCP setup, and CI integration gaps.
 - Replace the manual 3-AI review with the Writer/Reviewer two-session pattern: Session A writes, Session B reviews from fresh context with no bias
 - Do not deploy to Frappe Cloud until all entries in `docs/feature_status.json` show `"passes": true`
 - Source: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
+
+## Inbox Merge — 2026-04-15
+
+### Tool Evaluations (DEC-067 through DEC-069)
+- **Cognee** — rejected. Graph/vector memory is overkill; current docs system is sufficient.
+- **Playwright** — deferred to Phase 2. Phase 1 is backend-only; Playwright useful for Asset Board UI tests and has GitHub Actions integration.
+- **"Everything Claude Code"** — rejected. Multi-agent framework for large teams, not solo Frappe dev.
+- **Karpathy 4 Principles** — already in Task 25 checklist. At Task 25, run `claude -p` with Karpathy prompt to strengthen CLAUDE.md.
+
+### Phase 2 Testing Gaps Added to testing_checklist.md
+5 gaps added (items 1–2 highest priority for Phase 2 start):
+1. Dedicated test site isolation
+2. Role × API permission matrix
+3. Playwright UI tests
+4. Background job / scheduler health tests
+5. Frappe Recorder N+1 profiling
+
+Plus 2 pre-production security items: SQL injection audit of `frappe.db.sql()` calls, XSS audit of `render_tile()` in `asset_board.js`.
+
+### Frappe/ERPNext Mastery Guide Reference
+Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
+**Caveat:** Community flagged parts as AI-generated with possible errors. Use as a **topic navigation index only** — verify all code independently.
+
+**Relevant chapters by phase:**
+- **Task 25:** Ch.12 (Security & RBAC), Ch.12.3 (Audit Logs), Ch.3 (Workflows), Ch.13 (Fixtures)
+- **Phase 2:** Ch.13 (Background Jobs, Real-Time Sync), Ch.9.1 (Stripe), Ch.9.5 (Webhooks)
+- **Before go-live:** Ch.11 (Frappe Cloud deployment), Ch.10.3 (Backup & Restore automation)

@@ -857,4 +857,34 @@ This decision also completes the triage set for 2026-04-11: DEC-058 (HTTP verb m
 
 ---
 
+## DEC-067 — Cognee (Graph/Vector Memory) Rejected
+
+**Date:** 2026-04-14
+**Context:** Evaluated Cognee as a graph/vector memory tool for Hamilton ERP context management.
+**Decision:** Rejected. Overkill for this project — designed for agents querying 50,000+ documents dynamically.
+**Rationale:** Current setup (claude_memory.md + inbox.md + decisions_log.md) is the right fit. No new infrastructure needed. The concept of episodic → semantic consolidation is a useful mental model for designing the Phase 2 inbox auto-commit Python script, but does not justify the tool itself.
+**Venue applicability:** N/A — tooling decision.
+
+---
+
+## DEC-068 — Playwright Deferred to Phase 2
+
+**Date:** 2026-04-14
+**Context:** Evaluated Playwright for UI testing of the Asset Board.
+**Decision:** Defer to Phase 2. Phase 1 tests are Python backend tests; Playwright is JavaScript browser automation.
+**Rationale:** Useful in Phase 2 for: check-in form submission, asset board visual updates, POS payment screen after key scan. Has native GitHub Actions integration — aligns with Task 25 CI/CD work.
+**Venue applicability:** All venues once Asset Board UI is live.
+
+---
+
+## DEC-069 — "Everything Claude Code" (30+ Agent Framework) Rejected
+
+**Date:** 2026-04-14
+**Context:** Evaluated "Everything Claude Code" multi-agent framework for Hamilton ERP development workflow.
+**Decision:** Rejected. Built for large engineering teams with parallel workstreams.
+**Rationale:** Not suitable for a solo developer on a focused Frappe app. Would burn token limits and add management overhead with no proportional benefit.
+**Venue applicability:** N/A — tooling decision.
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*

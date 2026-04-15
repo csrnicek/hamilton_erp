@@ -1339,3 +1339,24 @@ framework-provided fixtures.
 that the full run would have caught. If your test passes with
 `--skip-test-records` and fails without it, the bug is in a test
 record dependency, not in your code.
+
+---
+
+## Phase 2 Testing Gaps
+
+Identified 2026-04-11 from expert testing checklist review. Items 1 and 2 are **highest priority for Phase 2 start**.
+
+| # | Gap | Description | Priority |
+|---|-----|-------------|----------|
+| 1 | Dedicated test site isolation | `hamilton-unit-test.localhost` must be fully isolated from dev browser sessions — no shared state | Phase 2 start |
+| 2 | Role × API permission matrix | Test every Hamilton role against every whitelisted API method — ensures no privilege gaps | Phase 2 start |
+| 3 | Playwright UI tests | Asset Board tile rendering, popover interactions, role-based button visibility (JS browser automation) | Phase 2 |
+| 4 | Background job / scheduler health | Automated `bench doctor` and scheduler health checks — important for DC's complex accounting flows | Phase 2 |
+| 5 | Frappe Recorder performance profiling | Full SQL trace visibility for N+1 query detection on busiest workflows — current `test_api_phase1.py` guard is incomplete | Phase 2 |
+
+### Pre-Production Security Items
+
+Two critical items required before production go-live (from 2026-04-11 review):
+
+- **SQL injection audit**: ERPNext published a SQL injection vulnerability in late 2025. Every `frappe.db.sql()` call in `api.py` must be verified to pass parameters as a second argument, never via string formatting. Add a dedicated test.
+- **XSS in asset_board.js**: ERPNext published a reflected XSS vulnerability in December 2025. The `render_tile()` function generates HTML dynamically from asset data. All dynamic values must be verified as properly escaped. Add a test.
