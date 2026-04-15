@@ -788,4 +788,73 @@ This decision also completes the triage set for 2026-04-11: DEC-058 (HTTP verb m
 
 ---
 
+## DEC-061 — Single Frappe Cloud Site Per Venue (Not Multi-Company)
+
+**Date:** 2026-04-14
+**Context:** With expansion to Philadelphia, DC, and Dallas planned, needed to decide between one Frappe Cloud site with ERPNext Multi-Company or separate sites per venue.
+**Options considered:**
+1. Multi-Company on a single site — shared DB, company-level isolation
+2. Separate Frappe Cloud sites per venue — one GitHub repo, independent sites
+**Decision:** Separate Frappe Cloud sites per venue. One GitHub repo (`csrnicek/hamilton_erp`) deploys to all sites. Venue-specific behavior controlled by `site_config.json` flags, not code branches.
+**Rationale:** Multi-Company shares a single database, meaning a bug or migration failure at one venue can take down all venues simultaneously. Separate sites provide blast-radius isolation. Frappe Cloud supports multiple sites from the same GitHub repo natively. The trade-off is slightly higher hosting cost for much better operational safety.
+**Venue applicability:** All venues.
+
+---
+
+## DEC-062 — Feature Flags via site_config.json
+
+**Date:** 2026-04-14
+**Context:** Venues have different tax rules, currencies, tablet counts, and feature sets (e.g., DC has membership, Hamilton does not). Need a mechanism to vary behavior per venue without code branches.
+**Decision:** Use Frappe's native `site_config.json` per-site configuration. All flag reads centralized in `hamilton_erp/utils/venue_config.py`. Never scatter `frappe.conf.get()` calls across the codebase.
+**Key flags:**
+- `anvil_venue_id` — venue identifier string
+- `anvil_membership_enabled` — 0 or 1
+- `anvil_tax_mode` — CA_HST, US_NONE, etc.
+- `anvil_tablet_count` — integer
+- `anvil_currency` — CAD, USD, etc.
+**Rationale:** `site_config.json` is Frappe's native per-site config mechanism, readable via `frappe.conf`. No custom DocType needed. Feature flags in code run behind `if is_membership_enabled():` guards — code ships to all sites, only activates where the flag is on.
+**Venue applicability:** All venues. Schema documented in `docs/site_config_schema.md` (to be created).
+
+---
+
+## DEC-063 — Redis Locking Preserved for All Venues
+
+**Date:** 2026-04-14
+**Context:** Hamilton has 1 tablet — no real race condition risk. Philadelphia also has 1 tablet. DC has 3 tablets and a genuine race condition risk. Should simpler venues skip the Redis lock layer?
+**Decision:** Keep the full three-layer locking system (Redis NX + MariaDB FOR UPDATE + optimistic version field) on all venues, regardless of tablet count.
+**Rationale:** Hamilton's Redis lock system IS the production solution for DC's 3-tablet race condition. The lock is harmless on single-tablet venues (negligible overhead) but load-bearing on multi-tablet venues. Removing it from "simple" venues creates a maintenance fork and risks re-introducing it incorrectly when a venue adds tablets. MariaDB prevents data corruption but NOT double-assignment — the Redis advisory lock is the only guard against double-booking.
+**Venue applicability:** All venues. Do NOT simplify or remove during Philadelphia or Dallas builds.
+
+---
+
+## DEC-064 — Trunk-Based Development for Multi-Venue
+
+**Date:** 2026-04-14
+**Context:** Need a branching strategy that supports 4+ venues deploying from the same codebase.
+**Decision:** Trunk-based development on a single `main` branch. Always deployable. CI must pass before merge. Short-lived feature branches (hours to 2 days max) → PR → merge to main. No long-lived venue branches. No per-venue forks.
+**Rationale:** Per-venue branches diverge within days and become unmergeable. Feature flags (DEC-062) handle venue differences at runtime. DC's membership module ships to all sites behind `anvil_membership_enabled` — code is present everywhere, only activates where the flag is on. Hotfix pattern: tag last known-good commit, create `hotfix/` branch from tag, fix, merge to main AND cherry-pick to production tag.
+**Venue applicability:** All venues.
+
+---
+
+## DEC-065 — No Stripe in Phase 1
+
+**Date:** 2026-04-14
+**Context:** Payment terminal integration (Stripe Terminal or equivalent) could be built alongside asset management.
+**Decision:** Deliberately defer all payment terminal integration to Phase 2+. Phase 1 is cash-only at the POS level.
+**Rationale:** Build spec §14 explicitly defers payment integration. Phase 1's goal is asset lifecycle management — adding payment adds an entire new failure surface (network, terminal hardware, refund flows). Ship the asset board first, add payments once it's proven stable.
+**Venue applicability:** All venues for Phase 1. Phase 2 will revisit per-venue payment needs.
+
+---
+
+## DEC-066 — Key/Barcode Scan Before Payment (Phase 2)
+
+**Date:** 2026-04-14
+**Context:** Fraud research identified cash skimming (no session entered) as the most likely real-world attack. A physical verification step could prevent operators from pocketing cash without creating a session.
+**Decision:** Phase 2 will require a physical key scan BEFORE payment processing. The scan validates that the physical key matches the selected asset in ERPNext. Dual purpose: fraud prevention + asset/payment verification.
+**Rationale:** Pairs with blind cash reconciliation (also Phase 2). Without a physical scan, an operator can collect cash and never create a session — the missing session is invisible until end-of-shift reconciliation, and even then only if the guest complains. The key scan creates an auditable event that ties physical key possession to a system record.
+**Venue applicability:** All venues with physical key assets (rooms, lockers).
+
+---
+
 *Add new decisions below this line. Use the next sequential number.*

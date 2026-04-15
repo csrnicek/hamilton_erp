@@ -99,7 +99,7 @@ Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lif
 
 ## Workflow rules
 
-1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`
+1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`, `docs/lessons_learned.md`, `docs/venue_rollout_playbook.md`
 2. **Use Subagent-Driven Development** for all Phase 1 tasks — dispatch implementer → spec reviewer → code quality reviewer → fix → re-review
 3. **Push to GitHub after every task** — every commit goes to `origin/main`
 4. **Never use browser automation** — always give Chris manual instructions instead
@@ -120,6 +120,22 @@ Run ChatGPT + Grok + Claude (new tab) review after:
 Review files are saved at:
 - Blind review prompt: `docs/reviews/review_task9_blind.md`
 - Context-aware review prompt: `docs/reviews/review_task9_context.md`
+
+## Inbox Workflow (claude.ai ↔ Claude Code bridge)
+
+`docs/inbox.md` bridges research done in claude.ai with implementation in Claude Code.
+- **End of claude.ai session:** Chris pastes a summary into `docs/inbox.md` on GitHub
+- **Start of Claude Code session:** "read inbox.md, merge into docs, clear it"
+- Merge targets: `claude_memory.md`, `decisions_log.md`, `lessons_learned.md`, `venue_rollout_playbook.md`, `CLAUDE.md`
+- After merging, clear `inbox.md` to a single heading: `# Inbox`
+
+## Karpathy 4 Principles
+
+Apply these to every task:
+1. **Think Before Coding** — understand the problem fully before writing code
+2. **Simplicity First** — the simplest solution that works is the right one
+3. **Surgical Changes** — change only what needs to change, nothing more
+4. **Goal-Driven Execution** — every action must serve the stated goal
 
 ## Things that frustrate Chris (avoid these)
 - Going in circles with multiple failed attempts before finding the right answer

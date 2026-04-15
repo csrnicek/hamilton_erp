@@ -3,7 +3,7 @@
 Persistent reference for Claude Code sessions. Captures best practices, planning notes,
 tooling decisions, and Phase 2 readiness that don't belong in code comments or decisions_log.md.
 
-**Last updated:** 2026-04-13
+**Last updated:** 2026-04-14
 
 ---
 
@@ -88,14 +88,20 @@ The current Hamilton build is single-venue. The Philadelphia expansion will requ
 - **Card-based tiles are forward-compatible:** The Phase 1 design uses self-contained cards specifically
   so Philadelphia can add member name/photo to each tile without restructuring the grid.
 
-### Feature Flags
+### Feature Flags (DEC-062)
 
-Not currently implemented. When multi-venue ships:
+Decision made 2026-04-14: Use Frappe's native `site_config.json` per-site configuration.
+All flag reads centralized in `hamilton_erp/utils/venue_config.py` (to be created).
+Never scatter `frappe.conf.get()` calls across the codebase.
 
-- Use Hamilton Settings (Single DocType) or a new Feature Flag DocType.
-- Gate new features behind flags so Hamilton can stay on the stable path while Philadelphia
-  gets experimental features.
-- Consider Frappe's `frappe.flags` for runtime feature gating during tests.
+Key flags per venue:
+- `anvil_venue_id` — venue identifier string (hamilton, philadelphia, dc, dallas)
+- `anvil_membership_enabled` — 0 or 1 (only DC = 1)
+- `anvil_tax_mode` — CA_HST (Hamilton), US_NONE (US venues)
+- `anvil_tablet_count` — integer (DC = 3, all others = 1)
+- `anvil_currency` — CAD or USD
+
+Schema to be documented in `docs/site_config_schema.md`.
 
 ### Race Condition Research
 
@@ -153,6 +159,37 @@ Documented race conditions and their mitigations:
 Task 25 is the final Phase 1 task: Frappe Cloud deploy + acceptance testing.
 These items must all be complete before Phase 1 is marked done.
 
+### Security & Permissions
+
+- [ ] Cancel/amend locked to Floor Manager+ only
+- [ ] System Manager restricted to Chris only
+- [ ] Enable Document Versioning on all critical DocTypes (now, not at handoff)
+- [ ] Enable Audit Trail in System Settings
+- [ ] Verify no Front Desk role self-escalation possible
+- [ ] Export role permission matrix as fixture
+- [ ] Enable v16 Role-Based Field Masking on sensitive fields
+
+### Code Quality
+
+- [ ] Export all fixtures (Custom Fields, Roles, DocPerms, Property Setters)
+- [ ] Verify `patches.txt` covers all manual setup steps
+- [ ] Add venue config validation patch (fails loudly on missing flags)
+- [ ] Audit `hooks.py` — remove wildcards, add try-except to all hook functions
+- [ ] Add `pyproject.toml` with bounded v16 Frappe dependency
+- [ ] Add GitHub Actions CI/CD workflow (`.github/workflows/ci.yml`)
+- [ ] Clear Frappe Cloud error log
+- [ ] Create `init.sh` (start bench, migrate, test, exit non-zero on failure)
+- [ ] Tag `v1.0.0-hamilton-handoff`
+
+### New Files to Create
+
+- [ ] `VENUES.md` — all planned venues with site URLs, venue_id, config
+- [ ] `docs/site_config_schema.md` — every `site_config.json` key hamilton_erp reads
+- [ ] `hamilton_erp/utils/venue_config.py` — centralized flag reads
+- [ ] `docs/lessons_learned.md` — DONE (created 2026-04-14)
+- [ ] `docs/venue_rollout_playbook.md` — DONE (created 2026-04-14)
+- [ ] `.github/workflows/ci.yml`
+
 ### Handoff Documentation
 
 - [ ] `docs/operator_playbook.md` — Step-by-step guide for Club Hamilton operators
@@ -166,6 +203,10 @@ These items must all be complete before Phase 1 is marked done.
   - How to change Hamilton Settings (stay duration, float amount)
   - How to check Asset Status Logs
   - Frappe Cloud dashboard basics
+- [ ] Every architectural decision + why
+- [ ] Known bugs and deferred items with ticket/task references
+- [ ] Role matrix
+- [ ] Phase 2 scope summary
 
 ### Semantic Versioning
 
@@ -175,7 +216,7 @@ These items must all be complete before Phase 1 is marked done.
 
 ### Testing Quality Gates
 
-- [ ] **All 12 test modules green** — zero failures, skipped tests documented
+- [ ] **All 14 test modules green** — zero failures, skipped tests documented
 - [ ] **mutmut mutation testing** — run `mutmut run` against lifecycle.py and locks.py
   - Target: kill ratio > 80% on critical paths
   - Surviving mutants must be reviewed and either killed or documented as acceptable
@@ -325,6 +366,74 @@ Identified during a full source review. No changes made — these are future imp
 | `utils.py` | **Entirely dead code** — no Python file imports from it. Contains `create_asset_status_log`, `get_current_shift_record`, `get_next_drop_number`. All superseded by `lifecycle._make_asset_status_log`. | Low | None |
 | `lifecycle.py` | `_set_vacated_timestamp` and `_set_cleaned_timestamp` are one-line DB writes that could be folded into `_set_asset_status` | Low | Low |
 | `locks.py` | Extra Redis round-trip in finally block for TTL-expiry logging | Low | Low |
+
+## 8. Fraud Research Findings (2026-04-14)
+
+Key risks identified for ANVIL venues:
+
+| Attack | Likelihood | Mitigation |
+|--------|-----------|------------|
+| **Cash skimming** (no session entered) | Highest | Key/barcode scan before payment (DEC-066, Phase 2) |
+| **Transaction void after cash collected** | Medium | Lock cancel permission to Floor Manager+ only |
+| **Offline mode abuse** (browser cache wipe) | Medium | Dual WAN failover, no offline-first mode |
+| **Role self-escalation** | Medium | System Manager restricted to Chris only |
+| **Direct DB access** | Low | Frappe Cloud managed — no direct DB access for staff |
+| **Ghost employees / vendor fraud** | Low | Out of scope for Phase 1 — standard ERPNext controls |
+
+Key scan/barcode decision (DEC-066): Physical key must be scanned BEFORE payment in Phase 2.
+Dual purpose: fraud prevention + asset/payment verification. Pairs with blind cash reconciliation.
+
+---
+
+## 9. Production Hardening Checklist (Pre-Handoff)
+
+Items from pre-handoff research sessions, April 2026. Cross-referenced with Task 25 checklist.
+
+### Critical Items
+
+- **pyproject.toml** — Frappe Cloud now requires ALL apps to have this at repo root with bounded dependency:
+  `frappe = ">=16.0.0-dev,<17.0.0-dev"` (comma required, not space). Without it, deploys are blocked.
+- **Fixtures export** — Custom Fields, Roles, DocPerms, Property Setters are DB-only until exported.
+  Command: `bench --site {site} export-fixtures --app hamilton_erp`. Must be declared in `hooks.py` AND exported.
+- **hooks.py audit** — Remove wildcard `doc_events {"*": ...}` (runs on every doc save site-wide).
+  Every function called from hooks.py must have try-except + `frappe.log_error()`.
+- **Document Versioning** — Enable BEFORE records are created (cannot retroactively get history).
+  Enable on: Venue Asset, Venue Session, Cash Drop, Shift Record, any financial DocType.
+- **Audit Trail** — Enable in System Settings. Tracks who did what actions across the whole site.
+
+### Patches Needed
+
+All UI configuration must become idempotent patches so new venues require zero manual clicking:
+- `validate_venue_config` — fail loudly if required `site_config` keys missing
+- `create_anvil_roles` — ANVIL Front Desk, Floor Manager, Manager
+- `set_system_settings` — audit trail, document versioning
+- `seed_asset_statuses` — status list
+- `configure_session_numbering` — sequence format
+
+### Other Items
+
+- **init.sh** — Start bench, run migrations, run full test suite, exit non-zero on failure.
+  Every session starts from known-good state.
+- **Git tag** — `git tag v1.0.0-hamilton-handoff && git push origin --tags` before Philadelphia build.
+- **Frappe Cloud error log** — Zero unacknowledged errors before handoff.
+
+---
+
+## 10. Knowledge Portability Strategy
+
+Each new venue inherits the full Hamilton knowledge base:
+- `docs/decisions_log.md` — architectural decisions + reasoning
+- `docs/lessons_learned.md` — bugs, mistakes, fixes
+- `docs/venue_rollout_playbook.md` — step-by-step venue setup checklist
+- `docs/claude_memory.md` — session bridge and planning notes
+
+**Inbox workflow:** `docs/inbox.md` bridges claude.ai and Claude Code.
+- End of claude.ai session: paste summary into `inbox.md` on GitHub
+- Start of Claude Code session: "read inbox.md, merge into docs, clear it"
+
+Each venue build should be faster than the last.
+
+---
 
 ## Claude Code Operating Tips
 
