@@ -132,7 +132,184 @@ No single tool is enough. All 4 together give you near-certainty.
 
 ---
 
-## Current test count (as of Task 8)
-- Core tests: 45 passing (25 lifecycle / 3 locks / 17 venue_asset)
-- Expert tests: ~52 (some pending Tasks 9-11)
-- Total target by Task 11: 90+ tests all passing
+## Current test count (as of 2026-04-14)
+- Full suite: **334 tests passing**, 0 failures, 7 skipped across **13 modules**
+- See CLAUDE.md "Test Suite" table for the per-module breakdown
+
+---
+
+## Advanced Database and Performance Tests
+
+**File:** `hamilton_erp/test_database_advanced.py`
+**Tests:** 51 | **Added:** 2026-04-14
+
+These tests target the infrastructure underneath the application logic — MariaDB indexes and query plans, Redis lock mechanics, Frappe v16 framework contracts, and fraud-detection invariants. They complement the functional tests (lifecycle, locks, edge cases) by verifying that the database, cache, and framework behave the way Hamilton ERP assumes they do.
+
+Run with:
+```
+cd ~/frappe-bench-hamilton && source env/bin/activate && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests \
+    --app hamilton_erp --module hamilton_erp.test_database_advanced
+```
+
+---
+
+### R1 — Database Index Verification (7 tests)
+
+Queries `INFORMATION_SCHEMA.STATISTICS` to confirm every `search_index` field declared in DocType JSON actually has a corresponding MariaDB index. Missing indexes cause full table scans on the Asset Board and session queries.
+
+| Test | What it verifies |
+|---|---|
+| `test_venue_asset_status_index_exists` | `tabVenue Asset.status` has an index |
+| `test_venue_session_session_number_index_exists` | `tabVenue Session.session_number` has an index |
+| `test_venue_session_venue_asset_index_exists` | `tabVenue Session.venue_asset` has an index |
+| `test_shift_record_operator_index_exists` | `tabShift Record.operator` has an index |
+| `test_cash_drop_shift_record_index_exists` | `tabCash Drop.shift_record` has an index |
+| `test_asset_status_log_venue_session_index_exists` | `tabAsset Status Log.venue_session` has an index |
+| `test_venue_asset_display_order_index_exists` | `tabVenue Asset.display_order` has an index (Asset Board ORDER BY) |
+
+**What's not yet tested:**
+- Composite/covering indexes for common multi-column queries
+- Index selectivity / cardinality checks
+
+---
+
+### R2 — Query Performance and SLA Timing (6 tests)
+
+Uses `EXPLAIN` to inspect query plans and `time.monotonic()` to enforce timing SLAs on critical operations. These SLAs are generous (100ms board load, 200ms session creation, 50ms lock acquisition) — any breach indicates a missing index or regression.
+
+| Test | What it verifies |
+|---|---|
+| `test_asset_board_query_returns_explain_plan` | EXPLAIN on the board query produces a valid plan |
+| `test_asset_board_load_under_100ms` | `get_asset_board_data()` completes in <100ms |
+| `test_session_creation_under_200ms` | `start_session_for_asset()` completes in <200ms |
+| `test_lock_acquisition_under_50ms` | Redis + FOR UPDATE lock acquired in <50ms |
+| `test_session_number_like_query_not_full_scan` | LIKE query on session_number does not produce type=ALL |
+| `test_for_update_query_targets_single_row` | FOR UPDATE uses const/eq_ref/ref (primary key lookup) |
+
+**What's not yet tested:**
+- SLA timing under concurrent load (multiple simultaneous requests)
+- Query performance with >1000 sessions in the table
+- Slow query log integration
+
+---
+
+### R3 — MariaDB Edge Cases (7 tests)
+
+Verifies MariaDB-specific behaviours that Frappe and Hamilton ERP depend on. A wrong isolation level, table-level locking, or lost microsecond precision would break the state machine or session ordering.
+
+| Test | What it verifies |
+|---|---|
+| `test_transaction_isolation_is_repeatable_read` | `@@tx_isolation` = REPEATABLE-READ |
+| `test_global_isolation_matches_session` | Session and global isolation levels match |
+| `test_for_update_locks_row_not_table` | FOR UPDATE on asset A does not block reads on asset B |
+| `test_datetime_microsecond_precision` | `session_start` column has DATETIME_PRECISION = 6 |
+| `test_null_vs_empty_string_in_reason` | Fresh asset `reason` is NULL, not empty string |
+| `test_unique_constraint_on_asset_code` | Duplicate `asset_code` raises exception |
+| `test_session_number_unique_constraint_enforced` | Duplicate `session_number` raises exception |
+
+**What's not yet tested:**
+- Deadlock detection and automatic retry (two transactions locking rows in opposite order)
+- Character set / collation edge cases (UTF-8 asset names)
+- Large BLOB/TEXT field handling in Asset Status Log
+
+---
+
+### R4 — Redis Edge Cases (7 tests)
+
+Tests the Redis primitives that the three-layer lock (locks.py) depends on. If `SET NX` doesn't prevent overwrites, or the Lua CAS release deletes the wrong key, the lock is broken.
+
+| Test | What it verifies |
+|---|---|
+| `test_lock_ttl_matches_constant` | Lock key TTL is within tolerance of `LOCK_TTL_MS` |
+| `test_incr_returns_integer` | `INCR` returns `int`, not bytes or string |
+| `test_incr_at_large_values` | `INCR` at 99999 → 100000 (no overflow at our threshold) |
+| `test_key_namespace_isolation` | `hamilton:` namespace keys don't collide with Frappe internals |
+| `test_nx_flag_prevents_overwrite` | Second `SET NX` on existing key returns False |
+| `test_lua_cas_release_correct_token` | Lua CAS release deletes only when token matches; wrong token returns 0 |
+| `test_cold_start_db_fallback_returns_correct_max` | `_db_max_seq_for_prefix()` reads MariaDB correctly when Redis key is cold |
+
+**What's not yet tested:**
+- Redis connection failure / reconnection handling
+- Redis memory pressure (maxmemory policy eviction)
+- Key expiry race condition (lock expires during FOR UPDATE)
+
+---
+
+### R5 — Frappe v16 Specific Behaviour (9 tests)
+
+Pins Frappe v16 framework contracts that Hamilton ERP relies on. If a Frappe upgrade changes `in_test`, `track_changes`, `autoname`, or role handling, these tests break before production does.
+
+| Test | What it verifies |
+|---|---|
+| `test_frappe_in_test_flag_is_true` | `frappe.in_test` is True during test execution |
+| `test_override_doctype_class_loads_correctly` | `HamiltonSalesInvoice` mixin has expected methods |
+| `test_scheduler_job_is_importable` | `check_overtime_sessions` is importable and callable |
+| `test_after_migrate_hook_is_importable` | `ensure_setup_complete` is importable and callable |
+| `test_role_permissions_exist_for_venue_asset` | Venue Asset has permissions for all 3 Hamilton roles |
+| `test_track_changes_enabled_on_venue_session` | Venue Session has `track_changes = 1` |
+| `test_track_changes_enabled_on_shift_record` | Shift Record has `track_changes = 1` |
+| `test_venue_session_autoname_is_hash` | Venue Session uses `hash` autoname (DEC-033) |
+| `test_venue_asset_autoname_is_series` | Venue Asset uses `VA-.####` naming series |
+
+**What's not yet tested:**
+- `override_doctype_class` loads correctly via Frappe's `get_controller()` (not just import)
+- Custom field metadata survives `bench migrate`
+- Webhook / notification hook contracts
+
+---
+
+### R6 — Fraud Detection and Operational Integrity (5 tests)
+
+Verifies the guards that prevent fraud, data corruption, and operational errors in the single-operator, walk-in-guest environment.
+
+| Test | What it verifies |
+|---|---|
+| `test_orphan_session_detectable` | Session older than stay_duration + grace_minutes is found by overtime query |
+| `test_duplicate_assignment_blocked_by_state_machine` | Second `start_session` on Occupied asset raises `ValidationError` |
+| `test_bulk_clean_does_not_affect_occupied_assets` | `_mark_all_clean()` skips Occupied assets — never transitions Occupied → Available |
+| `test_vacate_method_stored_correctly` | Vacate method is persisted on the Venue Session record |
+| `test_oos_from_occupied_auto_closes_session` | OOS on Occupied asset closes session with "Discovery on Rounds" |
+
+**What's not yet tested:**
+- Bulk clean race condition (two operators press "Clean All" simultaneously)
+- Cash drop without an active shift (should be blocked)
+- Session duration manipulation (backdated session_start)
+
+---
+
+### R7 — Concurrency and Connection Reliability (3 tests)
+
+Tests that the system handles repeated operations without leaking connections or corrupting state. Threading-based concurrency tests are omitted because Frappe's `IntegrationTestCase` runs inside an uncommitted transaction that is invisible to child threads.
+
+| Test | What it verifies |
+|---|---|
+| `test_sequential_lock_acquisitions_on_different_assets` | 3 sequential lock/unlock cycles don't exhaust the connection pool |
+| `test_full_lifecycle_is_repeatable` | Available → Occupied → Dirty → Available repeatable 3 times |
+| `test_version_increments_monotonically` | Version field increments by exactly 1 on each state transition |
+
+**What's not yet tested:**
+- True multi-thread / multi-process concurrency (requires `setUpClass` + `db.commit()` pattern from `test_adversarial.py`)
+- Connection pool exhaustion under sustained load
+- Frappe worker restart mid-transaction
+
+---
+
+### R8 — Data Integrity Under Edge Conditions (7 tests)
+
+Verifies timestamp ordering, field nullability, and cleanup after state transitions. These catch regressions where a field gets set to empty string instead of NULL, or a timestamp is missing after a transition.
+
+| Test | What it verifies |
+|---|---|
+| `test_session_end_after_session_start` | `session_end > session_start` after vacate |
+| `test_last_cleaned_at_updates_on_mark_clean` | `last_cleaned_at` is stamped on Dirty → Available |
+| `test_last_cleaned_at_updates_on_return_from_oos` | `last_cleaned_at` is stamped on OOS → Available (DEC-031) |
+| `test_last_vacated_at_updates_on_vacate` | `last_vacated_at` is stamped on Occupied → Dirty |
+| `test_reason_cleared_after_return_from_oos` | `reason` is NULL (not empty string) after return from OOS |
+| `test_current_session_cleared_after_vacate` | `current_session` is NULL (not empty string) after vacate |
+| `test_hamilton_last_status_change_populated` | `hamilton_last_status_change` is set on every transition |
+
+**What's not yet tested:**
+- Timezone edge cases (UTC vs local time in `session_start`)
+- Leap second / DST transition handling
+- Field truncation on very long reason strings
