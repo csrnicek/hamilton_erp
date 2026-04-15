@@ -872,6 +872,73 @@ class TestMalformedSessionNumberDBFallback(IntegrationTestCase):
 
 
 
+# ---------------------------------------------------------------------------
+# Category Q — Named Constants and Configuration Defaults
+# ---------------------------------------------------------------------------
+
+
+class TestNamedConstants(IntegrationTestCase):
+	"""Category Q1 — verify lifecycle.py named constants match expected values.
+
+	These tests pin the string values that the codebase relies on for
+	customer defaults and vacate methods. If someone renames a constant
+	without updating the Venue Session DocType or the Walk-in Customer
+	record, these tests will catch the mismatch immediately.
+	"""
+
+	def test_walkin_customer_value(self):
+		"""WALKIN_CUSTOMER equals 'Walk-in'."""
+		self.assertEqual(lifecycle.WALKIN_CUSTOMER, "Walk-in")
+
+	def test_vacate_discovery_value(self):
+		"""VACATE_DISCOVERY equals 'Discovery on Rounds'."""
+		self.assertEqual(lifecycle.VACATE_DISCOVERY, "Discovery on Rounds")
+
+	def test_vacate_methods_contains_key_return(self):
+		"""_VACATE_METHODS includes 'Key Return'."""
+		self.assertIn("Key Return", lifecycle._VACATE_METHODS)
+
+	def test_vacate_methods_contains_discovery(self):
+		"""_VACATE_METHODS includes VACATE_DISCOVERY constant value."""
+		self.assertIn(lifecycle.VACATE_DISCOVERY, lifecycle._VACATE_METHODS)
+
+	def test_vacate_methods_exactly_two(self):
+		"""_VACATE_METHODS has exactly two entries (Key Return, Discovery on Rounds)."""
+		self.assertEqual(len(lifecycle._VACATE_METHODS), 2)
+
+
+class TestHamiltonSettingsDefaults(IntegrationTestCase):
+	"""Category Q2 — verify Hamilton Settings DocType default values.
+
+	The singleton Hamilton Settings provides operational parameters.
+	These tests verify that every field with a declared default returns
+	the expected value, ensuring api.py fallback defaults stay in sync
+	with the DocType JSON.
+	"""
+
+	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company"]
+
+	def test_float_amount_default(self):
+		"""Default float amount is 300."""
+		settings = frappe.get_doc("Hamilton Settings")
+		self.assertEqual(settings.float_amount, 300)
+
+	def test_default_stay_duration_minutes(self):
+		"""Default stay duration is 360 minutes (6 hours)."""
+		settings = frappe.get_doc("Hamilton Settings")
+		self.assertEqual(settings.default_stay_duration_minutes, 360)
+
+	def test_grace_minutes_default(self):
+		"""Default grace period is 15 minutes."""
+		settings = frappe.get_doc("Hamilton Settings")
+		self.assertEqual(settings.grace_minutes, 15)
+
+	def test_assignment_timeout_minutes_default(self):
+		"""Default assignment timeout is 15 minutes."""
+		settings = frappe.get_doc("Hamilton Settings")
+		self.assertEqual(settings.assignment_timeout_minutes, 15)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
