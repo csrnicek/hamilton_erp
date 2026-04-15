@@ -488,8 +488,8 @@ class TestERPNextSilentFailures(IntegrationTestCase):
         ERPNext silent failure: log entries are supposed to be created but
         a bug causes them to be skipped silently. Operators lose audit trail.
         """
-        prev = frappe.flags.in_test
-        frappe.flags.in_test = False
+        prev = frappe.in_test
+        frappe.in_test = False
         try:
             log_count_before = frappe.db.count("Asset Status Log",
                                                 {"venue_asset": self.asset.name})
@@ -499,7 +499,7 @@ class TestERPNextSilentFailures(IntegrationTestCase):
             self.assertEqual(log_count_after, log_count_before + 1,
                              "Asset Status Log silently skipped on transition")
         finally:
-            frappe.flags.in_test = prev
+            frappe.in_test = prev
 
     def test_version_never_silently_stays_at_zero(self):
         """Z3 — version field always increments — never stays at 0 after transition.

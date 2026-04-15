@@ -409,8 +409,8 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 
 	def test_asset_status_log_created_on_transition(self):
 		"""Item 48 — log entry created on every transition."""
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			before = frappe.db.count("Asset Status Log",
 			                         {"venue_asset": self.asset.name})
@@ -419,49 +419,49 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 			                        {"venue_asset": self.asset.name})
 			self.assertEqual(after - before, 1)
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 	def test_asset_status_log_previous_status_correct(self):
 		"""Item 49 — log previous_status matches actual previous status."""
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.previous_status, "Available")
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 	def test_asset_status_log_new_status_correct(self):
 		"""Item 50 — log new_status matches actual new status."""
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.new_status, "Occupied")
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 	def test_asset_status_log_operator_populated(self):
 		"""Item 51 — log operator is populated."""
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.operator, OPERATOR)
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 	def test_asset_status_log_timestamp_recent(self):
 		"""Item 52 — log timestamp is within 5 seconds of operation."""
 		from datetime import timedelta
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			before = now_datetime()
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
@@ -471,13 +471,13 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 			self.assertGreaterEqual(log.timestamp, before)
 			self.assertLessEqual(log.timestamp, after + timedelta(seconds=5))
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 	def test_bulk_clean_log_has_distinguishing_reason(self):
 		"""Item 53 — bulk clean log has distinguishing reason (DEC-054)."""
 		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Dirty")
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			mark_asset_clean(self.asset.name, operator=OPERATOR,
 			                 bulk_reason="Bulk sweep — morning reset")
@@ -485,7 +485,7 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.reason, "Bulk sweep — morning reset")
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 
 # ===========================================================================

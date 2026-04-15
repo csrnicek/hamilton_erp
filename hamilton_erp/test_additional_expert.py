@@ -297,13 +297,13 @@ class TestBulkClean(IntegrationTestCase):
 		frappe.db.set_value("Venue Asset", asset.name, "status", "Dirty")
 
 		# Temporarily clear in_test flag to allow log creation
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			mark_asset_clean(asset.name, operator=self.operator,
 			                 bulk_reason="Bulk Mark Clean — morning reset")
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 		# Verify the log entry has the distinguishing reason
 		log = frappe.get_last_doc("Asset Status Log",
@@ -315,12 +315,12 @@ class TestBulkClean(IntegrationTestCase):
 		asset = _make_asset("Test Single Clean Room")
 		frappe.db.set_value("Venue Asset", asset.name, "status", "Dirty")
 
-		prev = frappe.flags.in_test
-		frappe.flags.in_test = False
+		prev = frappe.in_test
+		frappe.in_test = False
 		try:
 			mark_asset_clean(asset.name, operator=self.operator)
 		finally:
-			frappe.flags.in_test = prev
+			frappe.in_test = prev
 
 		log = frappe.get_last_doc("Asset Status Log",
 		                          filters={"venue_asset": asset.name})

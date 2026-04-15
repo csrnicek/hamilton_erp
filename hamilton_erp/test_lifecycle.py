@@ -50,8 +50,8 @@ class TestLifecycleHelpers(IntegrationTestCase):
 
 	def test_log_helper_skipped_in_test_flag(self):
 		"""Grok review: Asset Status Log helper short-circuits when in_test is set."""
-		prev_flag = frappe.flags.in_test
-		frappe.flags.in_test = True
+		prev_flag = frappe.in_test
+		frappe.in_test = True
 		try:
 			result = lifecycle._make_asset_status_log(
 				asset_name="VA-0001",
@@ -63,7 +63,7 @@ class TestLifecycleHelpers(IntegrationTestCase):
 			)
 			self.assertIsNone(result)
 		finally:
-			frappe.flags.in_test = prev_flag
+			frappe.in_test = prev_flag
 
 
 class TestStartSession(IntegrationTestCase):
@@ -1546,7 +1546,7 @@ class TestAuditTrailExactlyOneLog(IntegrationTestCase):
 	"""Every lifecycle operation must create EXACTLY one Asset Status Log.
 
 	The ``_make_asset_status_log`` helper in lifecycle.py short-circuits
-	when ``frappe.flags.in_test`` is True (to keep the other ~200 tests
+	when ``frappe.in_test`` is True (to keep the other ~200 tests
 	fast — they don't care about the audit log). This class is the
 	exception: it clears the flag per-test, runs the real log insert
 	path, and verifies the DELTA in ``tabAsset Status Log`` is exactly
@@ -1595,11 +1595,11 @@ class TestAuditTrailExactlyOneLog(IntegrationTestCase):
 
 		# Flip off the in_test short-circuit so _make_asset_status_log
 		# actually inserts. Restored in tearDown.
-		self._prev_in_test = frappe.flags.in_test
-		frappe.flags.in_test = False
+		self._prev_in_test = frappe.in_test
+		frappe.in_test = False
 
 	def tearDown(self):
-		frappe.flags.in_test = self._prev_in_test
+		frappe.in_test = self._prev_in_test
 		frappe.db.rollback()
 
 	def _log_count_for_asset(self) -> int:

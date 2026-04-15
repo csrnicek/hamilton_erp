@@ -74,10 +74,10 @@ def _make_asset_status_log(
 
 	Returns the log name, or None when suppressed.
 
-	Tests that specifically assert log creation must clear frappe.flags.in_test
+	Tests that specifically assert log creation must clear frappe.in_test
 	locally via setUp/tearDown.
 	"""
-	if frappe.flags.in_test:
+	if frappe.in_test:
 		return None
 	log = frappe.get_doc({
 		"doctype": "Asset Status Log",
