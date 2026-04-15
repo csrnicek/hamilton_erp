@@ -313,3 +313,46 @@ Verifies timestamp ordering, field nullability, and cleanup after state transiti
 - Timezone edge cases (UTC vs local time in `session_start`)
 - Leap second / DST transition handling
 - Field truncation on very long reason strings
+
+---
+
+## Known Test Gaps — Resolve Before Task 25 Handoff
+
+These are concrete, known-missing tests that must be written before the Phase 1 handoff deploy.
+
+### 1. API POST Permission Tests
+
+Verify that a Guest user (unauthenticated) cannot call any of these whitelisted endpoints via the API layer:
+
+- `start_walk_in_session`
+- `vacate_asset`
+- `clean_asset`
+- `set_asset_oos`
+- `return_asset_from_oos`
+
+Each test should hit the endpoint through `frappe.handler.execute_cmd()` (or equivalent) with no session/role, and assert a `PermissionError` or 403. Direct Python imports bypass the permission gate entirely (see Best Practice #3 in `claude_memory.md`), so these tests must exercise the HTTP/handler layer.
+
+### 2. Sales Invoice Override Tests
+
+`HamiltonSalesInvoice` (in `hamilton_erp/overrides/sales_invoice.py`) defines three methods loaded via `override_doctype_class` in hooks.py:
+
+- `has_admission_item()` — returns True if any line item matches admission criteria
+- `get_admission_category()` — returns the admission category string
+- `has_comp_admission()` — returns True if the admission is comped
+
+None of these have any test coverage. Tests should create a Sales Invoice with and without admission items and verify each method's return value. These methods are the foundation of Phase 2 financial integration.
+
+### 3. Bulk Clean Catastrophic Exception Handling
+
+`_mark_all_clean()` in `api.py` iterates over all Dirty assets and calls `mark_asset_clean()` on each. If a catastrophic exception occurs mid-loop (e.g., DB connection failure), verify that:
+
+- The error is raised or logged, not silently swallowed
+- Assets cleaned before the failure remain clean (committed)
+- The caller receives an error response, not a success with partial results
+
+### 4. `utils.py` — Completely Untested Functions
+
+`get_current_shift_record()` and `get_next_drop_number()` in `hamilton_erp/utils.py` have zero test coverage:
+
+- `get_current_shift_record()` — returns the active Shift Record for the current operator. Must be tested with: no active shift, one active shift, multiple shifts (should return most recent).
+- `get_next_drop_number()` — returns the next sequential drop number for a shift. Must be tested with: no prior drops (returns 1), existing drops (returns max + 1), and the empty-string guard (a known edge case where an empty string in the `drop_number` field causes `max()` to return `""` instead of an integer).
