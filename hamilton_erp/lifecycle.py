@@ -25,6 +25,12 @@ from frappe.utils import now_datetime
 
 
 # ---------------------------------------------------------------------------
+# Named constants
+# ---------------------------------------------------------------------------
+WALKIN_CUSTOMER = "Walk-in"
+VACATE_DISCOVERY = "Discovery on Rounds"
+
+# ---------------------------------------------------------------------------
 # State machine — single source of truth
 # ---------------------------------------------------------------------------
 #
@@ -97,7 +103,7 @@ def _make_asset_status_log(
 # ---------------------------------------------------------------------------
 
 
-def start_session_for_asset(asset_name: str, *, operator: str, customer: str = "Walk-in") -> str:
+def start_session_for_asset(asset_name: str, *, operator: str, customer: str = WALKIN_CUSTOMER) -> str:
 	"""Available → Occupied + create Venue Session. Returns session name."""
 	from hamilton_erp.locks import asset_status_lock
 	from hamilton_erp.realtime import publish_status_change
@@ -307,7 +313,7 @@ def _set_asset_status(
 
 # SOURCE OF TRUTH: venue_session.json `vacate_method` Select field options.
 # Keep in sync — any change to the Select list here MUST also update the doctype JSON.
-_VACATE_METHODS = ("Key Return", "Discovery on Rounds")
+_VACATE_METHODS = ("Key Return", VACATE_DISCOVERY)
 
 
 def vacate_session(asset_name: str, *, operator: str, vacate_method: str) -> None:
@@ -476,7 +482,7 @@ def set_asset_out_of_service(asset_name: str, *, operator: str, reason: str) -> 
 				asset_name,
 				current_session=current_session,
 				operator=operator,
-				vacate_method="Discovery on Rounds",
+				vacate_method=VACATE_DISCOVERY,
 			)
 			log_venue_session = current_session
 		else:
