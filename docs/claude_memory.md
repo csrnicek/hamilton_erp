@@ -606,3 +606,19 @@ Claude runs both branches, compares outputs, and presents concrete evidence.
 Check the full Claude Code setup for gaps using this command inside Claude Code:
 > "Fetch and follow the onboarding instructions from: https://raw.githubusercontent.com/FlorianBruniaux/claude-code-ultimate-guide/main/tools/onboarding-prompt.md"
 Flags missing security hooks, incomplete MCP setup, and CI integration gaps.
+
+## Engineering Blog Action Items — Completed 2026-04-15
+
+### Skills and Agents Created
+- `.claude/skills/frappe-v16/SKILL.md` — Frappe v16 platform rules (in_test flag, extend_doctype_class, type comparisons, Redis lock key format and bug history)
+- `.claude/skills/hamilton-testing/SKILL.md` — test site, bench location, run commands, 5 core test files, baseline counts (270 passing / 7 skipped)
+- `.claude/agents/security-reviewer.md` — Opus-powered security review subagent for Frappe role gaps, silent exceptions, string comparisons, hardcoded values
+- PostToolUse test hook added to `.claude/settings.json` — runs full test suite after every `.py` edit (warn-only, `exitOnFailure: false`)
+
+### Task 25 Workflow Notes
+- Use `/clear` between every Task 25 sub-item — do not carry context across sub-items
+- Use Plan Mode before starting any Task 25 item (Ctrl+Shift+P in Claude Code)
+- The 36 `frappe.flags.in_test` replacements across 5 files should use the fan-out pattern: loop file by file with `claude -p`, one clean context per file
+- Replace the manual 3-AI review with the Writer/Reviewer two-session pattern: Session A writes, Session B reviews from fresh context with no bias
+- Do not deploy to Frappe Cloud until all entries in `docs/feature_status.json` show `"passes": true`
+- Source: https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents
