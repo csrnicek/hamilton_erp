@@ -1,0 +1,126 @@
+{
+  "description": "Pre-deploy gate — every feature must show passes:true before Frappe Cloud deploy",
+  "source": "https://www.anthropic.com/engineering/effective-harnesses-for-long-running-agents",
+  "features": [
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can start a session on an available room",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can start a session on an available locker",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Asset moves from Available to Occupied after session start",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can vacate an occupied asset",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Asset moves from Occupied to Dirty after vacate",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can mark a dirty asset as clean",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Asset moves from Dirty to Available after mark clean",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can set an asset to Out of Service",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Operator can return an Out of Service asset to Available",
+      "passes": false
+    },
+    {
+      "category": "asset_lifecycle",
+      "description": "Invalid transitions are rejected with a clear error message",
+      "passes": false
+    },
+    {
+      "category": "session_numbering",
+      "description": "Session number format is {d}-{m}-{y}---{NNN}",
+      "passes": false
+    },
+    {
+      "category": "session_numbering",
+      "description": "Session numbers increment correctly within a day",
+      "passes": false
+    },
+    {
+      "category": "session_numbering",
+      "description": "Session number sequence resets at midnight",
+      "passes": false
+    },
+    {
+      "category": "session_numbering",
+      "description": "Concurrent session starts produce unique numbers",
+      "passes": false
+    },
+    {
+      "category": "locking",
+      "description": "Redis lock prevents double-assignment of the same asset",
+      "passes": false
+    },
+    {
+      "category": "locking",
+      "description": "Lock contention returns a clear error to the second operator",
+      "passes": false
+    },
+    {
+      "category": "locking",
+      "description": "Lock is released after successful operation",
+      "passes": false
+    },
+    {
+      "category": "locking",
+      "description": "Lock is released after failed operation (no key leak)",
+      "passes": false
+    },
+    {
+      "category": "locking",
+      "description": "Lock TTL expires after 15 seconds if not released",
+      "passes": false
+    },
+    {
+      "category": "ui",
+      "description": "Asset Board displays all 59 assets grouped by tier",
+      "passes": false
+    },
+    {
+      "category": "ui",
+      "description": "Asset card shows correct status color after each transition",
+      "passes": false
+    },
+    {
+      "category": "ui",
+      "description": "Asset Board updates in real-time after a status change",
+      "passes": false
+    },
+    {
+      "category": "ui",
+      "description": "Tier badges display correctly on asset cards",
+      "passes": false
+    },
+    {
+      "category": "ui",
+      "description": "Out of Service assets are visually distinct",
+      "passes": false
+    }
+  ]
+}
