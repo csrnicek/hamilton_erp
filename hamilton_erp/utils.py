@@ -2,7 +2,6 @@
 
 import frappe
 from frappe import _
-from frappe.utils import now_datetime
 
 
 def get_current_shift_record(operator: str) -> str | None:
@@ -29,26 +28,3 @@ def get_next_drop_number(shift_record: str) -> int:
 	return (count or 0) + 1
 
 
-def create_asset_status_log(
-	venue_asset: str,
-	previous_status: str,
-	new_status: str,
-	operator: str,
-	reason: str = "",
-) -> None:
-	"""Create an Asset Status Log entry for every asset state change.
-
-	This is the audit trail for the asset board — every transition must be
-	recorded regardless of how it was triggered.
-	"""
-	frappe.get_doc(
-		{
-			"doctype": "Asset Status Log",
-			"venue_asset": venue_asset,
-			"previous_status": previous_status,
-			"new_status": new_status,
-			"reason": reason,
-			"operator": operator,
-			"timestamp": now_datetime(),
-		}
-	).insert(ignore_permissions=True)
