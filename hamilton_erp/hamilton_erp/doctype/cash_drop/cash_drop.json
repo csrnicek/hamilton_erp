@@ -40,7 +40,8 @@
    "fieldname": "shift_record",
    "fieldtype": "Link",
    "label": "Shift Record",
-   "options": "Shift Record"
+   "options": "Shift Record",
+   "search_index": 1
   },
   {
    "fieldname": "shift_date",
