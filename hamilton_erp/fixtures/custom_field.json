@@ -158,7 +158,7 @@
   "name": "Item-hamilton_asset_tier",
   "no_copy": 0,
   "non_negative": 0,
-  "options": "\nLocker\nSingle Standard\nDeluxe Single\nGlory Hole\nDouble Deluxe",
+  "options": "\nLocker\nSingle Standard\nDeluxe Single\nGH Room\nDouble Deluxe",
   "permlevel": 0,
   "placeholder": null,
   "precision": null,

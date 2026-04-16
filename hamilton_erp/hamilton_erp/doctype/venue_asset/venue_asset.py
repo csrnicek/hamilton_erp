@@ -53,13 +53,13 @@ class VenueAsset(Document):
 
 	def _validate_tier_matches_category(self):
 		"""Lockers must have tier Locker. Rooms must have a room tier."""
-		room_tiers = {"Single Standard", "Deluxe Single", "Glory Hole", "Double Deluxe"}
+		room_tiers = {"Single Standard", "Deluxe Single", "GH Room", "Double Deluxe"}
 		if self.asset_category == "Locker" and self.asset_tier != "Locker":
 			frappe.throw(_("Lockers must have tier 'Locker'."))
 		if self.asset_category == "Room" and self.asset_tier not in room_tiers:
 			frappe.throw(
 				_("Rooms must have a room tier: Single Standard, Deluxe Single, "
-				  "Glory Hole, or Double Deluxe.")
+				  "GH Room, or Double Deluxe.")
 			)
 
 	def _validate_reason_for_oos(self):

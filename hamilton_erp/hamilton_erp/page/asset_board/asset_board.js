@@ -50,7 +50,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	render() {
 		const rooms = this.assets.filter((a) => a.asset_category === "Room");
 		const lockers = this.assets.filter((a) => a.asset_category === "Locker");
-		const tierOrder = ["Single Standard", "Deluxe Single", "Glory Hole", "Double Deluxe"];
+		const tierOrder = ["Single Standard", "Deluxe Single", "GH Room", "Double Deluxe"];
 
 		const room_groups = tierOrder
 			.map((tier) => {
@@ -102,7 +102,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const status_class = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
 		const tier_short = asset.asset_tier === "Single Standard" ? "STD"
 			: asset.asset_tier === "Deluxe Single" ? "DLX"
-			: asset.asset_tier === "Glory Hole" ? "GH"
+			: asset.asset_tier === "GH Room" ? "GH"
 			: asset.asset_tier === "Double Deluxe" ? "2DLX"
 			: asset.asset_tier === "Locker" ? "" : asset.asset_tier;
 		return `

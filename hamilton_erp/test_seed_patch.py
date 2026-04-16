@@ -70,8 +70,8 @@ class TestSeedPatch(IntegrationTestCase):
 		self.assertEqual(assets[10]["asset_code"], "R011")  # last Single Standard
 		self.assertEqual(assets[11]["asset_code"], "R012")  # first Deluxe Single
 		self.assertEqual(assets[20]["asset_code"], "R021")  # last Deluxe Single
-		self.assertEqual(assets[21]["asset_code"], "R022")  # first Glory Hole
-		self.assertEqual(assets[22]["asset_code"], "R023")  # last Glory Hole
+		self.assertEqual(assets[21]["asset_code"], "R022")  # first GH Room
+		self.assertEqual(assets[22]["asset_code"], "R023")  # last GH Room
 		self.assertEqual(assets[23]["asset_code"], "R024")  # first Double Deluxe
 		self.assertEqual(assets[25]["asset_code"], "R026")  # last Double Deluxe
 		self.assertEqual(assets[26]["asset_code"], "L001")  # first Locker
@@ -97,9 +97,9 @@ class TestSeedPatch(IntegrationTestCase):
 		# Deluxe Single: R012-R021
 		for i in range(12, 22):
 			self.assertEqual(tiers[f"R{i:03d}"], "Deluxe Single")
-		# Glory Hole: R022-R023
+		# GH Room: R022-R023
 		for i in range(22, 24):
-			self.assertEqual(tiers[f"R{i:03d}"], "Glory Hole")
+			self.assertEqual(tiers[f"R{i:03d}"], "GH Room")
 		# Double Deluxe: R024-R026
 		for i in range(24, 27):
 			self.assertEqual(tiers[f"R{i:03d}"], "Double Deluxe")

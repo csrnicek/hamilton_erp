@@ -248,9 +248,9 @@ class TestVenueAsset(IntegrationTestCase):
 		doc = frappe.get_doc({
 			"doctype": "Venue Asset",
 			"asset_code": "TEST-LOCKER-GH",
-			"asset_name": "Locker With Glory Hole",
+			"asset_name": "Locker With GH Room",
 			"asset_category": "Locker",
-			"asset_tier": "Glory Hole",
+			"asset_tier": "GH Room",
 			"status": "Available",
 			"display_order": 97,
 		})

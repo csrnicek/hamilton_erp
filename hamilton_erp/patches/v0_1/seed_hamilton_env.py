@@ -61,7 +61,7 @@ def _ensure_venue_assets():
 	Order per Q6:
 	  R001-R011 Single Standard  (11)
 	  R012-R021 Deluxe Single    (10)
-	  R022-R023 Glory Hole       (2)
+	  R022-R023 GH Room          (2)
 	  R024-R026 Double Deluxe    (3)
 	  L001-L033 Lockers          (33)
 
@@ -85,7 +85,7 @@ def _ensure_venue_assets():
 	plan = (
 		("R", 11, "Room",   "Single Standard", "Sing STD",  1,  1),
 		("R", 10, "Room",   "Deluxe Single",   "Sing DLX", 12, 12),
-		("R",  2, "Room",   "Glory Hole",      "Glory",    22, 22),
+		("R",  2, "Room",   "GH Room",         "GH",       22, 22),
 		("R",  3, "Room",   "Double Deluxe",   "Dbl DLX",  24, 24),
 		("L", 33, "Locker", "Locker",          "Lckr",      1, 27),
 	)

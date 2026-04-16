@@ -96,11 +96,11 @@ class TestAssetBoardRendering(IntegrationTestCase):
 			tier_counts[r["asset_tier"]] = tier_counts.get(r["asset_tier"], 0) + 1
 		self.assertEqual(tier_counts.get("Single Standard"), 11)
 		self.assertEqual(tier_counts.get("Deluxe Single"), 10)
-		self.assertEqual(tier_counts.get("Glory Hole"), 2)
+		self.assertEqual(tier_counts.get("GH Room"), 2)
 		self.assertEqual(tier_counts.get("Double Deluxe"), 3)
 
 	def test_every_room_has_one_of_the_four_canonical_tiers(self):
-		canonical = {"Single Standard", "Deluxe Single", "Glory Hole", "Double Deluxe"}
+		canonical = {"Single Standard", "Deluxe Single", "GH Room", "Double Deluxe"}
 		data = api.get_asset_board_data()
 		for r in (a for a in data["assets"] if a["asset_category"] == "Room"):
 			self.assertIn(

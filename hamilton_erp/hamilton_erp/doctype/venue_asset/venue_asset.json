@@ -66,7 +66,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Asset Tier",
-   "options": "Locker\nSingle Standard\nDeluxe Single\nGlory Hole\nDouble Deluxe",
+   "options": "Locker\nSingle Standard\nDeluxe Single\nGH Room\nDouble Deluxe",
    "reqd": 1,
    "search_index": 1
   },
