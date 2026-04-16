@@ -95,7 +95,7 @@ Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lif
 
 ## Workflow rules
 
-1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`, `docs/lessons_learned.md`, `docs/venue_rollout_playbook.md`
+1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`, `docs/lessons_learned.md`, `docs/venue_rollout_playbook.md`, `docs/design/asset_board_ui.md`
 2. **Use Subagent-Driven Development** for all Phase 1 tasks — dispatch implementer → spec reviewer → code quality reviewer → fix → re-review
 3. **Push to GitHub after every task** — every commit goes to `origin/main`
 4. **Never use browser automation** — always give Chris manual instructions instead
