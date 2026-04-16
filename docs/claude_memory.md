@@ -649,3 +649,8 @@ Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
 - **Task 25:** Ch.12 (Security & RBAC), Ch.12.3 (Audit Logs), Ch.3 (Workflows), Ch.13 (Fixtures)
 - **Phase 2:** Ch.13 (Background Jobs, Real-Time Sync), Ch.9.1 (Stripe), Ch.9.5 (Webhooks)
 - **Before go-live:** Ch.11 (Frappe Cloud deployment), Ch.10.3 (Backup & Restore automation)
+
+### Frappe Cloud Version Pinning (Task 25 action item)
+- Before go-live, verify `hamilton-erp.v.frappe.cloud` is pinned to a specific stable v16 minor version — do not auto-update to latest.
+- Current latest: v16.14.0 (released 2026-04-14). Removes forced six-decimal rounding on valuation rate fields — verify no impact on Hamilton's session pricing after any platform update.
+- Task 25 checklist: (1) check running version, (2) confirm auto-update settings in Frappe Cloud dashboard, (3) pin to current stable minor, (4) document pinned version here.
