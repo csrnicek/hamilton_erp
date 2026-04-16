@@ -121,8 +121,10 @@ def asset_status_lock(asset_name: str, operation: str) -> Iterator[dict]:
 					f"for {key} — lock was held by another caller by release time. "
 					f"MariaDB FOR UPDATE preserved data integrity."
 				)
-		except Exception:
-			pass
+		except Exception as exc:
+			frappe.logger().warning(
+				f"asset_status_lock: Redis TTL check failed for {key}: {exc}"
+			)
 		# Atomic release via Lua CAS — only delete if the token is still ours.
 		# This is Redis server-side Lua scripting (EVAL command), not Python eval.
 		try:
