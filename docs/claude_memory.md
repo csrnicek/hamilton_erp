@@ -654,3 +654,37 @@ Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
 - Before go-live, verify `hamilton-erp.v.frappe.cloud` is pinned to a specific stable v16 minor version — do not auto-update to latest.
 - Current latest: v16.14.0 (released 2026-04-14). Removes forced six-decimal rounding on valuation rate fields — verify no impact on Hamilton's session pricing after any platform update.
 - Task 25 checklist: (1) check running version, (2) confirm auto-update settings in Frappe Cloud dashboard, (3) pin to current stable minor, (4) document pinned version here.
+
+---
+
+## Session Checkpoint — 2026-04-16 00:15 EDT
+
+### What was built
+- **Asset Board V6 rebuild** — complete rewrite of `asset_board.js` (403 lines) and `asset_board.css` (473 lines) per approved design spec `docs/design/asset_board_ui.md`
+- **Hamilton Settings feature flags** — added `show_waitlist_tab` and `show_other_tab` fields to Hamilton Settings DocType, wired to `api.py`
+- **Visual gap fixes** — pinned footer via `calc(100vh - 85px)`, status-coloured section headers, active tab border overlap technique
+- **Security audit compliance** — XSS tests updated for V6 tile template (`asset.name` not `asset.asset_name`), `frappe.utils.escape_html` used inline (no alias)
+- **CSS refinements** — `box-shadow: none` on normal tiles (shadow only on expanded + overtime), `text-overflow: ellipsis` on tile status labels to prevent "OUT OF SERVICE" wrapping
+- **Tab rename** — "VIP" tab renamed to "GH Room" to match the asset tier name
+- **Saturday night simulation** — `hamilton_erp/scripts/saturday_night_sim.py` created; hamilton-test.localhost populated with 5 occupied rooms (overtime), 3 dirty, 1 OOS for visual QA
+- **Tier migration** — ran `bench migrate` on hamilton-test.localhost to sync "Glory Hole" → "GH Room" schema change
+- **Import fix** — `test_stress_simulation.py` updated from `frappe.tests.utils` to `frappe.tests`
+
+### Decisions made
+- Tab labels: Lockers · Single · Double · GH Room · Waitlist · Other · Watch (VIP label rejected in favour of tier name)
+- `box-shadow: none` as default on `.hamilton-tile` — intentional shadows only on expanded tiles and overtime pulsing
+- Border-radius 6px added to design spec as formal rule
+- Session_start backdating via direct MariaDB SQL is acceptable for simulation data (doesn't violate state machine invariants)
+
+### Current branch state
+- Branch: `feature/asset-board-ui-rebuild`
+- Latest commit: `c9302d9` (Saturday night sim script)
+- PR #8 open: "feat(ui): Asset Board V6 rebuild — tabs, dark theme, tile expand"
+- All core tests pass (security audit, lifecycle, API, rendering, adversarial, database, hypothesis)
+- Pre-existing failures: `test_stress_simulation.py` Phase 2 stubs, `test_load_10k` timeout
+
+### Next steps
+- Continue populating simulation data per full Saturday night plan (lockers, remaining rooms)
+- Visual QA in browser against spec
+- Merge PR #8 when visual QA passes
+- Resume Taskmaster task queue (Tasks 17–22 are the Asset Board UI tasks)
