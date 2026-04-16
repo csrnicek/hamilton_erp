@@ -29,7 +29,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			{ id: "lockers", label: __("Lockers"), filter: (a) => a.asset_category === "Locker" },
 			{ id: "single", label: __("Single"), filter: (a) => a.asset_category === "Room" && (a.asset_tier === "Single Standard" || a.asset_tier === "Deluxe Single") },
 			{ id: "double", label: __("Double"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "Double Deluxe" },
-			{ id: "vip", label: __("VIP"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "GH Room" },
+			{ id: "gh-room", label: __("GH Room"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "GH Room" },
 			{ id: "waitlist", label: __("Waitlist"), feature_flag: "show_waitlist_tab", placeholder: true },
 			{ id: "other", label: __("Other"), feature_flag: "show_other_tab", placeholder: true },
 			{ id: "watch", label: __("Watch"), watch: true },

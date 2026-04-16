@@ -250,6 +250,10 @@
 	opacity: 0.8;
 	text-transform: uppercase;
 	letter-spacing: 0.3px;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
 }
 
 /* ── Status colours — dark theme per V6 spec ── */
