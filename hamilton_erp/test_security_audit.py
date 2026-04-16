@@ -308,19 +308,20 @@ class TestAssetBoardXSS(IntegrationTestCase):
 
 	def test_asset_name_is_escaped_in_render_tile(self):
 		html = self._extract_html_template()
-		# Find every ${...asset.asset_name...} interpolation in the HTML
-		# template and assert it is wrapped in escape_html.
-		pattern = re.compile(r"\$\{([^}]*asset\.asset_name[^}]*)\}")
+		# V6 tiles no longer render asset.asset_name (display name).
+		# They DO render asset.name (Frappe doc ID) in data-asset-name.
+		# Check that every ${...asset.name...} interpolation is escaped.
+		pattern = re.compile(r"\$\{([^}]*asset\.name[^}]*)\}")
 		matches = pattern.findall(html)
 		self.assertTrue(
 			matches,
-			"render_tile HTML template does not reference asset.asset_name "
+			"render_tile HTML template does not reference asset.name "
 			"at all — did the field get renamed? Update the test or the JS.",
 		)
 		for expr in matches:
 			self.assertIn(
 				"frappe.utils.escape_html", expr,
-				f"asset.asset_name interpolated without escape_html: "
+				f"asset.name interpolated without escape_html: "
 				f"${{{expr}}} — this is an XSS vector.",
 			)
 
