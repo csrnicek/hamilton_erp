@@ -53,6 +53,9 @@ Venue defaults:
 
 - Base size: width 95px, minHeight 75px
 - Border: 3px solid — always visible (accessibility decision for 50+ staff)
+- Border radius: 6px (subtle rounding only — no glow, no box-shadow on normal tiles, clean solid border only)
+- No box-shadow on normal tiles — clean solid border only, no glow
+- box-shadow only appears on: expanded tiles (lift shadow) and overtime pulsing tiles (spec intentional)
 - Border colour driven by status dot colour normally
 - Warning tiles: 3px amber border #f59e0b + ⏱ badge top-right corner
 - Overtime tiles: 3px red border #ef4444 + pulsing animation + OT badge top-right corner

@@ -215,3 +215,57 @@ when he is just approving routine decisions.
 ## Context Compaction Rule
 
 When compacting, always preserve: modified file list, failing test names, and Redis lock key format (`hamilton:asset_lock:{asset_name}`).
+
+## Design Spec Rules (Permanent)
+
+These rules apply to every session, every task, forever.
+
+### Rule 1 — Inbox first
+Before starting any task, read docs/inbox.md.
+If it has content, merge it into claude_memory.md and relevant docs, then clear inbox.md.
+Never skip this step even if inbox.md appears empty — always open and check it.
+
+### Rule 2 — Design spec before any frontend code
+Before writing any code for any frontend task (JS, CSS, HTML, page templates):
+- Check docs/design/ for a spec file matching the feature
+- If one exists, read it in full before writing a single line of code
+- If none exists, stop and tell Chris before proceeding
+
+### Rule 3 — Required startup reads (every session)
+Read all of these at the start of every Claude Code session, in this order:
+1. docs/claude_memory.md
+2. CLAUDE.md
+3. docs/inbox.md
+4. docs/design/asset_board_ui.md
+5. docs/decisions_log.md
+6. docs/phase1_design.md §5.6 (frontend sessions only)
+
+### Rule 4 — End of session commit
+At the end of every session, before stopping:
+- Run git status
+- If anything is uncommitted, commit and push it
+- Append a checkpoint to docs/claude_memory.md summarising: what was built, decisions made, current task status, next step
+- Never end a session with uncommitted work or an empty checkpoint
+
+## Permanent Automation Rules — DO NOT REMOVE
+
+### Session Start (every single session, no exceptions)
+Run /start before responding to anything. This is not optional.
+If /start has not run, run it now before reading this further.
+
+### Frontend Code Rule
+Before writing ANY JS, CSS, or HTML:
+- Check docs/design/ for a matching spec file
+- If found: read it completely before writing one line of code
+- If not found: stop and tell Chris — do not guess or use old spec
+
+### End of Session Rule
+Before stopping for any reason:
+- git status — commit and push anything uncommitted
+- Append checkpoint to docs/claude_memory.md
+- git add docs/claude_memory.md && git commit -m "chore: end of session checkpoint" && git push origin HEAD -y
+
+### inbox.md Rule
+inbox.md is the bridge from claude.ai planning to Claude Code building.
+Check it at session start (via /start) AND whenever PreCompact fires.
+Never let inbox.md sit unread for more than one session.
