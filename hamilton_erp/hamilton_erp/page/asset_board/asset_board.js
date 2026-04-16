@@ -271,6 +271,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		$pop.find(".hamilton-popover-error").text(msg).show();
 	}
 
+	// ── Task 21: Bulk Mark Clean confirmation dialog (DEC-054) ──
 	confirm_bulk_clean(category) {
 		const dirty = this.assets.filter(
 			(a) => a.asset_category === category && a.status === "Dirty"
@@ -279,20 +280,49 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			frappe.show_alert({message: __("No dirty assets to clean"), indicator: "orange"});
 			return;
 		}
-		const names = dirty.map((a) => `${a.asset_code} ${a.asset_name}`).join("\n");
-		if (confirm(`${__("Mark these clean?")}\n\n${names}`)) {
-			const method = category === "Room"
-				? "hamilton_erp.api.mark_all_clean_rooms"
-				: "hamilton_erp.api.mark_all_clean_lockers";
-			frappe.call({method, type: "POST"}).then(async (r) => {
-				frappe.show_alert({
-					message: `${r.message.succeeded.length} ${__("cleaned")}, ${r.message.failed.length} ${__("failed")}`,
-					indicator: r.message.failed.length ? "orange" : "green",
-				});
-				await this.fetch_board();
-				this.render();
-			});
-		}
+		const list_html = `
+			<p>${__("The following {0} assets will be marked clean:", [dirty.length])}</p>
+			<ul class="hamilton-bulk-list">
+				${dirty.map((a) =>
+					`<li><strong>${frappe.utils.escape_html(a.asset_code)}</strong>
+					 ${frappe.utils.escape_html(a.asset_name)}</li>`
+				).join("")}
+			</ul>
+		`;
+		const d = new frappe.ui.Dialog({
+			title: __("Confirm Bulk Mark Clean — {0}", [category]),
+			fields: [{fieldtype: "HTML", options: list_html}],
+			primary_action_label: __("Mark All Clean"),
+			primary_action: async () => {
+				d.get_primary_btn().prop("disabled", true);
+				const method = category === "Room"
+					? "hamilton_erp.api.mark_all_clean_rooms"
+					: "hamilton_erp.api.mark_all_clean_lockers";
+				try {
+					const r = await frappe.xcall(method, {});
+					frappe.show_alert({
+						message: __("{0} cleaned, {1} failed",
+									[r.succeeded.length, r.failed.length]),
+						indicator: r.failed.length ? "orange" : "green",
+					});
+					if (r.failed.length) {
+						console.warn("Bulk Mark Clean failures:", r.failed);
+					}
+					d.hide();
+					await this.fetch_board();
+					this.render();
+					this.refresh_overtime_overlays();
+				} catch (err) {
+					frappe.msgprint({
+						title: __("Bulk Mark Clean failed"),
+						message: (err && err.message) || String(err),
+						indicator: "red",
+					});
+					d.get_primary_btn().prop("disabled", false);
+				}
+			},
+		});
+		d.show();
 	}
 
 	// ── Task 19: Overtime ticker (2-stage visual) ──────────────
