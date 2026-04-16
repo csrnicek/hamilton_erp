@@ -5,6 +5,11 @@ Prefer doc_events in hooks.py for lifecycle reactions; use this class only
 when reusable methods on the document object itself are needed.
 """
 
+# UPGRADE CHECKPOINT — verified against ERPNext 16.13.2 (2026-04-15).
+# This import path is tightly coupled to ERPNext's internal module layout.
+# Re-verify after every ERPNext version bump: if the path moves, Hamilton
+# ERP will fail to start. The test_override_doctype_class_loads_correctly
+# test in test_database_advanced.py catches this at test time.
 from erpnext.accounts.doctype.sales_invoice.sales_invoice import SalesInvoice
 
 
