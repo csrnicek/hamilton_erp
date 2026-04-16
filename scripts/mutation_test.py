@@ -17,11 +17,15 @@ import subprocess
 import sys
 import shutil
 import tempfile
+from pathlib import Path
 
-BENCH_DIR = "/Users/chrissrnicek/frappe-bench-hamilton"
-APP_DIR = "/Users/chrissrnicek/hamilton_erp"
-SITE = "hamilton-unit-test.localhost"
-BENCH = "/Users/chrissrnicek/.pyenv/versions/3.11.9/bin/bench"
+# Derive paths from this script's location:
+#   scripts/mutation_test.py → hamilton_erp/ (app root) → apps/ → bench dir
+_SCRIPT_DIR = Path(__file__).resolve().parent
+APP_DIR = str(_SCRIPT_DIR.parent)                # apps/hamilton_erp
+BENCH_DIR = str(_SCRIPT_DIR.parents[2])          # frappe-bench-hamilton
+SITE = os.environ.get("HAMILTON_TEST_SITE", "hamilton-unit-test.localhost")
+BENCH = shutil.which("bench") or "bench"
 
 # Files to mutate
 TARGETS = [
@@ -75,7 +79,6 @@ def run_tests():
 	result = subprocess.run(
 		full_cmd, shell=True, capture_output=True, text=True, timeout=300,
 		cwd=BENCH_DIR,
-		env={**os.environ, "PATH": f"/Users/chrissrnicek/.pyenv/versions/3.11.9/bin:{os.environ.get('PATH', '')}"},
 	)
 	return result.returncode == 0
 
