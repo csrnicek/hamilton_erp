@@ -1,4 +1,5 @@
 frappe.provide("hamilton_erp");
+//
 
 frappe.pages["asset-board"].on_page_load = (wrapper) => {
 	const page = frappe.ui.make_app_page({
@@ -25,8 +26,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.render();
 		this.bind_events();
 		this.start_overtime_ticker();
+		this.listen_realtime();
 		this.page.wrapper.on("page-destroyed", () => this.teardown());
-		// Task 20: realtime
 	}
 
 	async fetch_board() {
@@ -329,8 +330,44 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		}
 	}
 
+	// ── Task 20: Realtime listeners (cross-tab sync) ──────────
+	listen_realtime() {
+		frappe.realtime.on("hamilton_asset_status_changed",
+			(d) => this.apply_status_change(d));
+		frappe.realtime.on("hamilton_asset_board_refresh",
+			() => this.full_refresh());
+	}
+
+	apply_status_change(payload) {
+		const local = this.assets.find((a) => a.name === payload.name);
+		if (!local) return;
+		// Discard stale events (out-of-order delivery)
+		if (payload.version != null && local.version != null
+			&& payload.version <= local.version) {
+			return;
+		}
+		Object.assign(local, payload);
+		// Re-render this single tile in place
+		const $tile = this.wrapper.find(
+			`.hamilton-tile[data-asset-name="${$.escapeSelector(local.name)}"]`
+		);
+		if ($tile.length) {
+			const $new = $(this.render_tile(local));
+			$tile.replaceWith($new);
+		}
+		this.refresh_overtime_overlays();
+	}
+
+	async full_refresh() {
+		await this.fetch_board();
+		this.render();
+		this.refresh_overtime_overlays();
+	}
+
 	teardown() {
 		if (this.overtime_interval) clearInterval(this.overtime_interval);
 		$(document).off("click.hamilton-popover");
+		frappe.realtime.off("hamilton_asset_status_changed");
+		frappe.realtime.off("hamilton_asset_board_refresh");
 	}
 };
