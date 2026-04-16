@@ -246,3 +246,26 @@ At the end of every session, before stopping:
 - If anything is uncommitted, commit and push it
 - Append a checkpoint to docs/claude_memory.md summarising: what was built, decisions made, current task status, next step
 - Never end a session with uncommitted work or an empty checkpoint
+
+## Permanent Automation Rules — DO NOT REMOVE
+
+### Session Start (every single session, no exceptions)
+Run /start before responding to anything. This is not optional.
+If /start has not run, run it now before reading this further.
+
+### Frontend Code Rule
+Before writing ANY JS, CSS, or HTML:
+- Check docs/design/ for a matching spec file
+- If found: read it completely before writing one line of code
+- If not found: stop and tell Chris — do not guess or use old spec
+
+### End of Session Rule
+Before stopping for any reason:
+- git status — commit and push anything uncommitted
+- Append checkpoint to docs/claude_memory.md
+- git add docs/claude_memory.md && git commit -m "chore: end of session checkpoint" && git push origin HEAD -y
+
+### inbox.md Rule
+inbox.md is the bridge from claude.ai planning to Claude Code building.
+Check it at session start (via /start) AND whenever PreCompact fires.
+Never let inbox.md sit unread for more than one session.
