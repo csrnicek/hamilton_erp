@@ -11,7 +11,7 @@ from frappe import _
 def on_sales_invoice_submit(doc, method):
 	"""After POS Sales Invoice is submitted, check for admission items.
 
-	`doc` is a HamiltonSalesInvoice instance (registered via override_doctype_class
+	`doc` is a HamiltonSalesInvoice instance (registered via extend_doctype_class
 	in hooks.py), so the Hamilton-specific helper methods are available directly.
 
 	If the cart contains an admission item, the custom asset-assignment flow is

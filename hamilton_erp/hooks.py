@@ -60,13 +60,13 @@ after_install = "hamilton_erp.setup.install.after_install"
 after_migrate = "hamilton_erp.setup.install.ensure_setup_complete"
 
 # ---------------------------------------------------------------------------
-# Override classes — extend standard ERPNext DocType classes
+# Extended classes — extend standard ERPNext DocType classes
 # ---------------------------------------------------------------------------
 # HamiltonSalesInvoice adds has_admission_item(), get_admission_category(),
 # and has_comp_admission() as reusable methods on the document object.
 # The doc_event hook below receives a HamiltonSalesInvoice instance as `doc`.
 
-override_doctype_class = {
+extend_doctype_class = {
 	"Sales Invoice": "hamilton_erp.overrides.sales_invoice.HamiltonSalesInvoice",
 }
 
