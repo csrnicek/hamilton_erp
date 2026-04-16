@@ -215,3 +215,34 @@ when he is just approving routine decisions.
 ## Context Compaction Rule
 
 When compacting, always preserve: modified file list, failing test names, and Redis lock key format (`hamilton:asset_lock:{asset_name}`).
+
+## Design Spec Rules (Permanent)
+
+These rules apply to every session, every task, forever.
+
+### Rule 1 — Inbox first
+Before starting any task, read docs/inbox.md.
+If it has content, merge it into claude_memory.md and relevant docs, then clear inbox.md.
+Never skip this step even if inbox.md appears empty — always open and check it.
+
+### Rule 2 — Design spec before any frontend code
+Before writing any code for any frontend task (JS, CSS, HTML, page templates):
+- Check docs/design/ for a spec file matching the feature
+- If one exists, read it in full before writing a single line of code
+- If none exists, stop and tell Chris before proceeding
+
+### Rule 3 — Required startup reads (every session)
+Read all of these at the start of every Claude Code session, in this order:
+1. docs/claude_memory.md
+2. CLAUDE.md
+3. docs/inbox.md
+4. docs/design/asset_board_ui.md
+5. docs/decisions_log.md
+6. docs/phase1_design.md §5.6 (frontend sessions only)
+
+### Rule 4 — End of session commit
+At the end of every session, before stopping:
+- Run git status
+- If anything is uncommitted, commit and push it
+- Append a checkpoint to docs/claude_memory.md summarising: what was built, decisions made, current task status, next step
+- Never end a session with uncommitted work or an empty checkpoint
