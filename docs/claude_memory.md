@@ -688,3 +688,25 @@ Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
 - Visual QA in browser against spec
 - Merge PR #8 when visual QA passes
 - Resume Taskmaster task queue (Tasks 17–22 are the Asset Board UI tasks)
+
+## 2026-04-24 — V8 Asset Board Design Locked
+
+All asset board design decisions are now locked in `docs/decisions_log.md`. Before changing any asset board behaviour, consult that file first and follow the protocol at the bottom (Part 12) for reversing a decision.
+
+Key locks:
+- Single overtime state (no two-stage warning/overtime)
+- "Xm late" / "Xm left" wording (no +/- signs)
+- OT badge on top border of tile (not corner)
+- Status text removed from tiles
+- Tab visibility = enabled_in_config AND has_at_least_one_asset
+- OOS reasons are GLOBAL (single list for all venues, amendable in Phase 2 via DocType)
+- Occupied tiles have NO Set Out of Service button
+- Lockers have NO Dirty state
+- Countdown threshold = 60 minutes (hardcoded in V8, Phase 2 makes it venue-configurable)
+
+The mockup at `docs/design/asset_board_mockup_v7.html` is the source of truth for V8 visual design. All 59 interactive tests pass.
+
+Outstanding items for next session:
+1. Fix expanded-tile text wrap at 1.5× scale (button labels like "EXTEND STAY PHASE 2" wrap)
+2. 3-AI review of V8 mockup (ChatGPT + Grok + fresh Claude tab)
+3. Then proceed to Tasks 23-25 per existing plan

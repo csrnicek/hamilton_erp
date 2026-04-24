@@ -237,7 +237,7 @@ Read all of these at the start of every Claude Code session, in this order:
 2. CLAUDE.md
 3. docs/inbox.md
 4. docs/design/asset_board_ui.md
-5. docs/decisions_log.md
+5. docs/decisions_log.md (LOCKED asset-board design decisions — consult BEFORE changing any asset board behaviour)
 6. docs/phase1_design.md §5.6 (frontend sessions only)
 
 ### Rule 4 — End of session commit
