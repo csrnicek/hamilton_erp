@@ -689,11 +689,17 @@ Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
 - Merge PR #8 when visual QA passes
 - Resume Taskmaster task queue (Tasks 17–22 are the Asset Board UI tasks)
 
-## 2026-04-24 — V8 Asset Board Design Locked
+## 2026-04-24 — V9 Asset Board Shipped to main
 
-All asset board design decisions are now locked in `docs/decisions_log.md`. Before changing any asset board behaviour, consult that file first and follow the protocol at the bottom (Part 12) for reversing a decision.
+**V9 is live on `main`.** Squash commit `1cc9125` ("feat(asset-board): ship V9 — apply M1-M5 + S1-S6 + countdown colour reversal") merged PR #8 into `main` on 2026-04-24. **PR #8 is merged and closed.** The `feature/asset-board-ui-rebuild` remote branch was deleted as part of the squash merge.
 
-Key locks:
+**Locked source of truth:** `docs/design/asset_board_mockup_v7.html` is now the V9 source-of-truth mockup. All 68 interactive tests pass. Do not edit it without first checking `docs/decisions_log.md` and following the Part 12 protocol for reversing a locked decision.
+
+**V9 integration plan archived:** `docs/design/archive/v9_integration_plan.md` (moved from `docs/design/` via `git mv` in commit `9eb5ff9`). Treat the archived plan as historical — V9 is shipped, the plan is no longer a live spec.
+
+**decisions_log.md Part 3.1 amended on 2026-04-24:** countdown text colour reversed from amber to red (`#f87171`) for the time-status row on overtime tiles. The original amber rule was overturned same-day after the v9_color_test.html A/B prototype; the amendment note is recorded in Part 3.1 of `docs/decisions_log.md`.
+
+Locked design rules (consult `docs/decisions_log.md` before changing any of these):
 - Single overtime state (no two-stage warning/overtime)
 - "Xm late" / "Xm left" wording (no +/- signs)
 - OT badge on top border of tile (not corner)
@@ -702,11 +708,10 @@ Key locks:
 - OOS reasons are GLOBAL (single list for all venues, amendable in Phase 2 via DocType)
 - Occupied tiles have NO Set Out of Service button
 - Lockers have NO Dirty state
-- Countdown threshold = 60 minutes (hardcoded in V8, Phase 2 makes it venue-configurable)
+- Countdown threshold = 60 minutes (hardcoded in V9; Phase 2 makes it venue-configurable)
+- Countdown text colour = red `#f87171` (amended 2026-04-24, was amber)
+- "Set Out of Service" button label = "Set OOS"; sub-button = "Rounds" (M1)
+- Time-status text = 12px bold (M3)
+- "Needs Cleaning" section header renamed to "Dirty" (S1)
 
-The mockup at `docs/design/asset_board_mockup_v7.html` is the source of truth for V8 visual design. All 59 interactive tests pass.
-
-Outstanding items for next session:
-1. Fix expanded-tile text wrap at 1.5× scale (button labels like "EXTEND STAY PHASE 2" wrap)
-2. 3-AI review of V8 mockup (ChatGPT + Grok + fresh Claude tab)
-3. Then proceed to Tasks 23-25 per existing plan
+Next: proceed to Tasks 23–25 per existing Phase 1 plan.
