@@ -11,13 +11,40 @@
 
 ---
 
+## Status Metadata
+
+- Audit date: 2026-04-25
+- Repo: csrnicek/hamilton_erp
+- Branch: main
+- Commit reviewed: 30c161b
+- Frappe version reviewed: TODO — confirm in `pyproject.toml` and Frappe Cloud dashboard
+- ERPNext version reviewed: TODO — confirm in `pyproject.toml` and Frappe Cloud dashboard
+- Local site used: TODO — likely `hamilton-unit-test.localhost`, but confirm
+- Frappe Cloud site directly checked: no
+- Reviewer: Chris (project owner) + claude.ai (production audit synthesis) + Claude Code (handoff audit + cleanup edits)
+
+This block must be updated on any future revision of this document.
+
+---
+
 ## Legend
 
 - 🔴 **Hard to fix after go-live or after handoff** — must be done now, before it's too late.
 - 💰 **Will cost billable hours if missing or messy** — devs charge to clean these up.
-- ✅ **Concrete action** — paste-able command or file change.
+- `[ ]` **Unchecked checkbox** — a to-do item not yet completed. Walk top-to-bottom and check off as you finish.
+- ✅ **Verified done** — already true in the current repo (April 2026 snapshot). No action needed.
 - 🟡 **Tier 2** — strongly recommended; missing this causes incidents within first month.
-- 🟢 **Already done well** — verified in current repo state.
+- 🟢 **Already done well** — verified in current repo state (used in Section 2 snapshot table only).
+
+---
+
+🔴 **DocType naming warning:** This document references DocTypes by names like `Bathhouse Asset`, `Venue Asset`, `Bathhouse Shift`, `Shift Record`, `Cash Drop`, `Bathhouse Receivable Log`, etc. Some of these may be older project names, aliases, or current repo names — they are NOT all guaranteed to match the actual DocTypes on disk. Before executing any task referencing a DocType, verify the exact name from the repo:
+
+```bash
+find hamilton_erp/hamilton_erp/doctype -maxdepth 2 -name "*.json" | sort
+```
+
+A future task at handoff is to generate a definitive DocType inventory in `docs/data_model.md`.
 
 ---
 
@@ -25,16 +52,16 @@
 
 Before Task 25 closes, these are non-negotiable. If items 1–8 aren't done, the dev's first invoice will include 5–15 hours of cleanup before they can start real work.
 
-1. ✅ **Every custom field, property setter, workflow, role, and notification you created in the UI is exported as a fixture and committed to Git.** (See §4.)
-2. ✅ **A working GitHub Actions CI runs your 270+ tests automatically on every push.** (See §7.) — Single highest-leverage 90 minutes in the entire pre-handoff list.
-3. ✅ **Both Audit Trail and Document Versioning ("Track Changes") are enabled on every financial DocType** (Sales Invoice, Bathhouse Receivable Log, Bathhouse Shift, Venue Asset, Venue Session, Cash Drop, Cash Reconciliation, Shift Record, Asset Status Log). (See §9.) — 🔴 Permanent damage if delayed; every day = lost audit history that cannot be recovered.
-4. ✅ **System Manager role is restricted to your account only. Cancel and Amend rights are locked to manager roles only.** (See §8.)
-5. ✅ **`hooks.py` is audited:** no wildcards (`"*"`) in `doc_events`, every handler wrapped in `try/except`, `override_doctype_class` → `extend_doctype_class` correction applied. (See §6.)
-6. ✅ **Every manual setting that has to exist on a fresh site** (PIN policies, default values, custom workflows, notification config) **is in a patch or `after_install` hook**, not just done by hand. (See §5.)
-7. ✅ **A working `init.sh` / `bench-bootstrap.sh` exists at the repo root** that a new dev can run on a clean laptop and have the test site up in <30 minutes. (See §13.)
-8. ✅ **A `docs/HANDOFF.md` exists** explaining decisions, gotchas, what's not done, and how to deploy. (See §14.)
-9. ✅ **Frappe Cloud production hosting is set up and a backup-restore drill has been done end-to-end.** (See §11.) — 🔴 First restore attempt always finds something missing (encryption key, version mismatch, fixture conflict). Must be rehearsed before go-live, not after.
-10. ✅ **A `.env.example` and a list of every secret/API key the system uses is documented** (and none are committed to Git).
+1. **[ ]** **Every custom field, property setter, workflow, role, and notification you created in the UI is exported as a fixture and committed to Git.** (See §4.)
+2. **[ ]** **A working GitHub Actions CI runs your test suite automatically on every push** (roughly 306+ tests reported locally; exact count to be confirmed by CI). (See §7.) — Single highest-leverage 90 minutes in the entire pre-handoff list.
+3. **[ ]** **Both Audit Trail and Document Versioning ("Track Changes") are enabled on every financial DocType** (Sales Invoice, Bathhouse Receivable Log, Bathhouse Shift, Venue Asset, Venue Session, Cash Drop, Cash Reconciliation, Shift Record, Asset Status Log). (See §9.) — 🔴 Permanent damage if delayed; every day = lost audit history that cannot be recovered.
+4. **[ ]** **System Manager role is restricted to your account only. Cancel and Amend rights are locked to manager roles only.** (See §8.)
+5. **[ ]** **`hooks.py` is audited:** no wildcards (`"*"`) in `doc_events`, overbroad `try/except` patterns reviewed (see §6), and the v16-safe `extend_doctype_class` pattern is in use (verify with grep). (See §6.)
+6. **[ ]** **Every manual setting that has to exist on a fresh site** (PIN policies, default values, custom workflows, notification config) **is in a patch or `after_install` hook**, not just done by hand. (See §5.)
+7. **[ ]** **A working `init.sh` / `bench-bootstrap.sh` exists at the repo root** that a new dev can run on a clean laptop and have the test site up in <30 minutes. (See §13.)
+8. **[ ]** **A `docs/HANDOFF.md` exists** explaining decisions, gotchas, what's not done, and how to deploy. (See §14.)
+9. **[ ]** **Frappe Cloud production hosting is set up and a backup-restore drill has been done end-to-end.** (See §11.) — 🔴 First restore attempt always finds something missing (encryption key, version mismatch, fixture conflict). Must be rehearsed before go-live, not after.
+10. **[ ]** **A `.env.example` and a list of every secret/API key the system uses is documented** (and none are committed to Git).
 
 ---
 
@@ -109,7 +136,13 @@ extend_doctype_class = {
 }
 ```
 
-🔴 Memory notes you have/had `override_doctype_class` in `hooks.py:69` and need to switch to `extend_doctype_class`. **This is now in place** per current repo state, but verify before handoff. The difference: `override_doctype_class` *replaces* the ERPNext class entirely (you lose every future ERPNext bug fix to that DocType). `extend_doctype_class` *inherits* from it (you keep ERPNext's logic and add yours on top). This is one of the most common mistakes in custom apps and a v16 best practice.
+🔴 The v16-safe pattern is `extend_doctype_class`, which inherits from the ERPNext class (you keep ERPNext's logic and add yours on top). The legacy pattern `override_doctype_class` *replaces* the ERPNext class entirely (you lose every future ERPNext bug fix). Verify the current `hooks.py` does not use `override_doctype_class`:
+
+```bash
+grep -rn 'override_doctype_class\|extend_doctype_class' hamilton_erp/hooks.py
+```
+
+If `override_doctype_class` appears, replace it with `extend_doctype_class` unless there is a documented reason not to.
 
 ### Upgrade-safety gotchas
 
@@ -121,15 +154,26 @@ extend_doctype_class = {
 
 Frappe v16 changed several internals. Confirm before handoff:
 
-- ✅ Replace `frappe.flags.in_test` → `frappe.in_test` (36 occurrences across 5 files).
-- ✅ Audit any `frappe.db.get_value(...) == "1"` or `== "0"` — v16 returns real booleans/integers, not strings. String comparisons silently break.
-- ✅ Drop dependencies on the legacy PDF engine — v16 uses Chrome-based PDF rendering. Retest custom Print Formats.
+- **[ ]** Replace `frappe.flags.in_test` → `frappe.in_test` (36 occurrences across 5 files).
+- **[ ]** Audit any `frappe.db.get_value(...) == "1"` or `== "0"` — v16 returns real booleans/integers, not strings. String comparisons silently break.
+- **[ ]** Drop dependencies on the legacy PDF engine — v16 uses Chrome-based PDF rendering. Retest custom Print Formats.
 
 ### Action items
 
 - [ ] **Tier 2** Add a docstring at the top of `hooks.py` summarising what each hook block does and why (non-obvious decisions only).
 - [ ] **Tier 2** Add an `app_compatibility.md` to `docs/` listing the exact Frappe minor + ERPNext minor + MariaDB version that Hamilton is verified against. Update on every Frappe Cloud upgrade.
 - [ ] **Tier 3** Add a `before_uninstall` hook that prints a warning and bails out unless `--force` is passed, to prevent accidental wipes during dev.
+
+### Items requiring Frappe v16 verification
+
+This document makes several v16-specific claims. Verify each before treating it as a rule. Frappe and ERPNext change quickly; one false instruction wastes hours.
+
+- [ ] Confirm correct test flag usage: `frappe.in_test` vs `frappe.flags.in_test`.
+- [ ] Confirm boolean/int return behavior for fields currently compared to `"1"` / `"0"`.
+- [ ] Confirm field masking setup steps in the current Frappe v16 UI.
+- [ ] Confirm Frappe Cloud version pinning options in the actual dashboard.
+- [ ] Confirm the shared Frappe GitHub Actions workflow works for this app.
+- [ ] Confirm whether `cron_long` is available and appropriate on the selected Frappe Cloud plan.
 
 ---
 
@@ -173,7 +217,7 @@ The `%-hamilton_%` filter convention is **excellent** — it prevents `bench exp
 
 - 🔴 **Filter your fixtures.** Without filters, `bench export-fixtures` exports `Custom Field` rows that ERPNext patches added (e.g. `Project-github_sync_id`). When your fixture is re-imported on another site, it tries to add ERPNext's own custom fields and may conflict.
 - 💰 **Re-run `export-fixtures` every time you change something via the UI.** Then commit the JSON. If you skip this, the dev will discover the running site has 30 things that aren't in Git.
-- ✅ Add a pre-commit reminder: a one-line note at the top of `decisions_log.md` saying "if you customized via UI today, run `bench export-fixtures` before committing."
+- **[ ]** Add a pre-commit reminder: a one-line note at the top of `decisions_log.md` saying "if you customized via UI today, run `bench export-fixtures` before committing."
 
 ### Action items
 
@@ -271,7 +315,7 @@ Two patches, both post-sync. Naming is good (descriptive, versioned). The recent
 
 - 🔴 **Patches must be idempotent.** Always check before you write. If your patch sets a default and runs again on a site that's already had a manager change that default, you'll wipe their work. Pattern: `if not settings.staff_pin_length:` — never blindly assign.
 - 💰 **No reverse patches.** Frappe doesn't support rolling back. If your patch corrupts data, you restore from backup. Always test on a fresh local site before pushing.
-- ✅ For very common one-liners, write them inline in `patches.txt`: `execute:frappe.delete_doc("Report", "Old Report Name", ignore_missing=True)`
+- **Tip:** For very common one-liners, write them inline in `patches.txt`: `execute:frappe.delete_doc("Report", "Old Report Name", ignore_missing=True)`
 - ⚠️ For large data migrations (>10,000 rows), batch the work or you'll hit `TooManyWritesError`. Process in chunks of 500–1000.
 
 ### Action items
@@ -344,6 +388,8 @@ def broadcast_asset_change(doc, method=None):
         # Do NOT re-raise — let the document save succeed
 ```
 
+**Important nuance — when NOT to wrap in `try/except`:** non-critical side-effect hooks (notifications, logging, audit trail writes) should catch and log errors so the main transaction continues. Critical hooks — validation, financial integrity, permission checks, lifecycle state enforcement, asset assignment rules — should fail loudly and block the transaction. Wrapping a validation hook in `try/except` would silently allow bad data to be saved. Rule of thumb: if the hook is sending a notification, do not let it break the sale. If the hook is protecting money, assets, permissions, or state, let it block the action.
+
 ### Performance traps to avoid (none of which Hamilton has — keep it that way)
 
 - **`doc_events = {"*": {...}}`** — wildcard subscriptions fire on every save of every doctype. Never use.
@@ -395,7 +441,7 @@ def on_submit(doc, method=None):
           print(f"FAIL {label}: {path}  ({e})")
   PY
   ```
-- [ ] **Tier 1** Apply the `override_doctype_class` → `extend_doctype_class` correction at `hooks.py:69` if not yet done. Single line change + verify no logic depends on full override behavior.
+- [ ] **Tier 1** Run the grep above and confirm `override_doctype_class` is not present. If present, replace with `extend_doctype_class` and run the test suite.
 - [ ] **Tier 2** Add `boot_session = "hamilton_erp.boot.boot_session"` to push Hamilton-specific config (feature flags, asset board endpoint) into `frappe.boot` on login. Saves one API call per page load.
 - [ ] **Tier 2** Document which doctypes Hamilton's `on_sales_invoice_submit` *can* receive. Currently filters by `has_admission_item()` — but a future contributor may not know retail-only sales pass through silently.
 - [ ] **Tier 3** Consider adding `validate_modified` to lock concurrent edits on Venue Asset more aggressively. Currently the `version` field + Redis lock handle this; defense-in-depth doesn't hurt.
@@ -409,14 +455,14 @@ def on_submit(doc, method=None):
 `.github/workflows/` contains exactly one file: `claude-review.yml` (PR review bot). **There is no test-runner workflow.** This means:
 
 - A push to main can break the test suite without being caught until someone runs tests locally.
-- A PR can be merged with no automated verification that 306+ tests still pass.
+- A PR can be merged with no automated verification of the test suite. Roughly 306+ tests have been reported passing locally; the exact current count should be confirmed by CI.
 - The first time anyone learns the suite is red is when Frappe Cloud auto-deploys the broken commit.
 
 **This is the highest-priority production readiness gap in the entire audit.**
 
 ### Why this matters more than it sounds
 
-Without CI, your "270+ passing tests" is a *claim*. With CI, every push runs them automatically and posts a green ✅ or red ❌ on the PR. The dev's first question on Day 1 will be "how do I run the tests?" — if CI is set up, the answer is "you don't, the bot does." If not, you'll spend 30 minutes walking them through your local bench setup. 💰
+Without CI, your test suite is a *claim* (roughly 306+ tests have been reported passing locally; the exact current count should be confirmed by CI). With CI, every push runs them automatically and posts a green ✅ or red ❌ on the PR. The dev's first question on Day 1 will be "how do I run the tests?" — if CI is set up, the answer is "you don't, the bot does." If not, you'll spend 30 minutes walking them through your local bench setup. 💰
 
 Frappe v16's `bench new-app` command auto-generates a CI workflow file. If your bench was older at app creation, you don't have it; copy a template below.
 
@@ -572,7 +618,7 @@ Hamilton has three roles and zero field-level permissions in use. That's fine fo
 - `Hamilton Operator`, `Hamilton Manager`, `Hamilton Admin` roles created idempotently in `after_install`.
 - All 9 whitelisted API endpoints call `frappe.has_permission(..., throw=True)` before doing work — gold standard.
 - `_block_pos_closing_for_operator()` removes the standard POS Closing Entry permission for operators, enforcing blind cash control (DEC-005).
-- All API endpoints declare `methods=["GET"]` or `methods=["POST"]` explicitly — closes the HTTP-method CSRF gap (CVE-2026-41317).
+- All API endpoints declare `methods=["GET"]` or `methods=["POST"]` explicitly — closes the entire HTTP-method CSRF gap. Whitelisted endpoints should declare explicit HTTP methods, and state-changing endpoints should reject unauthorized or CSRF-invalid requests.
 
 ### Pre-handoff permissions checklist (🔴 — much harder to fix after go-live)
 
@@ -758,9 +804,11 @@ def detect_stale_assets():
             # keep going to next asset
 ```
 
+**Scheduler error handling rule:** if one bad record should not stop the whole job, catch and log per record and continue (the pattern shown above). If the whole job is in an unsafe or unknown state, log the error and surface the failure (re-raise after logging). For `check_overtime_sessions` specifically: prefer logging job start and end, processing sessions individually, logging per-session failures where safe, and surfacing a final summary error if any sessions failed — so Error Log and alerts still show the job was unhealthy.
+
 - 🔴 **Cron times are in the server's timezone, not yours.** Frappe Cloud servers run UTC by default. 3 AM EST = 7 AM UTC = `0 7 * * *`. Test it.
-- ✅ **Verify the scheduler is enabled per site.** Run `bench --site hamilton-unit-test.localhost scheduler enable`. On Frappe Cloud, enabled by default but check the site dashboard.
-- ✅ **Test scheduler functions manually before relying on the cron:** `bench --site hamilton-unit-test.localhost execute hamilton_erp.tasks.daily.detect_stale_assets`. If that doesn't work, the cron won't either.
+- **[ ]** **Verify the scheduler is enabled per site.** Run `bench --site hamilton-unit-test.localhost scheduler enable`. On Frappe Cloud, enabled by default but check the site dashboard.
+- **[ ]** **Test scheduler functions manually before relying on the cron:** `bench --site hamilton-unit-test.localhost execute hamilton_erp.tasks.daily.detect_stale_assets`. If that doesn't work, the cron won't either.
 
 ### The scheduler heartbeat pattern 💰
 
@@ -818,6 +866,7 @@ Frappe Cloud takes daily backups by default. **Daily is not enough for a venue t
 
 Already noted in `claude_memory.md` (Frappe Cloud Version Pinning). Repeating for completeness:
 
+- [ ] **Tier 1** Confirm whether Frappe Cloud auto-deploys from `main` to production on every push, or whether deployment requires manual approval. Document the answer in `docs/HANDOFF.md`. **This matters because the urgency of CI is much higher if pushes auto-deploy.**
 - [ ] **Tier 1** Before go-live: pin hamilton-erp.v.frappe.cloud to a specific stable v16 minor (e.g., v16.14.0). Disable auto-update to latest. Document the pinned version in `docs/app_compatibility.md`. **Reason:** v16.14.0 (released 2026-04-14) removed forced six-decimal rounding on valuation rate fields; future minor versions may make similar invariant-breaking changes that need to be deliberately tested before adoption.
 
 ### Site config & secrets
@@ -994,30 +1043,30 @@ Every item below should exist in the repo at handoff:
 
 #### Top-level
 
-- ✅ `README.md` — what the app does, who it's for, prereqs, quick-start link.
-- ✅ `init.sh` — see §13.
-- ✅ `CLAUDE.md` — AI-assistant onboarding file.
-- ✅ `.env.example` — every env var, with placeholder values, no real secrets.
-- ✅ `.github/workflows/tests.yml` — CI passing.
+- **[ ]** `README.md` — what the app does, who it's for, prereqs, quick-start link. *(Currently a 2-line placeholder.)*
+- **[ ]** `init.sh` — see §13. *(Does not exist yet.)*
+- **[ ]** `CLAUDE.md` — AI-assistant onboarding file. *(Exists; verify it's under 200 lines and lean per §14.)*
+- **[ ]** `.env.example` — every env var, with placeholder values, no real secrets.
+- **[ ]** `.github/workflows/tests.yml` — CI passing. *(Currently only `claude-review.yml` exists; see §7.)*
 
 #### `docs/` folder
 
-- ✅ `HANDOFF.md` — see template below.
-- ✅ `decisions_log.md` — every architectural decision and why. (You already have this — verify current.)
-- ✅ `lessons_learned.md` — every dead-end you hit and how you got out.
-- ✅ `venue_rollout_playbook.md` — step-by-step "how to install on a new venue's site."
-- ✅ `dc_sync_notes.md` — preserve race-condition lock system context.
-- ✅ `data_model.md` — diagram or list of every custom DocType, its fields, its relationships. Your dev's first question.
-- ✅ `permissions_matrix.md` — table of Role × DocType × Permissions. Their second question.
-- ✅ `phase_2_wishlist.md` — explicit list of what's *not* done, with priority.
-- ✅ `troubleshooting.md` — known issues + fixes (e.g., "if scheduler stops, run X").
-- ✅ `app_compatibility.md` — verified Frappe/ERPNext/MariaDB versions.
-- ✅ `setup.md` — paired with `init.sh`.
-- ✅ `operations/disaster_recovery.md` — backup/restore drill procedure.
-- ✅ `operations/runbook.md` — manual bench commands the operator might need.
-- ✅ `operations/audit.md` — where to look for "who did what."
-- ✅ `operations/secrets.md` — where each secret lives (without values).
-- ✅ `security/permission_matrix.md` — the matrix referenced above.
+- **[ ]** `HANDOFF.md` — see template below.
+- ✅ `decisions_log.md` — every architectural decision and why. *(Exists; verify current as of last commit.)*
+- ✅ `lessons_learned.md` — every dead-end you hit and how you got out. *(Exists.)*
+- ✅ `venue_rollout_playbook.md` — step-by-step "how to install on a new venue's site." *(Exists.)*
+- **[ ]** `dc_sync_notes.md` — preserve race-condition lock system context.
+- **[ ]** `data_model.md` — diagram or list of every custom DocType, its fields, its relationships. Your dev's first question.
+- **[ ]** `permissions_matrix.md` — table of Role × DocType × Permissions. Their second question.
+- **[ ]** `phase_2_wishlist.md` — explicit list of what's *not* done, with priority.
+- ✅ `troubleshooting.md` — known issues + fixes (e.g., "if scheduler stops, run X"). *(Exists.)*
+- **[ ]** `app_compatibility.md` — verified Frappe/ERPNext/MariaDB versions.
+- **[ ]** `setup.md` — paired with `init.sh`.
+- **[ ]** `operations/disaster_recovery.md` — backup/restore drill procedure.
+- **[ ]** `operations/runbook.md` — manual bench commands the operator might need.
+- **[ ]** `operations/audit.md` — where to look for "who did what."
+- **[ ]** `operations/secrets.md` — where each secret lives (without values).
+- **[ ]** `security/permission_matrix.md` — the matrix referenced above.
 
 ### `docs/HANDOFF.md` template
 
@@ -1147,7 +1196,7 @@ Walk top-to-bottom. Items marked 🔴 will cost real money or permanent damage i
 | T1.3 | Verify `bench export-fixtures` produces zero diff against committed JSON | §4 | 30 min |
 | T1.4 | Verify both patches are idempotent (run twice, expect no-op) | §5 | 30 min |
 | T1.5 | Audit every function path in `hooks.py` resolves to a real function | §6 | 15 min |
-| T1.6 | Apply `override_doctype_class` → `extend_doctype_class` correction at `hooks.py:69` | §3, §6 | 15 min |
+| T1.6 | Run `grep -rn 'override_doctype_class\|extend_doctype_class' hamilton_erp/hooks.py`. Confirm only `extend_doctype_class` appears. | §3, §6 | 15 min |
 | T1.7 | Add justification comments above every `ignore_permissions=True` in `lifecycle.py` | §12 | 30 min |
 | T1.8 | Enable Track Changes on Venue Asset, Venue Session, Cash Drop, Cash Reconciliation, Shift Record, Asset Status Log, Bathhouse Receivable Log, Bathhouse Settings | §9 | 20 min |
 | T1.9 | Enable Audit Trail (System Settings) for Hamilton roles | §9 | 10 min |
@@ -1157,13 +1206,14 @@ Walk top-to-bottom. Items marked 🔴 will cost real money or permanent damage i
 | T1.13 | Audit `site_config.json` for committed secrets (history scan) | §11 | 15 min |
 | T1.14 | Configure Error Log retention (90 days) and email alerting | §11 | 20 min |
 | T1.15 | Add scheduler heartbeat job + dead-scheduler alert | §10 | 60 min |
-| T1.16 | Wrap `check_overtime_sessions` in try/except with `frappe.log_error()` | §10 | 15 min |
+| T1.16 | Wrap `check_overtime_sessions` to log start/end, process sessions individually with per-session try/except, and surface a summary failure if any sessions failed. | §10 | 15 min |
 | T1.17 | Write a real `README.md` (replaces 2-line placeholder) with CI badge | §2, §7 | 30 min |
 | T1.18 | Replace `frappe.flags.in_test` → `frappe.in_test` (36 occurrences, 5 files) | §3 | 30 min |
 | T1.19 | Audit `== "1"` / `== "0"` string comparisons for v16 type changes | §3 | 30 min |
 | T1.20 | Verify rate limiter exists for PIN-based staff identity | §12 | 15 min |
 | T1.21 | Document `check_overtime_sessions` Phase 2 stub with TODO + link to phase_2_wishlist | §10 | 10 min |
 | T1.22 | Audit field permlevels for sensitive fields (cost, financial, member PII) | §8 | 60 min |
+| T1.23 | Confirm Frappe Cloud deploy trigger (auto from main vs. manual). Document in HANDOFF.md. | §11 | 15 min |
 
 ### Tier 2 — Strongly recommended (~8 hours of work)
 
@@ -1430,7 +1480,6 @@ Honest notes on where this audit is thinner than I'd like:
 
 ### Security references
 - [SQL Injection, Insufficient ACLs in Frappe Framework — Altion Security](https://www.altion.dk/posts/frappe-security-vulnerabilities)
-- [CVE-2026-41317 — Frappe Press CSRF on API secret generation](https://cvefeed.io/vuln/detail/CVE-2026-41317)
 - [Frappe Framework Vulnerabilities — CSIRT.SK](https://csirt.sk/frappe-framework-vulnerabilities.html)
 
 ### Product updates referenced
@@ -1452,6 +1501,21 @@ Items appearing in both documents are not duplicate work — they are doubly-val
 - `extend_doctype_class` correction (both audits flag it)
 
 When two independent audits agree, the priority is real.
+
+---
+
+## Deferred to Task 25 — Working Documents To Build
+
+This document is a research/risk archive, not a project-management binder. The following working documents should be built during Task 25, drawing on the deferred findings preserved in `docs/inbox/archive/audit_review_findings_2026-04-25.md`:
+
+- `docs/production/TIER1_GO_LIVE_CHECKLIST.md` — launch blockers with owners, evidence, due dates
+- `docs/HANDOFF.md` — developer onboarding, decisions, setup, deploy, gotchas, environment definitions, emergency contacts
+- `docs/operations/RUNBOOK.md` — outage response, restore drills, scheduler failures, manual fallback, post-deploy smoke tests, incident report templates, staff training
+- `docs/operations/DISASTER_RECOVERY.md` — RTO/RPO, restore procedure, backup encryption key chain of custody
+- `docs/security/permission_matrix.md` — Role × DocType × Permissions matrix, cash control specifics, user account rules
+- `docs/security/privacy.md` — PII handling, data retention, ID scan policy, privacy incident response
+
+Keep the merged audit as a research/risk archive, not a project-management binder.
 
 ---
 
