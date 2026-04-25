@@ -1,6 +1,6 @@
 # V9 Integration Plan — Asset Board
 
-**Status:** DRAFT. Synthesis of three V8 reviews (Claude, Grok, Reviewer 3). Decisions marked OPEN require Chris's answer before handoff to Claude Code.
+**Status:** READY FOR IMPLEMENTATION. Synthesis of three V8 reviews (Claude, Grok, Reviewer 3). All four open questions answered by Chris on 2026-04-24. Ready for Claude Code handoff.
 
 **Created:** 2026-04-24
 **Supersedes:** nothing yet — V8 remains the source-of-truth mockup (`docs/design/asset_board_mockup_v7.html` path, currently `asset_board_FINAL_v2.html`) until V9 is built.
@@ -14,7 +14,7 @@ This is the brief Claude Code will work from to build V9. It does three things:
 
 1. Lists every V9 change ranked by confidence × impact.
 2. Documents what was rejected from the reviews and why, so future sessions don't re-open the question.
-3. Records open decisions Chris needs to make before implementation starts.
+3. Records the four decisions Chris locked on 2026-04-24 to close out the planning phase.
 
 Once V9 is built and passes tests, this document's entries get folded into `decisions_log.md` as new locked decisions, and this file is archived or deleted.
 
@@ -66,11 +66,11 @@ These are measured facts, not opinions. 1-of-3 reflects only that the other two 
 - "Set Out of Service" → "Set OOS"
 - "Discovery on Rounds" → "Rounds"
 - "Extend Stay" → hidden entirely (see M2)
-Rationale: 3-of-3 reviewer agreement, pre-acknowledged in `decisions_log.md` Part 11.1.
+Rationale: 3-of-3 reviewer agreement, pre-acknowledged in `decisions_log.md` Part 11.1. "Set OOS" wording confirmed by Chris (D2 below).
 Conflicts: none. Part 4.6 locks the *concept* of Key Return vs Discovery on Rounds, not the wording.
 
 **M2. Hide Phase-2 Extend Stay button from Occupied overlay.**
-Rationale: Renders as `Extend StayPhase 2` with no space (template bug), adds vertical height to overlay for no current functionality, trains staff that buttons "don't work yet".
+Rationale: Renders as `Extend StayPhase 2` with no space (template bug), adds vertical height to overlay for no current functionality, trains staff that buttons "don't work yet". Confirmed by Chris (D3 below).
 Side effect: eliminates the render bug automatically.
 Conflicts: none. Part 4.3 lists Extend Stay as a Phase-2 button but doesn't require Phase-1 visibility.
 
@@ -88,9 +88,9 @@ Conflicts: none.
 
 ### 4.2 Should fix in V9
 
-**S1. Standardise Dirty-state terminology across mockup, footer, and `decisions_log.md`.**
-Rationale: Grok significant #1 + Claude minor. Mockup section header says "NEEDS CLEANING", footer label says "Dirty", `decisions_log.md` uses "Dirty" in Part 4 examples and "Needs Cleaning" in Part 6.2 implicit context. Pick one term and propagate.
-**Chris to decide (OPEN Q1):** "NEEDS CLEANING" or "DIRTY"?
+**S1. Standardise Dirty-state terminology to "DIRTY" across mockup, footer, and `decisions_log.md`.**
+Rationale: Grok significant #1 + Claude minor. Mockup section header currently says "NEEDS CLEANING", footer label says "Dirty", `decisions_log.md` uses "Dirty" in Part 4 examples. **Chris's decision (2026-04-24):** standardise on "DIRTY" — visual parity with other single-concept headers (AVAILABLE / DIRTY / OCCUPIED / OUT OF SERVICE), matches existing footer language, matches existing `decisions_log.md` Part 4 language.
+Implementation: change mockup section header text from "Needs Cleaning" to "Dirty" (will render as "DIRTY" via existing CSS `text-transform: uppercase`). No footer change needed (already "Dirty"). Update any "Needs Cleaning" references in `decisions_log.md` to "Dirty".
 Conflicts: none — section header wording was never locked.
 
 **S2. Add audit-preview line to Set OOS modal.**
@@ -115,22 +115,23 @@ Conflicts: this IS a decisions_log correction — flag it in the V9 commit messa
 Rationale: Reviewer 3. Touch keyboards are error-prone; a quick reset is cheap.
 Conflicts: none.
 
-### 4.3 Decide before V9
+### 4.3 Decisions locked by Chris on 2026-04-24
 
-**D1 (OPEN Q2). Footer — keep per-tab counts or swap to facility-wide metric?**
-- Reviewer 3: footer counts duplicate section headers; suggests replacing with Total Occupancy % or similar facility-wide metric for manager-level awareness.
-- Claude (original position): keep counts — they're always visible regardless of scroll position.
-- Claude (revised): Reviewer 3 has a point. Section headers rarely scroll out of view at Hamilton's scale, so the duplication is real.
+**D1. Footer KEEPS per-tab counts (not swapped to facility-wide metric).**
+- Reviewer 3 argued: footer counts duplicate section headers; suggested replacing with Total Occupancy % or similar facility-wide metric for manager-level awareness.
+- Decision rationale: Front-desk staff need *this tab right now* — "how many rooms do I have available" — not facility-wide occupancy. That's a manager metric served by other reports. Footer real estate faces the person doing the work; should answer the question they'll actually ask. The "duplicates section headers" critique has a real counter: on Lockers tab with 25 Available tiles, the AVAILABLE header and tiles can occupy most of the screen, pushing OCCUPIED and OOS counts down. Footer gives all four counts in one place at all times, glanceable from across the desk.
 - Grok: graded Part 6 PASS. No opinion on redesign.
-**Chris to decide.**
+- Claude: re-read changed position back to keep — Reviewer 3 is solving a manager's problem, not an attendant's.
+- **Outcome:** no footer change in V9. R5 below now formally rejects this proposal.
 
-**D2 (OPEN Q3). "Set OOS" wording acceptable?**
-"Set Out of Service" → "Set OOS" is the proposed M1 shortening. Is "OOS" acceptable terminology on a button staff see every shift, or does the board need to say "Set Out of Service" for formality, training, or compliance reasons? If not OK, alternative could be "Take Offline" or similar.
-**Chris to decide.**
+**D2. Button wording: "Set OOS" (shortened).**
+- Decision rationale: Staff already say "OOS" in conversation. The term is already used in the Watch tab, the section header ("OUT OF SERVICE"), the day counter context, and `decisions_log.md`. Shortening fixes the wrap problem in M1 without widening the overlay. Alternatives ("Take Offline") drift terminology away from established hospitality language.
+- **Outcome:** M1 implementation uses "Set OOS" as the button label.
 
-**D3 (OPEN Q4). Extend Stay handling — hidden or plain-text placeholder?**
-M2 proposes hiding entirely. Alternative: render as plain text ("Extend Stay — coming in Phase 2") below the real buttons for discoverability.
-**Chris to decide.**
+**D3. Phase-2 Extend Stay button HIDDEN ENTIRELY in V9.**
+- Decision rationale: Disabled "Phase 2" buttons train staff that some buttons don't work, eroding interface trust. Wastes vertical pixels in cramped overlay. Eliminates the `Extend StayPhase 2` render bug as a side effect. When Phase 2 ships, the button will be added fresh as a working feature with no negative training history.
+- Plain-text placeholder option ("Extend Stay — coming in Phase 2") was considered and rejected because it consumes more vertical pixels than the disabled button does.
+- **Outcome:** M2 implementation removes the Extend Stay button entirely from the Occupied expanded tile. To be reintroduced when Phase 2 ships.
 
 ### 4.4 Rejected from reviews — do not adopt
 
@@ -145,6 +146,9 @@ Reason: Mechanically wrong. Overlay is content-sized (min-width 130px + flex con
 
 **R4. Dirty amber vs countdown amber visual collision concern (Claude only, last round).**
 Reason: On re-inspection via screenshot, the full-amber Dirty tile and the red-tile-with-amber-text Countdown are sufficiently distinct. Monitor in UAT.
+
+**R5. Replace footer per-tab counts with facility-wide metric (Reviewer 3 only).**
+Reason: Decision D1 above. Footer faces the attendant; per-tab counts answer the attendant's actual question. Facility-wide metrics are a manager concern and live in other reports.
 
 ### 4.5 Deferred — out of V9 scope
 
@@ -172,9 +176,11 @@ Recommended order when Claude Code builds V9:
 
 ---
 
-## 6. Open questions summary (for Chris)
+## 6. Decisions locked by Chris on 2026-04-24
 
-- **Q1.** "NEEDS CLEANING" or "DIRTY" as the canonical term? *(Claude recommends: "NEEDS CLEANING" — action-oriented, warmer.)*
-- **Q2.** Footer keeps per-tab counts, or swaps to facility-wide metric? *(No recommendation — fair argument both ways. Chris's call.)*
-- **Q3.** "Set OOS" acceptable button text, or use a different contraction? *(Claude recommends: "Set OOS" — staff will say it anyway.)*
-- **Q4.** Extend Stay: hide entirely, or plain-text placeholder under buttons? *(Claude recommends: hide entirely — reintroduce as a live button when Phase 2 ships.)*
+All four open questions answered. Plan is ready for Claude Code handoff.
+
+- **Q1 → DIRTY** (not "Needs Cleaning"). Visual parity with other single-concept headers; matches existing footer and `decisions_log.md` Part 4 language. Implements as S1.
+- **Q2 → Keep per-tab counts** in footer (no facility-wide metric swap). Footer faces the attendant doing the work; their question is "how many available right now," not "what's facility occupancy." Captured as R5 (rejected proposal).
+- **Q3 → "Set OOS"** (shortened button label). Matches conversational staff usage; fixes wrap problem in M1 without widening overlay. Implements as M1.
+- **Q4 → Hide Extend Stay entirely** in V9. Reintroduce as a live working button when Phase 2 ships. Implements as M2.
