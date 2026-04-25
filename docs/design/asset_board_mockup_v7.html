@@ -281,7 +281,10 @@
     letter-spacing: 0.3px;
   }
   .tile-time {
-    font-size: 10px;
+    /* V9 M3: bumped 10→12px for legibility per Grok review (50+ staff target).
+       Tile min-height stays 58px; with 17px code + 12px time + paddings = ~37px,
+       well under the 58px floor. */
+    font-size: 12px;
     color: var(--warning-amber);
     font-weight: 700;
     margin-top: 1px;
@@ -326,10 +329,14 @@
     line-height: 1;
   }
 
-  /* Source tile is dimmed while overlay is shown */
+  /* Source tile is dimmed while overlay is shown.
+     V9 M5: kill the pulse animation on the source tile too — pulsing under
+     the overlay was distracting and wasted GPU cycles on a tile the user
+     can't interact with anyway. */
   .tile.is-source {
     opacity: 0.3;
     pointer-events: none;
+    animation: none !important;
   }
 
   /* EXPANDED OVERLAY — absolute-positioned floating tile that doesn't
@@ -364,10 +371,14 @@
   }
 
   .action-btn {
+    /* V9 S3: bumped from 8.5px → 12px font and 4/5px → 7/6px padding so
+       primary buttons land in the 28-30px tall range called for in the
+       review (shape-recognition for 50+ staff). M1 label shortening keeps
+       widths inside the overlay's content box. */
     width: 100%;
-    padding: 4px 5px;
-    border-radius: 3px;
-    font-size: 8.5px;
+    padding: 7px 6px;
+    border-radius: 4px;
+    font-size: 12px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.3px;
@@ -380,21 +391,13 @@
   .action-btn.primary-red { background: #ef4444; color: #2a0707; border-color: #ef4444; }
   .action-btn.primary-amber { background: #f59e0b; color: #2a1e08; border-color: #f59e0b; }
   .action-btn.secondary {
+    /* One step down from primaries, still up from V8's 7.5px */
     background: transparent;
     color: var(--text-mid);
     border-color: var(--text-dim);
-    font-size: 7.5px;
-    padding: 3px 5px;
+    font-size: 10px;
+    padding: 6px 6px;
   }
-  .action-btn.disabled {
-    background: #1f1f2e;
-    border-color: #374151;
-    color: #6b7280;
-    cursor: not-allowed;
-    font-size: 7.5px;
-    padding: 3px 5px;
-  }
-  .phase2-tag { font-size: 6.5px; opacity: 0.6; margin-left: 3px; font-weight: 500; }
 
   /* Guest info on expanded occupied tile */
   .guest-info {
@@ -438,11 +441,14 @@
   }
   .vacate-subs.shown { display: flex; }
   .vacate-subs .action-btn {
+    /* V9 S3: bumped from 7.5/3-5 → 11/6-6 to match the new primary button
+       hierarchy without quite matching primaries (these are sub-options,
+       not the main action). */
     background: rgba(239,68,68,0.25);
     border-color: #ef4444;
     color: #fca5a5;
-    font-size: 7.5px;
-    padding: 3px 5px;
+    font-size: 11px;
+    padding: 6px 6px;
   }
 
   /* OOS REASON MODAL */
@@ -499,6 +505,33 @@
   }
   .oos-modal textarea { resize: vertical; min-height: 60px; }
   .oos-modal textarea.hidden { display: none; }
+
+  /* V9 S6: "Other" reason note group — label + textarea + Clear button.
+     Hidden by default; shown when Other is selected. */
+  .oos-note-wrap { margin-bottom: 12px; }
+  .oos-note-wrap.hidden { display: none; }
+  .oos-note-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .oos-note-header label { margin-bottom: 0; }
+  .oos-note-clear {
+    background: transparent;
+    border: 1px solid #444;
+    color: var(--text-mid);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .oos-note-clear:hover { background: #1f1f2e; color: var(--text-bright); }
+  .oos-note-wrap textarea { margin-bottom: 0; }
   .oos-modal-actions {
     display: flex;
     gap: 8px;
@@ -978,7 +1011,7 @@ function renderActions(asset, vacateExpanded) {
     case 'available':
       return `
         <button class="action-btn primary-green" onclick="alert('Assign Guest flow — Phase 2')">Assign Guest</button>
-        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set Out of Service</button>
+        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set OOS</button>
       `;
     case 'occupied':
       const subClass = vacateExpanded ? 'vacate-subs shown' : 'vacate-subs';
@@ -990,14 +1023,13 @@ function renderActions(asset, vacateExpanded) {
         <button class="action-btn primary-red" onclick="toggleVacateSubs('${asset.id}')">${vacateExpanded ? 'Cancel Vacate' : 'Vacate'}</button>
         <div class="${subClass}">
           <button class="action-btn" onclick="alert('Vacate via Key Return — Phase 2')">Key Return</button>
-          <button class="action-btn" onclick="alert('Vacate via Discovery on Rounds — Phase 2')">Discovery on Rounds</button>
+          <button class="action-btn" onclick="alert('Vacate via Discovery on Rounds — Phase 2')">Rounds</button>
         </div>
-        <button class="action-btn disabled">Extend Stay<span class="phase2-tag">Phase 2</span></button>
       `;
     case 'dirty':
       return `
         <button class="action-btn primary-amber" onclick="alert('Mark Clean flow — Phase 2')">Mark Clean</button>
-        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set Out of Service</button>
+        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set OOS</button>
       `;
     case 'oos':
       // Show reason + days + who set it OOS above the Return to Service button
@@ -1016,7 +1048,7 @@ function renderActions(asset, vacateExpanded) {
 
 function renderRegularTab(category) {
   // Sections by category:
-  //   Rooms (Single/Double/VIP) have 4 sections: Available → Needs Cleaning → Occupied → OOS
+  //   Rooms (Single/Double/VIP) have 4 sections: Available → Dirty → Occupied → OOS
   //   Lockers have 3 sections: Available → Occupied → OOS (NO dirty state — lockers
   //     skip the cleaning cycle; they go straight from Occupied back to Available on vacate)
   const all = ASSETS.filter(a => a.category === category);
@@ -1034,7 +1066,7 @@ function renderRegularTab(category) {
   }
   if (dirty.length) {
     html += `<div class="section">
-      <div class="section-header dirty">Needs Cleaning <span class="section-count">(${dirty.length})</span></div>
+      <div class="section-header dirty">Dirty <span class="section-count">(${dirty.length})</span></div>
       <div class="tile-grid">${dirty.map(tileHTML).join('')}</div>
     </div>`;
   }
@@ -1180,15 +1212,30 @@ function render() {
     ${expandedOverlayHTML()}
     <div class="modal-backdrop ${STATE.oosModalOpen ? 'shown' : ''}" id="oos-modal-backdrop" onclick="if(event.target.id==='oos-modal-backdrop') closeOOSModal()">
       <div class="oos-modal">
-        <div class="oos-modal-title">Set Out of Service</div>
+        <div class="oos-modal-title">Set OOS</div>
         <div class="oos-modal-asset">${STATE.oosModalAssetId || ''}</div>
         <label for="oos-reason">Reason</label>
         <select id="oos-reason" onchange="onOOSReasonChange()">
           <option value="">— Select reason —</option>
           ${OOS_REASONS.map(r => `<option>${r}</option>`).join('')}
         </select>
-        <label for="oos-note" id="oos-note-label" style="display:none">Note (required for "Other")</label>
-        <textarea id="oos-note" class="hidden" placeholder="Describe the issue..."></textarea>
+        <!-- V9 S6: wrap label+textarea+Clear button so the whole "Other" group
+             toggles together. Clear button gives staff a one-tap reset for
+             the touch-keyboard typo case. -->
+        <div id="oos-note-wrap" class="oos-note-wrap hidden">
+          <div class="oos-note-header">
+            <label for="oos-note" id="oos-note-label">Note (required for "Other")</label>
+            <button type="button" id="oos-note-clear" class="oos-note-clear" onclick="clearOOSNote()">Clear</button>
+          </div>
+          <textarea id="oos-note" placeholder="Describe the issue..."></textarea>
+        </div>
+        <!-- V9 S2: mirror the Return-to-Service modal's audit pattern so the
+             Set OOS path has the same accountability preview without adding
+             a second tap. -->
+        <div class="return-modal-audit">
+          By confirming, this action will be recorded as:<br>
+          <strong>Set out of service by ${STATE.attendant} at ${timeStr}</strong>
+        </div>
         <div class="oos-modal-actions">
           <button class="oos-modal-btn cancel" onclick="closeOOSModal()">Cancel</button>
           <button class="oos-modal-btn confirm" onclick="confirmOOS()">Confirm</button>
@@ -1207,8 +1254,22 @@ function render() {
       </div>
     </div>
   `;
-  // After render: if a tile is expanded, position the overlay
-  if (STATE.expandedTileId) positionExpandedOverlay();
+  // After render: if a tile is expanded, position the overlay AND attach a
+  // one-shot scroll listener that closes the overlay if the .board scrolls.
+  // The overlay is positioned once via getBoundingClientRect() — scrolling
+  // the board would detach it visually from its source tile (V9 M4).
+  if (STATE.expandedTileId) {
+    positionExpandedOverlay();
+    const boardEl = document.querySelector('.board');
+    if (boardEl) {
+      boardEl.addEventListener('scroll', () => {
+        if (!STATE.expandedTileId) return;
+        STATE.expandedTileId = null;
+        STATE.vacateExpandedTileId = null;
+        render();
+      }, {passive: true, once: true});
+    }
+  }
 }
 
 /* Position the expanded overlay over its source tile, then clamp to screen
@@ -1283,16 +1344,20 @@ function closeOOSModal() {
   render();
 }
 function onOOSReasonChange() {
+  // V9 S6: toggle the wrapping element so label, textarea, and Clear button
+  // all show/hide together (no more separate display:none on the label).
   const sel = document.getElementById('oos-reason');
-  const noteLabel = document.getElementById('oos-note-label');
+  const wrap = document.getElementById('oos-note-wrap');
+  if (!wrap) return;
+  if (sel.value === 'Other') wrap.classList.remove('hidden');
+  else wrap.classList.add('hidden');
+}
+function clearOOSNote() {
+  // V9 S6: reset the textarea on Clear tap. Refocus so the staff can keep typing.
   const note = document.getElementById('oos-note');
-  if (sel.value === 'Other') {
-    noteLabel.style.display = 'block';
-    note.classList.remove('hidden');
-  } else {
-    noteLabel.style.display = 'none';
-    note.classList.add('hidden');
-  }
+  if (!note) return;
+  note.value = '';
+  note.focus();
 }
 function confirmOOS() {
   const sel = document.getElementById('oos-reason');
@@ -1353,6 +1418,20 @@ function confirmReturn() {
 
 /* INIT */
 render();
+
+/* V9 S4: live-tick — re-render every 15s so countdown→overtime transitions
+   surface without requiring a user interaction. The guard skips re-render
+   while the user has an open expanded overlay or modal so we don't
+   destroy in-flight DOM (form selections, typed notes, etc.). 15s is
+   visually imperceptible but cheap on Frappe; a future Phase 2 pass can
+   make this venue-configurable. */
+const LIVE_TICK_MS = 15000;
+function liveTick() {
+  if (STATE.oosModalOpen || STATE.returnModalOpen) return;
+  if (STATE.expandedTileId) return;
+  render();
+}
+let liveTickHandle = setInterval(liveTick, LIVE_TICK_MS);
 
 /* ===== AUTOMATED TESTS ===== */
 function runTests() {
@@ -1449,7 +1528,7 @@ function runTests() {
   const expanded = document.querySelector('#expanded-overlay');
   tests.push({name: 'Expanded tile renders as overlay', pass: !!expanded});
   tests.push({name: 'Expanded Available tile shows Assign Guest', pass: expanded && expanded.innerHTML.includes('Assign Guest')});
-  tests.push({name: 'Expanded Available tile shows Set Out of Service', pass: expanded && expanded.innerHTML.includes('Set Out of Service')});
+  tests.push({name: 'Expanded Available tile shows Set OOS button (M1)', pass: expanded && expanded.innerHTML.includes('Set OOS')});
 
   // 9b. CRITICAL: Overlay must NOT cause grid row tiles to stretch.
   //     Measure the height of every other tile in the same row and compare against an unexpanded tile.
@@ -1482,20 +1561,21 @@ function runTests() {
   const occExpanded = document.querySelector('#expanded-overlay');
   tests.push({name: 'Expanded Occupied tile shows guest name', pass: occExpanded && occExpanded.querySelector('.guest-name')});
   tests.push({name: 'Expanded Occupied tile shows Vacate', pass: occExpanded && occExpanded.innerHTML.includes('Vacate')});
-  tests.push({name: 'Expanded Occupied tile shows Extend Stay (Phase 2)', pass: occExpanded && occExpanded.innerHTML.includes('Extend Stay')});
+  // M2: Extend Stay button hidden entirely in V9 (was disabled "Phase 2" pill)
+  tests.push({name: 'Expanded Occupied tile does NOT show Extend Stay (M2)', pass: occExpanded && !occExpanded.innerHTML.includes('Extend Stay')});
 
   // 11. Vacate sub-buttons reveal
   STATE.vacateExpandedTileId = 'L003'; render();
   const subBtns = document.querySelector('#expanded-overlay .vacate-subs.shown');
   tests.push({name: 'Vacate sub-buttons appear when toggled', pass: !!subBtns});
   tests.push({name: 'Sub-buttons include Key Return', pass: subBtns && subBtns.innerHTML.includes('Key Return')});
-  tests.push({name: 'Sub-buttons include Discovery on Rounds', pass: subBtns && subBtns.innerHTML.includes('Discovery on Rounds')});
+  tests.push({name: 'Sub-buttons include Rounds (M1 shortened from "Discovery on Rounds")', pass: subBtns && subBtns.innerHTML.includes('Rounds')});
 
   // 12. Expand OOS tile — shows reason, days, who set it, and Return to Service
   STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L015'; STATE.vacateExpandedTileId = null; render();
   const oosExpanded = document.querySelector('#expanded-overlay');
   tests.push({name: 'Expanded OOS tile shows Return to Service', pass: oosExpanded && oosExpanded.innerHTML.includes('Return to Service')});
-  tests.push({name: 'Expanded OOS tile does NOT show Set Out of Service', pass: oosExpanded && !oosExpanded.innerHTML.includes('Set Out of Service')});
+  tests.push({name: 'Expanded OOS tile does NOT show Set OOS button (no offline-while-OOS)', pass: oosExpanded && !oosExpanded.innerHTML.includes('Set OOS')});
   tests.push({name: 'Expanded OOS tile shows reason (Lock or Hardware)', pass: oosExpanded && oosExpanded.innerHTML.includes('Lock or Hardware')});
   tests.push({name: 'Expanded OOS tile shows who set it (M. CHEN)', pass: oosExpanded && oosExpanded.innerHTML.includes('M. CHEN')});
   tests.push({name: 'Expanded OOS tile shows days ago', pass: oosExpanded && /\d+ days? ago/.test(oosExpanded.innerHTML)});
@@ -1590,6 +1670,72 @@ function runTests() {
       detail: result.msg
     });
   });
+
+  // M4: scrolling the .board closes any open expanded overlay
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L001'; STATE.vacateExpandedTileId = null; render();
+  const m4Board = document.querySelector('.board');
+  if (m4Board) m4Board.dispatchEvent(new Event('scroll'));
+  tests.push({name: 'Scrolling .board closes the expanded overlay (M4)', pass: STATE.expandedTileId === null});
+
+  // S2: Set OOS modal includes the audit-preview line mirroring Return-to-Service
+  STATE.expandedTileId = null; openOOSModal('L001');
+  const s2Modal = document.getElementById('oos-modal-backdrop');
+  tests.push({
+    name: 'Set OOS modal shows audit preview line (S2)',
+    pass: !!s2Modal && s2Modal.innerHTML.includes('Set out of service by') && s2Modal.innerHTML.includes(STATE.attendant)
+  });
+  closeOOSModal();
+
+  // S4: liveTick re-renders normally and skips when overlay/modal is open
+  STATE.expandedTileId = null; STATE.oosModalOpen = false; STATE.returnModalOpen = false; render();
+  const s4Header1 = document.querySelector('.header');
+  liveTick();
+  const s4Header2 = document.querySelector('.header');
+  tests.push({
+    name: 'liveTick re-renders header when no overlay/modal (S4)',
+    pass: !!s4Header2 && s4Header1 !== s4Header2
+  });
+  // Skip when expanded overlay is open
+  STATE.expandedTileId = 'L001'; render();
+  const s4OverlayBefore = document.getElementById('expanded-overlay');
+  liveTick();
+  const s4OverlayAfter = document.getElementById('expanded-overlay');
+  tests.push({
+    name: 'liveTick skips render while expanded overlay is open (S4)',
+    pass: !!s4OverlayBefore && s4OverlayBefore === s4OverlayAfter
+  });
+  // Skip when modal is open — typed-note state survives the tick
+  STATE.expandedTileId = null; openOOSModal('L001');
+  document.getElementById('oos-reason').value = 'Plumbing';
+  liveTick();
+  tests.push({
+    name: 'liveTick skips render while OOS modal is open, preserves selection (S4)',
+    pass: document.getElementById('oos-reason').value === 'Plumbing'
+  });
+  closeOOSModal();
+
+  // S6: Clear button clears the OOS note textarea when "Other" is selected
+  openOOSModal('L001');
+  document.getElementById('oos-reason').value = 'Other';
+  onOOSReasonChange();
+  const s6Wrap = document.getElementById('oos-note-wrap');
+  const s6ClearBtn = document.getElementById('oos-note-clear');
+  const s6Note = document.getElementById('oos-note');
+  s6Note.value = 'Some typed text';
+  tests.push({
+    name: 'OOS Note wrapper visible when "Other" reason selected (S6)',
+    pass: !!s6Wrap && !s6Wrap.classList.contains('hidden')
+  });
+  tests.push({name: 'OOS Note Clear button rendered (S6)', pass: !!s6ClearBtn});
+  if (s6ClearBtn) s6ClearBtn.click();
+  tests.push({name: 'OOS Note Clear button empties the textarea (S6)', pass: s6Note.value === ''});
+  closeOOSModal();
+
+  // M5: source tile must have animation:none so it doesn't pulse under the overlay
+  STATE.currentTab = 'single'; STATE.expandedTileId = 'R002'; STATE.vacateExpandedTileId = null; render();
+  const m5Source = document.querySelector('.tile.is-source');
+  const m5Anim = m5Source ? getComputedStyle(m5Source).animationName : '';
+  tests.push({name: 'is-source tile has animation:none (M5, no pulse-strong under overlay)', pass: m5Anim === 'none'});
 
   // Reset for user interaction
   STATE.currentTab = 'lockers'; STATE.expandedTileId = null; STATE.vacateExpandedTileId = null;

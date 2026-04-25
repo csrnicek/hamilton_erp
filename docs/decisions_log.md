@@ -83,7 +83,7 @@ OOS is PURPLE, not grey. Deliberate.
 
 ### 2.4 Tap-to-expand interaction
 
-Tap any tile → grows to 1.5× scale with edge-aware positioning (corner-anchored when near viewport edges, centered otherwise), revealing action buttons inside. Tap outside to collapse.
+Tap any tile → floats a separate overlay anchored near the source tile with `min-width: 130px` and content-driven height. Source tile stays at normal size underneath (dimmed). Edge-aware positioning clamps overlay to viewport. Tap outside, **or scroll the board**, to collapse.
 
 Tiles NEVER stretch their row — the expanded view is a separate absolutely-positioned overlay over the source tile. Source tile stays in grid at normal size underneath.
 
@@ -147,6 +147,12 @@ Pulsing applies ONLY to overtime tiles (not countdown, not warning). 1.4 sec cyc
 
 Sorted by `elapsedMin` DESCENDING. Longest-occupied first. Puts most-urgent items at top of list where staff look first. Overtime tiles naturally bubble to top of the Occupied section for free.
 
+### 3.7 Live-tick cadence (V9)
+
+The board re-renders every **15 seconds** so countdown→overtime transitions surface without requiring a user interaction. The tick is guarded — it skips re-render while an expanded overlay or modal is open so in-flight DOM (form selections, typed notes) is preserved.
+
+Constant: `LIVE_TICK_MS = 15000`. Cheap on Frappe; visually imperceptible to staff. Phase 2 may make this venue-configurable but the default stays here.
+
 ---
 
 ## Part 4 — State machine (asset status transitions)
@@ -164,7 +170,7 @@ Sorted by `elapsedMin` DESCENDING. Longest-occupied first. Puts most-urgent item
 
 ### 4.2 Lockers skip the Dirty state
 
-Lockers go directly from Occupied back to Available on vacate. No "Needs Cleaning" section ever renders on the Lockers tab. Rooms (Single/Double/VIP) go through Dirty as a required cleaning step.
+Lockers go directly from Occupied back to Available on vacate. No "Dirty" section ever renders on the Lockers tab. Rooms (Single/Double/VIP) go through Dirty as a required cleaning step.
 
 Code comment documents this in `renderRegularTab()`.
 
@@ -298,7 +304,7 @@ Mockup's `.tablet` container renders at 1080×716 usable height (matching iPad 1
 
 ### 8.3 Font sizes chosen for staff 50+
 
-Asset code: 17px. Time text: 10px bold. Tab labels: 15px. Tab height: 56px (accessibility).
+Asset code: 17px. Time text: **12px bold** (was 10px in V8 — bumped in V9 per Grok review for legibility next to 17px asset codes; tile min-height stays 58px and content fits comfortably). Tab labels: 15px. Tab height: 56px (accessibility).
 
 ---
 
