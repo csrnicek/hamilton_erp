@@ -283,14 +283,19 @@
   .tile-time {
     /* V9 M3: bumped 10→12px for legibility per Grok review (50+ staff target).
        Tile min-height stays 58px; with 17px code + 12px time + paddings = ~37px,
-       well under the 58px floor. */
+       well under the 58px floor.
+       Amendment 2026-04-24: countdown/late text colour reversed from amber to
+       red (#f87171) to match the Occupied tile border. Amber on red read as
+       visually similar to the all-amber Dirty tile in V9 visual review — see
+       decisions_log.md Part 3.1 amendment note. */
     font-size: 12px;
-    color: var(--warning-amber);
+    color: #f87171;
     font-weight: 700;
     margin-top: 1px;
   }
-  /* Countdown: amber, "Xm left" text — quieter heads-up */
-  .tile-time.countdown { color: var(--warning-amber); }
+  /* Countdown: red text matching tile border. Distinguished from Overtime by
+     "left" wording, absence of OT badge, and absence of pulse animation. */
+  .tile-time.countdown { color: #f87171; }
   /* Overtime overrides to red, works whether or not .countdown class is present */
   .tile.overtime .tile-time { color: var(--overtime-red); }
 

@@ -102,10 +102,12 @@ Based on `remaining = expectedMin - elapsedMin`:
 | State | Condition | Visual | Text |
 |---|---|---|---|
 | Normal | `remaining > 60` | plain red-bordered occupied tile | no text |
-| Countdown | `0 < remaining <= 60` | plain red-bordered occupied tile + amber text | `"Xm left"` / `"1h 0m left"` amber |
+| Countdown | `0 < remaining <= 60` | plain red-bordered occupied tile + red text | `"Xm left"` red |
 | Overtime | `remaining <= 0` | pulsing red border + OT badge on top border | `"Xm late"` / `"2h 20m late"` red |
 
 Threshold constant: `COUNTDOWN_THRESHOLD_MIN = 60`.
+
+**Amendment 2026-04-24:** Countdown text colour reversed from amber to red. Reason: in V9 visual review, the amber countdown text on a red Occupied tile read as visually similar to the all-amber Dirty tile next to it, creating ambiguity for staff scanning the board. Red countdown text matches the Occupied tile border, eliminates the orange-overlap with Dirty, and is still distinguished from Overtime by (a) the word "left" vs "late", (b) the absence of the OT badge, and (c) the absence of the pulse animation.
 
 ### 3.2 Single overtime state — no warning/overtime two-stage
 
