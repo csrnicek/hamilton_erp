@@ -17,7 +17,11 @@
   "section_thresholds",
   "grace_minutes",
   "column_break_thresholds",
-  "assignment_timeout_minutes"
+  "assignment_timeout_minutes",
+  "section_asset_board",
+  "show_waitlist_tab",
+  "column_break_asset_board",
+  "show_other_tab"
  ],
  "fields": [
   {
@@ -92,6 +96,29 @@
    "fieldname": "assignment_timeout_minutes",
    "fieldtype": "Int",
    "label": "Assignment Timeout (Minutes)"
+  },
+  {
+   "fieldname": "section_asset_board",
+   "fieldtype": "Section Break",
+   "label": "Asset Board"
+  },
+  {
+   "default": "0",
+   "description": "Show the Waitlist tab on the Asset Board. Placeholder for Phase 2.",
+   "fieldname": "show_waitlist_tab",
+   "fieldtype": "Check",
+   "label": "Show Waitlist Tab"
+  },
+  {
+   "fieldname": "column_break_asset_board",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Show the Other tab on the Asset Board. Used for venue-specific asset categories.",
+   "fieldname": "show_other_tab",
+   "fieldtype": "Check",
+   "label": "Show Other Tab"
   }
  ],
  "index_web_pages_for_search": 0,

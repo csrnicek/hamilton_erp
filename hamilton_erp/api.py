@@ -118,6 +118,8 @@ def _get_hamilton_settings() -> dict:
 		"grace_minutes": s.get("grace_minutes") or 15,
 		"default_stay_duration_minutes": s.get("default_stay_duration_minutes") or 360,
 		"assignment_timeout_minutes": s.get("assignment_timeout_minutes") or 15,
+		"show_waitlist_tab": bool(s.get("show_waitlist_tab")),
+		"show_other_tab": bool(s.get("show_other_tab")),
 	}
 
 

@@ -20,7 +20,7 @@ import frappe
 import unittest
 import threading
 import time
-from frappe.tests.utils import IntegrationTestCase
+from frappe.tests import IntegrationTestCase
 
 IGNORE_TEST_RECORD_DEPENDENCIES = []
 
