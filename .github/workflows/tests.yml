@@ -157,17 +157,6 @@ jobs:
           bench --site test_site set-config allow_tests 1 --parse
           bench --site test_site set-config server_script_enabled 1 --parse
 
-      - name: Run ERPNext before_tests (creates Customer Group + Territory roots)
-        working-directory: frappe-bench
-        # ERPNext's setup-wizard creates "All Customer Groups", "All Territories",
-        # default Company, etc. Without it our seed_hamilton_env fails on
-        # `frappe.db.get_value("Customer Group", {"is_group": 0}, "name")`
-        # returning None, then falling back to non-existent "All Customer Groups",
-        # then LinkValidationError on the Walk-in Customer insert.
-        # ERPNext exposes setup.utils.before_tests for exactly this — it runs
-        # the setup wizard in non-interactive mode.
-        run: bench --site test_site execute erpnext.setup.utils.before_tests
-
       - name: Seed hamilton_erp test data
         working-directory: frappe-bench
         # patches.txt registers seed_hamilton_env under [post_model_sync] but
