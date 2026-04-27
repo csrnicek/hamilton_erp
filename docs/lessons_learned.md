@@ -149,3 +149,13 @@ debugging dead-end, or production surprise so the next venue build avoids repeat
 ---
 
 *Add new lessons below this line.*
+
+---
+
+## 2026-04-27 — CI bootstrap trap
+
+**What happened:** PR #9 set up GitHub Actions CI for hamilton_erp. The Tests workflow failed at every step of the install path on a fresh runner: missing `apps/frappe`, wrong Python version, wrong Node version, Redis ordering wrong, missing `hypothesis`, missing seed data, missing ERPNext root records, fresh-ERPNext `desktop:home_page='setup-wizard'` row. I fixed each in turn — 12 commits — and ended up with the workflow YAML containing inline Python heredocs that created Customer Group + Territory roots, raw SQL DELETE for the `tabDefaultValue` row, and a standalone `pip install hypothesis`. Each fix advanced the workflow by one step but accumulated a parallel install path that production would never run. Frappe Cloud deploys would have hit every one of those errors freshly because none of the workarounds existed in app code.
+
+**What to do differently:** When CI fails at install or bootstrap, the first question is *"would this also fail on a fresh production deploy?"* If the answer is yes, the bug is in the app's install path, not in the CI workflow. Fix `setup/install.py` (or the relevant patch) so the install hook handles the missing precondition itself. CI then becomes a verifier — its only setup logic is `bench init` + `install-app` + run tests + assert outcomes — and the same code that makes CI pass also makes a fresh production install succeed. The pivot in PR #9 (commit `4c5d6c2`) reverted the 5 workaround commits, moved the bootstrap into `_ensure_erpnext_prereqs()` and `_seed_hamilton_data()` in `hamilton_erp/setup/install.py:after_install()`, moved the `desktop:home_page` cleanup into `ensure_setup_complete()` (after_migrate), declared `hypothesis` as a `[project.optional-dependencies] test` extra in `pyproject.toml`, and added a conformance-assertion CI step that proves the install path produced the expected records. Net: fewer lines of code, less duplication, and the install path actually works on every fresh bench — CI or production.
+
+The drift-prevention rule shipped earlier the same day (`Verify Before Claiming Done` in CLAUDE.md) earned a sibling: **"If a test/CI fix needs logic that lives only in the test/CI environment, ask whether production has that logic. If not, the fix belongs in the app."**
