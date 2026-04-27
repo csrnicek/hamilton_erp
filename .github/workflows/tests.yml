@@ -164,44 +164,46 @@ jobs:
         # All Territories, etc.) don't exist. Without them, our seed_hamilton_env
         # fails with LinkValidationError on the Walk-in Customer insert.
         # erpnext.setup.utils.before_tests doesn't exist at that path in v16
-        # (refactored away). Direct frappe.init() also fails because Frappe
-        # computes log paths from bench root which it can't auto-detect outside
-        # the bench utility context. Workaround: write the bootstrap as a
-        # script file and exec it via `bench execute exec(...)` — bench
-        # initializes frappe correctly (with logging paths) before evaluating.
+        # (refactored away). Cleanest CI fix: create the minimum root records
+        # directly via frappe.get_doc + ignore_permissions. NestedSet auto-fills
+        # lft/rgt. Idempotent guards make this safe on re-run.
         run: |
-          cat > /tmp/ci_bootstrap.py <<'PY'
-          # Runs inside bench execute's eval context — frappe is already initialized
-          if not frappe.db.exists('Customer Group', 'All Customer Groups'):
-              frappe.get_doc({
-                  'doctype': 'Customer Group',
-                  'customer_group_name': 'All Customer Groups',
-                  'is_group': 1,
-              }).insert(ignore_permissions=True)
-          if not frappe.db.exists('Customer Group', 'Individual'):
-              frappe.get_doc({
-                  'doctype': 'Customer Group',
-                  'customer_group_name': 'Individual',
-                  'parent_customer_group': 'All Customer Groups',
-                  'is_group': 0,
-              }).insert(ignore_permissions=True)
-          if not frappe.db.exists('Territory', 'All Territories'):
-              frappe.get_doc({
-                  'doctype': 'Territory',
-                  'territory_name': 'All Territories',
-                  'is_group': 1,
-              }).insert(ignore_permissions=True)
-          if not frappe.db.exists('Territory', 'Default'):
-              frappe.get_doc({
-                  'doctype': 'Territory',
-                  'territory_name': 'Default',
-                  'parent_territory': 'All Territories',
-                  'is_group': 0,
-              }).insert(ignore_permissions=True)
-          frappe.db.commit()
-          print('Bootstrap complete: Customer Group + Territory roots created')
+          env/bin/python <<'PY'
+          import frappe
+          frappe.init(site='test_site', sites_path='sites')
+          frappe.connect()
+          try:
+              if not frappe.db.exists('Customer Group', 'All Customer Groups'):
+                  frappe.get_doc({
+                      'doctype': 'Customer Group',
+                      'customer_group_name': 'All Customer Groups',
+                      'is_group': 1,
+                  }).insert(ignore_permissions=True)
+              if not frappe.db.exists('Customer Group', 'Individual'):
+                  frappe.get_doc({
+                      'doctype': 'Customer Group',
+                      'customer_group_name': 'Individual',
+                      'parent_customer_group': 'All Customer Groups',
+                      'is_group': 0,
+                  }).insert(ignore_permissions=True)
+              if not frappe.db.exists('Territory', 'All Territories'):
+                  frappe.get_doc({
+                      'doctype': 'Territory',
+                      'territory_name': 'All Territories',
+                      'is_group': 1,
+                  }).insert(ignore_permissions=True)
+              if not frappe.db.exists('Territory', 'Default'):
+                  frappe.get_doc({
+                      'doctype': 'Territory',
+                      'territory_name': 'Default',
+                      'parent_territory': 'All Territories',
+                      'is_group': 0,
+                  }).insert(ignore_permissions=True)
+              frappe.db.commit()
+              print('Bootstrap complete: Customer Group + Territory roots created')
+          finally:
+              frappe.destroy()
           PY
-          bench --site test_site execute 'exec(open("/tmp/ci_bootstrap.py").read())' 
 
       - name: Seed hamilton_erp test data
         working-directory: frappe-bench
