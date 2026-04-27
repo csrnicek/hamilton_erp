@@ -9,7 +9,160 @@ on:
 jobs:
   test:
     name: Server Tests
-    uses: frappe/frappe/.github/workflows/_base-server-tests.yml@version-16
-    with:
-      enable-postgres: false
-      parallel-runs: 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Add test_site to /etc/hosts
+        run: echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
+
+      - name: Configure git
+        run: |
+          git config --global init.defaultBranch main
+          git config --global advice.detachedHead false
+
+      - name: Checkout hamilton_erp
+        uses: actions/checkout@v4
+        with:
+          path: hamilton_erp
+
+      - name: Checkout frappe (version-16)
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/frappe
+          ref: version-16
+          path: frappe
+
+      - name: Checkout erpnext (version-16)
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/erpnext
+          ref: version-16
+          path: erpnext
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install yarn
+        run: npm install -g yarn
+
+      - name: Install system dependencies (apt)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            mariadb-client \
+            libmariadb-dev \
+            libcups2-dev \
+            redis-server \
+            wkhtmltopdf
+          # Stop the system-installed Redis — bench will run its own on
+          # ports 13000 and 11000 via Procfile-managed redis-server processes.
+          sudo systemctl stop redis-server || true
+
+      - name: Install frappe-bench
+        run: pip install frappe-bench
+
+      - name: Init bench (using local frappe checkout)
+        run: |
+          bench init frappe-bench \
+            --frappe-path "${GITHUB_WORKSPACE}/frappe" \
+            --skip-assets \
+            --no-backups \
+            --python "$(which python)" \
+            --ignore-exist
+
+      - name: Trim Procfile for CI (drop watch + schedule)
+        working-directory: frappe-bench
+        run: |
+          sed -i '/^watch:/d' Procfile
+          sed -i '/^schedule:/d' Procfile
+
+      - name: Add ERPNext to bench
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets erpnext "${GITHUB_WORKSPACE}/erpnext"
+
+      - name: Add hamilton_erp to bench
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets hamilton_erp "${GITHUB_WORKSPACE}/hamilton_erp"
+
+      - name: Configure bench credentials
+        working-directory: frappe-bench
+        run: |
+          bench set-config -g root_login root
+          bench set-config -g root_password root
+          bench set-config -g admin_password admin
+
+      - name: Create test_site (install frappe + erpnext + hamilton_erp)
+        working-directory: frappe-bench
+        run: |
+          bench new-site test_site \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket \
+            --install-app erpnext \
+            --install-app hamilton_erp \
+            --verbose
+          bench --site test_site set-config allow_tests 1 --parse
+          bench --site test_site set-config server_script_enabled 1 --parse
+
+      - name: Start bench in background (for redis_cache, redis_queue, worker)
+        working-directory: frappe-bench
+        run: |
+          bench start &> bench_start.log &
+          echo "Waiting for redis_cache on port 13000..."
+          for i in {1..30}; do
+            if redis-cli -p 13000 ping >/dev/null 2>&1; then
+              echo "redis_cache ready after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+          echo "Waiting for redis_queue on port 11000..."
+          for i in {1..30}; do
+            if redis-cli -p 11000 ping >/dev/null 2>&1; then
+              echo "redis_queue ready after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Run hamilton_erp tests
+        working-directory: frappe-bench
+        run: bench --site test_site run-tests --app hamilton_erp
+
+      - name: Show bench_start.log on failure
+        if: failure()
+        working-directory: frappe-bench
+        run: |
+          echo "=== bench_start.log ==="
+          cat bench_start.log || true
+          echo "=== sites/test_site/logs (if any) ==="
+          ls -la sites/test_site/logs/ 2>/dev/null || true
+          for f in sites/test_site/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            tail -50 "$f"
+          done
