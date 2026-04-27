@@ -1266,6 +1266,7 @@ Walk top-to-bottom. Items marked 🔴 will cost real money or permanent damage i
 | T4.3 | Add `validate_modified` on Venue Asset for defense-in-depth concurrency | §6 |
 | T4.4 | Migrate to code-first custom fields (away from fixtures) | §4 |
 | T4.5 | v16 Field Masking on member PII (phone, email) | §8 |
+| T4.6 | Security training: complete relevant Hacksplaining lessons (Broken Access Control, CSRF, Password Mismanagement, Logging and Monitoring, AI Prompt Injection, Insecure Design, Toxic Dependencies). Source: https://www.hacksplaining.com/lessons. Pace: 2-3 lessons/week post-handoff. | self-education |
 
 ---
 
