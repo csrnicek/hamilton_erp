@@ -157,27 +157,6 @@ jobs:
           bench --site test_site set-config allow_tests 1 --parse
           bench --site test_site set-config server_script_enabled 1 --parse
 
-      - name: Seed hamilton_erp test data
-        working-directory: frappe-bench
-        # patches.txt registers seed_hamilton_env under [post_model_sync] but
-        # bench new-site --install-app doesn't reliably trigger post-install
-        # patches in fresh-DB scenarios. Call the seed explicitly so the 59
-        # Venue Assets, Walk-in Customer, and Hamilton Settings defaults exist
-        # before tests query them.
-        run: |
-          bench --site test_site execute hamilton_erp.patches.v0_1.seed_hamilton_env.execute
-          bench --site test_site execute hamilton_erp.patches.v0_1.rename_glory_hole_to_gh_room.execute
-
-      - name: Clean fresh-ERPNext desktop:home_page row (CI-only)
-        working-directory: frappe-bench
-        # Fresh ERPNext installs leave tabDefaultValue.desktop:home_page set to
-        # "setup-wizard" which causes the asset-board flash-loop pinned by
-        # test_regression_desktop_home_page_not_setup_wizard. Local dev sites
-        # have this cleared; CI gets a fresh install every run, so clean it
-        # here. This mirrors what the local /debug-env workflow does.
-        run: |
-          bench --site test_site mariadb --execute "DELETE FROM \`tabDefaultValue\` WHERE defkey='desktop:home_page' AND defvalue='setup-wizard';"
-
       - name: Run hamilton_erp tests
         working-directory: frappe-bench
         run: bench --site test_site run-tests --app hamilton_erp
