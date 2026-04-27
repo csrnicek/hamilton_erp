@@ -342,11 +342,9 @@
 .hamilton-btn-red:hover { background: #b91c1c; }
 .hamilton-btn-amber { background: #d97706; }
 .hamilton-btn-amber:hover { background: #b45309; }
-.hamilton-btn-blue { background: #2563eb; }
 .hamilton-btn-grey { background: #4b5563; }
 .hamilton-btn-grey:hover { background: #374151; }
 .hamilton-btn-sm { font-size: 7px; padding: 3px 4px; }
-.hamilton-btn-disabled { opacity: 0.4; cursor: not-allowed; }
 
 /* ── Overtime overlays ────────────────────────── */
 .hamilton-tile.hamilton-warning {

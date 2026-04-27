@@ -159,7 +159,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	_render_status_sections(assets) {
 		const sections = [
 			{ status: "Available", label: __("Available"), cls: "section-available", sort: this._sort_by_code },
-			{ status: "Dirty", label: __("Needs Cleaning"), cls: "section-dirty", sort: this._sort_by_dirty_time },
+			{ status: "Dirty", label: __("Dirty"), cls: "section-dirty", sort: this._sort_by_dirty_time },
 			{ status: "Occupied", label: __("Occupied"), cls: "section-occupied", sort: this._sort_by_occupied_time },
 			{ status: "Out of Service", label: __("Out of Service"), cls: "section-oos", sort: this._sort_by_oos_time },
 		];
@@ -324,7 +324,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			case "Available":
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-green" data-action="assign">${__("Assign Guest")}</button>
-					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set Out of Service")}</button>
+					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set OOS")}</button>
 				`;
 				break;
 			case "Occupied":
@@ -334,15 +334,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-key">${__("Vacate \u2014 Key Return")}</button>
 					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-rounds">${__("Vacate \u2014 Rounds")}</button>
-					<button class="hamilton-action-btn hamilton-btn-blue hamilton-btn-disabled" disabled
-					        title="${__("Coming in Phase 2")}">${__("Extend Stay")}</button>
-					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set Out of Service")}</button>
 				`;
 				break;
 			case "Dirty":
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-amber" data-action="clean">${__("Mark Clean")}</button>
-					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set Out of Service")}</button>
+					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set OOS")}</button>
 				`;
 				break;
 			case "Out of Service":
@@ -358,7 +355,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	// ── Reason prompt for OOS / Return ──────────────────────
 	_prompt_reason(asset, action) {
 		const title = action === "oos"
-			? __("Set Out of Service")
+			? __("Set OOS")
 			: __("Return to Service");
 		const d = new frappe.ui.Dialog({
 			title: title,
@@ -576,11 +573,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			if (elapsed_min > stay + grace) {
 				$tile.addClass("hamilton-overtime");
 				const over = Math.floor(elapsed_min - stay);
-				$tile.append(`<div class="hamilton-time-badge badge-ot">OT +${over}m</div>`);
+				$tile.append(`<div class="hamilton-time-badge badge-ot">${over}m late</div>`);
 			} else if (elapsed_min > stay) {
 				$tile.addClass("hamilton-warning");
 				const over = Math.floor(elapsed_min - stay);
-				$tile.append(`<div class="hamilton-time-badge badge-warn">&#9201; +${over}m</div>`);
+				$tile.append(`<div class="hamilton-time-badge badge-warn">&#9201; ${over}m late</div>`);
 			}
 		}
 	}
