@@ -112,22 +112,6 @@ jobs:
           bench set-config -g root_password root
           bench set-config -g admin_password admin
 
-      - name: Create test_site (install frappe + erpnext + hamilton_erp)
-        working-directory: frappe-bench
-        run: |
-          bench new-site test_site \
-            --db-type mariadb \
-            --db-host 127.0.0.1 \
-            --db-port 3306 \
-            --mariadb-root-password root \
-            --admin-password admin \
-            --no-mariadb-socket \
-            --install-app erpnext \
-            --install-app hamilton_erp \
-            --verbose
-          bench --site test_site set-config allow_tests 1 --parse
-          bench --site test_site set-config server_script_enabled 1 --parse
-
       - name: Start bench in background (for redis_cache, redis_queue, worker)
         working-directory: frappe-bench
         run: |
@@ -148,6 +132,22 @@ jobs:
             fi
             sleep 2
           done
+
+      - name: Create test_site (install frappe + erpnext + hamilton_erp)
+        working-directory: frappe-bench
+        run: |
+          bench new-site test_site \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket \
+            --install-app erpnext \
+            --install-app hamilton_erp \
+            --verbose
+          bench --site test_site set-config allow_tests 1 --parse
+          bench --site test_site set-config server_script_enabled 1 --parse
 
       - name: Run hamilton_erp tests
         working-directory: frappe-bench
