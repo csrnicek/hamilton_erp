@@ -105,14 +105,6 @@ jobs:
         working-directory: frappe-bench
         run: bench get-app --skip-assets hamilton_erp "${GITHUB_WORKSPACE}/hamilton_erp"
 
-      - name: Install test-only Python deps into bench env
-        working-directory: frappe-bench
-        # hypothesis is imported by hamilton_erp/test_hypothesis.py for property-based
-        # tests (run via `bench run-tests`). It's not a runtime app dep so it's not
-        # in pyproject.toml's main dependencies. Install directly into the bench venv
-        # so test discovery can import it.
-        run: env/bin/pip install hypothesis
-
       - name: Configure bench credentials
         working-directory: frappe-bench
         run: |
