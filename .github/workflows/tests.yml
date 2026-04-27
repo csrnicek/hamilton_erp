@@ -105,6 +105,14 @@ jobs:
         working-directory: frappe-bench
         run: bench get-app --skip-assets hamilton_erp "${GITHUB_WORKSPACE}/hamilton_erp"
 
+      - name: Install hamilton_erp test extras (hypothesis)
+        working-directory: frappe-bench
+        # The [test] extra in hamilton_erp/pyproject.toml declares hypothesis
+        # as a test-only dep. `bench get-app` already pip-installed the main
+        # package; this re-installs with the [test] extra so hypothesis lands
+        # in the bench env. Local dev gets it via /hypothesis slash command.
+        run: env/bin/pip install -e "apps/hamilton_erp[test]"
+
       - name: Configure bench credentials
         working-directory: frappe-bench
         run: |
@@ -148,6 +156,44 @@ jobs:
             --verbose
           bench --site test_site set-config allow_tests 1 --parse
           bench --site test_site set-config server_script_enabled 1 --parse
+
+      - name: Verify install path produced expected state
+        working-directory: frappe-bench
+        # Conformance gate: prove that hamilton_erp's after_install hook
+        # (_ensure_erpnext_prereqs + _seed_hamilton_data) ran during install-app
+        # and produced the records the test suite expects. If this step fails,
+        # the install path is broken — not the workflow. Fail loudly.
+        # Same assertions production deploys should also satisfy.
+        run: |
+          set -e
+          assert_exists() {
+            local doctype="$1"
+            local name="$2"
+            local result
+            result=$(bench --site test_site execute frappe.db.exists --kwargs "{'doctype': '$doctype', 'name': '$name'}" 2>&1 | tail -1)
+            if [ "$result" != "$name" ]; then
+              echo "::error::install conformance: $doctype '$name' not found after install-app (got: $result)"
+              exit 1
+            fi
+            echo "✓ $doctype '$name' present"
+          }
+
+          assert_exists "Customer Group" "All Customer Groups"
+          assert_exists "Customer Group" "Individual"
+          assert_exists "Territory" "All Territories"
+          assert_exists "Territory" "Default"
+          assert_exists "Customer" "Walk-in"
+
+          # Asset count assertion — must be exactly 59 per DEC-054 §1.
+          count_raw=$(bench --site test_site execute frappe.db.count --kwargs "{'dt': 'Venue Asset'}" 2>&1 | tail -1)
+          if [ "$count_raw" != "59" ]; then
+            echo "::error::install conformance: expected 59 Venue Asset records, got '$count_raw'"
+            exit 1
+          fi
+          echo "✓ Venue Asset count = 59"
+
+          echo ""
+          echo "✓ Install path conformance passed — after_install produced all expected records"
 
       - name: Run hamilton_erp tests
         working-directory: frappe-bench

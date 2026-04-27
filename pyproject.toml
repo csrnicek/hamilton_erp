@@ -9,6 +9,12 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = []
 
+[project.optional-dependencies]
+# Test-only deps — installed in CI via `pip install -e ".[test]"` and locally
+# via /hypothesis slash command. Not runtime requirements; kept out of
+# `dependencies` so production installs stay lean.
+test = ["hypothesis"]
+
 [tool.bench.frappe-dependencies]
 frappe = ">=16.0.0,<17.0.0"
 erpnext = ">=16.0.0,<17.0.0"
