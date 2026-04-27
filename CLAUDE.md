@@ -73,6 +73,10 @@ The slash commands in `.claude/commands/` have `# Recommended model: ...` header
 - **Machine:** M1 Max MacBook Pro, 64GB RAM ("Chris's laptop")
 - **OS:** macOS
 - **Local bench:** `~/frappe-bench-hamilton` (Frappe v16, ERPNext v16, Python 3.14, Node 24, MariaDB 12.2.2, Redis)
+- **Frappe v16 hard requirements (do NOT pick lower versions for CI or any new bench):**
+  - **Python: 3.14** (`>=3.14,<3.15` per Frappe 16.16.0's pyproject.toml). 3.13 fails with `frappe depends on Python>=3.14,<3.15`. 3.11 fails earlier with `SyntaxError: type ConfType = _dict[str, Any]` (PEP 695 syntax).
+  - **Node: 24** (Frappe's package.json declares `engines.node >= 24`). Node 20 fails `yarn install --check-files` with `frappe-framework: The engine "node" is incompatible with this module. Expected version ">=24". Got "20.20.2"`.
+  - **Why this is here:** I burned three CI runs in a single session by overriding the vendored Frappe action's defaults of 3.14 and 24 to "conservative" lower values. The defaults are not preferences — they're hard requirements. Match upstream version pins exactly unless you have specific evidence the upstream is wrong.
 - **Dev browser site:** `hamilton-test.localhost` — Chris's manual testing site. **NEVER run the test suite here.** Tests corrupt it (setup_wizard loops, 403s, wiped roles).
 - **Unit-test site:** `hamilton-unit-test.localhost` — dedicated Frappe test site. `allow_tests = true`. All `bench run-tests` invocations point here. Safe to wipe/reinstall.
 - **MariaDB root password:** `admin`
