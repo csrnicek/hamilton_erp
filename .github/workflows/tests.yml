@@ -1,0 +1,15 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Server Tests
+    uses: frappe/frappe/.github/workflows/_base-server-tests.yml@version-16
+    with:
+      enable-postgres: false
+      parallel-runs: 2
