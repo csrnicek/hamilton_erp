@@ -157,6 +157,16 @@ jobs:
           bench --site test_site set-config allow_tests 1 --parse
           bench --site test_site set-config server_script_enabled 1 --parse
 
+      - name: Run bench migrate (fires after_migrate hook for desktop:home_page cleanup)
+        working-directory: frappe-bench
+        # bench install-app calls set_all_patches_as_completed but does NOT fire
+        # the after_migrate hook — that's bench migrate's job. ensure_setup_complete
+        # in install.py is registered on after_migrate and contains the
+        # DefaultValue desktop:home_page DELETE. Run migrate explicitly so the
+        # cleanup fires in CI same as it does on a real production deploy
+        # (deploy = install-app + migrate). Idempotent.
+        run: bench --site test_site migrate
+
       - name: Verify install path produced expected state
         working-directory: frappe-bench
         # Conformance gate: prove that hamilton_erp's after_install hook
@@ -164,13 +174,15 @@ jobs:
         # and produced the records the test suite expects. If this step fails,
         # the install path is broken — not the workflow. Fail loudly.
         # Same assertions production deploys should also satisfy.
+        # Note: frappe.db.exists takes positional (dt, dn) — passed via kwargs
+        # the names are dt + dn, not doctype + name.
         run: |
           set -e
           assert_exists() {
             local doctype="$1"
             local name="$2"
             local result
-            result=$(bench --site test_site execute frappe.db.exists --kwargs "{'doctype': '$doctype', 'name': '$name'}" 2>&1 | tail -1)
+            result=$(bench --site test_site execute frappe.db.exists --kwargs "{'dt': '$doctype', 'dn': '$name'}" 2>&1 | tail -1)
             if [ "$result" != "$name" ]; then
               echo "::error::install conformance: $doctype '$name' not found after install-app (got: $result)"
               exit 1
@@ -192,8 +204,16 @@ jobs:
           fi
           echo "✓ Venue Asset count = 59"
 
+          # desktop:home_page row should be cleared by ensure_setup_complete.
+          dhp_raw=$(bench --site test_site execute frappe.db.count --kwargs "{'dt': 'DefaultValue', 'filters': {'parent': '__default', 'defkey': 'desktop:home_page', 'defvalue': 'setup-wizard'}}" 2>&1 | tail -1)
+          if [ "$dhp_raw" != "0" ]; then
+            echo "::error::install conformance: DefaultValue desktop:home_page='setup-wizard' still present (count=$dhp_raw); ensure_setup_complete didn't clean it"
+            exit 1
+          fi
+          echo "✓ DefaultValue desktop:home_page='setup-wizard' cleaned"
+
           echo ""
-          echo "✓ Install path conformance passed — after_install produced all expected records"
+          echo "✓ Install path conformance passed — after_install + after_migrate produced expected state"
 
       - name: Run hamilton_erp tests
         working-directory: frappe-bench
