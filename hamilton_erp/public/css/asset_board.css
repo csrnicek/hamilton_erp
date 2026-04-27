@@ -210,9 +210,9 @@
 .hamilton-tile {
 	position: relative;
 	width: 95px;
-	height: 75px;
+	min-height: 58px;
 	padding: 8px;
-	border-radius: 6px;
+	border-radius: 8px;
 	cursor: pointer;
 	user-select: none;
 	display: flex;
@@ -229,31 +229,10 @@
 	transform: scale(0.95);
 }
 
-.hamilton-tile-dot {
-	position: absolute;
-	top: 6px;
-	left: 6px;
-	width: 6px;
-	height: 6px;
-	border-radius: 50%;
-}
-
 .hamilton-tile-code {
-	font-size: 14px;
+	font-size: 17px;
 	font-weight: 700;
 	line-height: 1;
-}
-
-.hamilton-tile-status {
-	font-size: 9px;
-	margin-top: 3px;
-	opacity: 0.8;
-	text-transform: uppercase;
-	letter-spacing: 0.3px;
-	white-space: nowrap;
-	overflow: hidden;
-	text-overflow: ellipsis;
-	max-width: 100%;
 }
 
 /* ── Status colours — dark theme per V6 spec ── */
@@ -262,28 +241,24 @@
 	border-color: #22c55e;
 	color: #4ade80;
 }
-.hamilton-status-available .hamilton-tile-dot { background: #22c55e; }
 
 .hamilton-status-occupied {
 	background: #200f0f;
 	border-color: #ef4444;
 	color: #f87171;
 }
-.hamilton-status-occupied .hamilton-tile-dot { background: #ef4444; }
 
 .hamilton-status-dirty {
 	background: #201a0a;
 	border-color: #f59e0b;
 	color: #fbbf24;
 }
-.hamilton-status-dirty .hamilton-tile-dot { background: #f59e0b; }
 
 .hamilton-status-out-of-service {
 	background: #141420;
 	border-color: #6366f1;
 	color: #818cf8;
 }
-.hamilton-status-out-of-service .hamilton-tile-dot { background: #6366f1; }
 
 /* ── Tile expand (1.5x with spring) ───────────── */
 .hamilton-tile.hamilton-expanded {

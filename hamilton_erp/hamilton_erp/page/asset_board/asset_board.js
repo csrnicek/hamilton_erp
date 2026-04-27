@@ -268,9 +268,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			<div class="hamilton-tile ${status_cls}"
 			     data-asset-name="${frappe.utils.escape_html(asset.name)}"
 			     data-status="${frappe.utils.escape_html(asset.status)}">
-				<div class="hamilton-tile-dot"></div>
 				<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>
-				<div class="hamilton-tile-status">${frappe.utils.escape_html(asset.status)}</div>
 			</div>
 		`;
 	}
