@@ -715,3 +715,15 @@ Locked design rules (consult `docs/decisions_log.md` before changing any of thes
 - "Needs Cleaning" section header renamed to "Dirty" (S1)
 
 Next: proceed to Tasks 23–25 per existing Phase 1 plan.
+
+## Drift Prevention Rule (added 2026-04-27)
+
+The full rule lives in `CLAUDE.md` at the repo root: "Verify Before Claiming Done."
+
+Summary: read actual code before claiming anything is shipped, distinguish
+spec-committed from implementation-working, state uncertainty plainly. The
+2026-04-24 V9 incident is the canonical example of why this rule exists.
+
+Two more drift-prevention layers are pending:
+- Layer 2 (~90 min): GitHub Actions CI — Tier 1 item T1.1 in production_handoff_audit_merged_2026-04-25.md
+- Layer 1 (~4 hours, Task 25): V9 conformance tests — one test per locked decision in decisions_log.md

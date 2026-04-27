@@ -1,5 +1,22 @@
 # Hamilton ERP — Claude Code Context
 
+## Drift Prevention — Verify Before Claiming Done
+
+Before saying anything is "shipped", "complete", or "closes the gap":
+
+1. Read the actual implementation code, not just the commit message
+2. Distinguish "spec/design committed" from "implementation working in running code" — these are NOT the same
+3. Run the test suite if available, and verify the tests cover the spec (not just the old behavior)
+4. Confirm visually in a browser if the change is user-facing
+5. State uncertainty plainly. "I don't know" and "let me verify" are real answers
+
+Past failure to learn from: 2026-04-24, V9 was described as shipped when only the
+mockup file shipped — the live `asset_board.js` was still on V8. The gap was
+discovered three days later as a 20-item divergence audit. Do not repeat this
+pattern.
+
+When in doubt, the answer is "let me check first."
+
 ## About Chris (the human you are working with)
 
 - **Experience level:** Beginner with coding, terminal, and developer tools
