@@ -45,17 +45,28 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.active_tab = "lockers";
 		this.expanded_asset = null;
 		this.$overlay = null;
+		// V9 Decision 4.6: Vacate sub-buttons. When Vacate parent is tapped,
+		// flip this flag to true so the overlay renders Key Return / Rounds
+		// sub-buttons instead of the parent. Reset on overlay close.
+		this.vacate_subs_open = false;
 		this.overtime_interval = null;
 		this.clock_interval = null;
 		this.init();
 	}
 
-	// Tab definitions — order matches V6 spec: docs/design/asset_board_ui.md
+	// Tab definitions — V9 spec order per decisions_log.md Part 1.1:
+	//   lockers / single / double / vip / waitlist / other / watch.
+	// Hamilton-specific extension: gh-room tab between vip and waitlist
+	// because Hamilton's actual asset_tier set includes "GH Room" rooms
+	// that don't fit any V9-standard category. Other venues without GH
+	// Room assets get auto-hidden via the categoryHasAssets check.
+	// V9 Decision 1.2: tab visibility = enabled-in-config AND has-at-least-one-asset.
 	get tabs() {
 		return [
 			{ id: "lockers", label: __("Lockers"), filter: (a) => a.asset_category === "Locker" },
 			{ id: "single", label: __("Single"), filter: (a) => a.asset_category === "Room" && (a.asset_tier === "Single Standard" || a.asset_tier === "Deluxe Single") },
 			{ id: "double", label: __("Double"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "Double Deluxe" },
+			{ id: "vip", label: __("VIP"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "VIP" },
 			{ id: "gh-room", label: __("GH Room"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "GH Room" },
 			{ id: "waitlist", label: __("Waitlist"), feature_flag: "show_waitlist_tab", placeholder: true },
 			{ id: "other", label: __("Other"), feature_flag: "show_other_tab", placeholder: true },
@@ -88,9 +99,18 @@ hamilton_erp.AssetBoard = class AssetBoard {
 
 	// ── Shell: header + tabs + content area + footer ────────
 	render_shell() {
+		// V9 Decision 1.2: combined visibility rule.
+		// A tab renders only when BOTH:
+		//   1. enabled in config (feature_flag check OR no flag = always-on)
+		//   2. has at least one asset matching its filter (auto-hide empty)
+		// Watch tab is always visible regardless.
+		// Mockup parallel: getTabs() at V9_CANONICAL_MOCKUP.html line 967.
 		const visible_tabs = this.tabs.filter((t) => {
-			if (t.feature_flag) return this.settings[t.feature_flag];
-			return true;
+			if (t.watch) return true;
+			if (t.feature_flag && !this.settings[t.feature_flag]) return false;
+			if (t.placeholder) return true;  // placeholder tabs (Waitlist/Other) skip asset check
+			if (typeof t.filter !== "function") return true;
+			return this.assets.some(t.filter);
 		});
 
 		const tab_html = visible_tabs.map((t) => {
@@ -116,6 +136,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 
 		const user_name = frappe.boot.user.full_name || frappe.session.user;
 		const now = this._format_time(new Date());
+		const shift = this._compute_shift_label(new Date());
 
 		this.wrapper.html(`
 			<div class="hamilton-board">
@@ -124,6 +145,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 						<span class="hamilton-header-venue">CLUB HAMILTON</span>
 						<span class="hamilton-header-sep">&middot;</span>
 						<span class="hamilton-header-title">ASSET BOARD</span>
+						<span class="hamilton-header-sep">&middot;</span>
+						<span class="hamilton-header-shift">${frappe.utils.escape_html(shift)}</span>
 						<span class="hamilton-header-sep">&middot;</span>
 						<span class="hamilton-header-time">${now}</span>
 					</div>
@@ -391,6 +414,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	collapse_expanded() {
 		this._hide_overlay();
 		this.expanded_asset = null;
+		this.vacate_subs_open = false;
 	}
 
 	// ── Floating overlay primitive (Decision 2.4) ───────────
@@ -436,6 +460,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			} else if (action === "return") {
 				this.collapse_expanded();
 				this._open_return_modal(asset);
+			} else if (action === "vacate-toggle") {
+				// V9 Decision 4.6: tap Vacate parent → expand sub-buttons.
+				// Tap again ("Cancel Vacate") → collapse them.
+				// Re-render the overlay in place to update the button labels.
+				this.vacate_subs_open = !this.vacate_subs_open;
+				this._redraw_overlay(asset, $tile);
 			} else {
 				this._run_action(asset, action);
 			}
@@ -498,6 +528,49 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.wrapper.find(".hamilton-expand-overlay").remove();
 	}
 
+	// Re-render the overlay in place without dismissing it. Used when
+	// toggling Vacate parent → sub-buttons (V9 Decision 4.6) so the user's
+	// tap doesn't close the overlay.
+	_redraw_overlay(asset, $tile) {
+		// Tear down just the overlay (not the source-tile dim or scroll listener)
+		if (this.$overlay) {
+			this.$overlay.find("[data-action]").off("click.action");
+			this.$overlay.remove();
+			this.$overlay = null;
+		}
+		// Rebuild
+		const status_cls = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
+		const code_html = `<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>`;
+		const actions_html = this._render_expand_panel(asset);
+		const $overlay = $(
+			`<div class="hamilton-expand-overlay hamilton-tile ${status_cls}">
+				${code_html}
+				<div class="hamilton-tile-actions">${actions_html}</div>
+			</div>`
+		);
+		this.wrapper.find(".hamilton-board").append($overlay);
+		this.$overlay = $overlay;
+
+		$overlay.find("[data-action]").on("click.action", (e) => {
+			e.stopPropagation();
+			const action = $(e.currentTarget).data("action");
+			if (action === "oos") {
+				this.collapse_expanded();
+				this._open_oos_modal(asset);
+			} else if (action === "return") {
+				this.collapse_expanded();
+				this._open_return_modal(asset);
+			} else if (action === "vacate-toggle") {
+				this.vacate_subs_open = !this.vacate_subs_open;
+				this._redraw_overlay(asset, $tile);
+			} else {
+				this._run_action(asset, action);
+			}
+		});
+
+		this._position_overlay($tile, $overlay);
+	}
+
 	_render_expand_panel(asset) {
 		let info = "";
 		let buttons = "";
@@ -525,9 +598,22 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				if (guest_name_html || elapsed_html) {
 					info = `<div class="hamilton-guest-info">${guest_name_html}${elapsed_html}</div>`;
 				}
+				// V9 Decision 4.6: Vacate parent button \u2192 sub-buttons (Key
+				// Return / Rounds). Tap "Vacate" to expand, sub-buttons
+				// appear in styled .hamilton-vacate-subs container.
+				// Mockup parallel: V9_CANONICAL_MOCKUP.html lines 1090-1097.
+				const vacate_subs_class = this.vacate_subs_open
+					? "hamilton-vacate-subs hamilton-vacate-subs-shown"
+					: "hamilton-vacate-subs";
+				const parent_label = this.vacate_subs_open
+					? __("Cancel Vacate")
+					: __("Vacate");
 				buttons = `
-					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-key">${__("Vacate \u2014 Key Return")}</button>
-					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-rounds">${__("Vacate \u2014 Rounds")}</button>
+					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-toggle">${parent_label}</button>
+					<div class="${vacate_subs_class}">
+						<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-key">${__("Key Return")}</button>
+						<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-rounds">${__("Rounds")}</button>
+					</div>
 				`;
 				break;
 			}
@@ -992,5 +1078,16 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const h = Math.floor(diff / 60);
 		const m = diff % 60;
 		return h > 0 ? `${h}h ${m}m` : `${m}m`;
+	}
+
+	// V9 Decision 6.1: header shows current shift label.
+	// Mockup parallel: STATE.shift static "PM Shift" at line 794. Production
+	// derives from current hour as a sensible default until shift_record
+	// integration ships.
+	_compute_shift_label(date) {
+		const hour = date.getHours();
+		if (hour >= 6 && hour < 12) return __("AM Shift");
+		if (hour >= 12 && hour < 18) return __("PM Shift");
+		return __("Night Shift");
 	}
 };
