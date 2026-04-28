@@ -17,6 +17,31 @@ pattern.
 
 When in doubt, the answer is "let me check first."
 
+## Frappe v16 Conventions
+
+When writing any Frappe code, consult these sources before writing:
+
+- Frappe docs: https://frappeframework.com/docs/v16/user/en
+- Frappe wiki: https://github.com/frappe/frappe/wiki
+- ERPNext contributing guide: https://github.com/frappe/erpnext/blob/develop/CONTRIBUTING.md
+- Reference implementation: read existing patterns in apps/frappe/ source code
+
+If a convention is unclear, prefer matching what frappe/frappe itself does over inventing something new.
+
+### Hard rules that override defaults
+
+- Tests must be self-contained — each test creates and tears down its own data, no reliance on global seed
+- Use tabs, not spaces (matches Frappe formatter; lint config in pyproject.toml ignores W191/E101)
+- Inherit from `frappe.tests.IntegrationTestCase` or `frappe.tests.UnitTestCase`, not plain `unittest.TestCase`
+- Use `frappe.db.get_value(..., for_update=True)` for race-condition protection on critical reads
+- Never use `frappe.db.commit()` in controllers — let the framework handle transaction boundaries
+- Use `@frappe.whitelist()` with `allow_guest=False` as the default for any callable method
+- Validate permissions in controllers, not in client-side JS
+- Use `frappe.db.exists()` guards before any insert in install/seed/migration code (idempotency requirement)
+- Use `frappe.db.delete()` not raw SQL for cleanup operations (transaction-safe, returns no-op on missing rows)
+
+These rules are enforced by Layer 1 conformance tests (Task 25) and CI lint checks. Violations should fail CI, not just earn a comment in code review.
+
 ## About Chris (the human you are working with)
 
 - **Experience level:** Beginner with coding, terminal, and developer tools
@@ -234,6 +259,38 @@ unless one of these STOP conditions is hit:
 Everything else — picking fix options, committing, pushing, continuing —
 happens without Chris. Chris does not want to be part of the workflow
 when he is just approving routine decisions.
+
+## PR completion template
+
+When a PR is ready for human review, leave a summary in `docs/inbox.md` (under today's date heading) AND in the PR description with these sections:
+
+### Commits made
+[Output of `git log --oneline main..HEAD` — full list of commits on the branch.]
+
+### Tests run
+[Which test suites ran. CI run ID(s). Local test run output if applicable. Whether all tests passed or which were skipped.]
+
+### CI result
+[Latest CI run conclusion with a link. Pass/fail counts for Server Tests + Linter. Note if any required check is still pending.]
+
+### Files changed
+[Output of `git diff main...HEAD --stat`.]
+
+### Remaining risks
+[Anything that could go wrong in production. Things tested locally but not in CI. Things that depend on environment setup. Anything Chris should verify before deploying. If "none," say so explicitly.]
+
+### Rollback notes
+[How to revert if this breaks production. Specific commands. Whether any data migrations are reversible. If irreversible (e.g. DocType field rename with data migration), flag explicitly.]
+
+### Recommended merge command
+[Specific gh CLI command. Squash vs. merge commit. Whether to delete the branch.]
+
+### Open questions for Chris
+[Decisions that need Chris's judgment before or after merge. Empty list is fine if there are none.]
+
+If any section is N/A, write "N/A — [reason]" — never omit sections silently.
+
+This template applies to ALL PRs Claude Code creates, including docs-only PRs (where CI result and rollback may be trivial but should still be stated). It exists so session handoff is durable: tomorrow-Chris reading the inbox can fully reconstruct what landed and why without re-running git commands.
 
 ## Context Compaction Rule
 
