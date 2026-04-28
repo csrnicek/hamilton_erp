@@ -73,6 +73,10 @@ The slash commands in `.claude/commands/` have `# Recommended model: ...` header
 - **Machine:** M1 Max MacBook Pro, 64GB RAM ("Chris's laptop")
 - **OS:** macOS
 - **Local bench:** `~/frappe-bench-hamilton` (Frappe v16, ERPNext v16, Python 3.14, Node 24, MariaDB 12.2.2, Redis)
+- **Frappe v16 hard requirements (do NOT pick lower versions for CI or any new bench):**
+  - **Python: 3.14** (`>=3.14,<3.15` per Frappe 16.16.0's pyproject.toml). 3.13 fails with `frappe depends on Python>=3.14,<3.15`. 3.11 fails earlier with `SyntaxError: type ConfType = _dict[str, Any]` (PEP 695 syntax).
+  - **Node: 24** (Frappe's package.json declares `engines.node >= 24`). Node 20 fails `yarn install --check-files` with `frappe-framework: The engine "node" is incompatible with this module. Expected version ">=24". Got "20.20.2"`.
+  - **Why this is here:** I burned three CI runs in a single session by overriding the vendored Frappe action's defaults of 3.14 and 24 to "conservative" lower values. The defaults are not preferences — they're hard requirements. Match upstream version pins exactly unless you have specific evidence the upstream is wrong.
 - **Dev browser site:** `hamilton-test.localhost` — Chris's manual testing site. **NEVER run the test suite here.** Tests corrupt it (setup_wizard loops, 403s, wiped roles).
 - **Unit-test site:** `hamilton-unit-test.localhost` — dedicated Frappe test site. `allow_tests = true`. All `bench run-tests` invocations point here. Safe to wipe/reinstall.
 - **MariaDB root password:** `admin`
@@ -108,7 +112,7 @@ Custom Frappe/ERPNext v16 app for Club Hamilton — a men's bathhouse in Hamilto
 Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md`
 - 25 tasks, TDD, Subagent-Driven Development
 - Test harness: 26 tests passing (6 lifecycle, 3 locks, 17 venue_asset)
-- 6 pre-existing setUpClass failures in Phase 0 stub doctypes — known, out of scope
+- 6 pre-existing IntegrationTestCase setUpClass failures from transitive Link-field dependency on Payment Gateway. NOT actually stubs — real tests with real assertions. Frappe's `IntegrationTestCase.setUpClass` walks every Link-field on the test's DocType recursively; for shift_record/comp_admission_log/cash_reconciliation/cash_drop/venue_session/asset_status_log, the chain ends at Payment Gateway which lives in `frappe/payments` (not in vanilla frappe + erpnext). Local dev benches that have frappe/payments installed pass; CI now installs frappe/payments@develop to fix this (see .github/workflows/tests.yml). Production deploys may also need frappe/payments — see docs/inbox.md 2026-04-28 entry.
 
 ## Workflow rules
 
@@ -158,7 +162,9 @@ Review files are saved at:
 ## Common Issues and Solutions
 
 ### Tests fail with setUpClass errors
-Phase 0 stub doctypes fail with setUpClass — ignore unless they appear in the 5 core test modules.
+If failures are in the 6 doctype tests (shift_record/comp_admission_log/cash_reconciliation/cash_drop/venue_session/asset_status_log) with `DoesNotExistError: DocType Payment Gateway not found` — frappe/payments isn't installed in the bench. CI installs it from develop branch automatically; for local dev: `bench get-app https://github.com/frappe/payments && bench --site SITE install-app payments`.
+
+Other setUpClass errors warrant investigation — they're not the documented Payment Gateway issue.
 
 ### Redis lock contention during tests
 A previous crash left a Redis key. Wait 15s for TTL expiry, or `redis-cli FLUSHDB` (test site ONLY).

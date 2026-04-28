@@ -9,7 +9,297 @@ on:
 jobs:
   test:
     name: Server Tests
-    uses: frappe/frappe/.github/workflows/_base-server-tests.yml@version-16
-    with:
-      enable-postgres: false
-      parallel-runs: 2
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      mariadb:
+        image: mariadb:11.8
+        env:
+          MARIADB_ROOT_PASSWORD: root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Add test_site to /etc/hosts
+        run: echo "127.0.0.1 test_site" | sudo tee -a /etc/hosts
+
+      - name: Configure git
+        run: |
+          git config --global init.defaultBranch main
+          git config --global advice.detachedHead false
+
+      - name: Checkout hamilton_erp
+        uses: actions/checkout@v4
+        with:
+          path: hamilton_erp
+
+      - name: Checkout frappe (version-16)
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/frappe
+          ref: version-16
+          path: frappe
+
+      - name: Checkout erpnext (version-16)
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/erpnext
+          ref: version-16
+          path: erpnext
+
+      - name: Checkout payments (develop — no version-16 branch yet)
+        # frappe/payments has not cut a version-16 branch (only v14, v15,
+        # v15-hotfix, develop as of 2026-04-28). Required so Frappe's
+        # IntegrationTestCase.setUpClass dependency walk can resolve the
+        # Payment Gateway DocType for hamilton_erp's 6 doctype tests
+        # (transitive Link via User → ERPNext POS chain → Payment Gateway).
+        # Switch to version-16 once frappe/payments cuts that branch.
+        # See docs/inbox.md 2026-04-28 entry for production deploy implications.
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/payments
+          ref: develop
+          path: payments
+
+      - name: Setup Python 3.14
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Setup Node 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Install yarn
+        run: npm install -g yarn
+
+      - name: Install system dependencies (apt)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            mariadb-client \
+            libmariadb-dev \
+            libcups2-dev \
+            redis-server \
+            wkhtmltopdf
+          # Stop the system-installed Redis — bench will run its own on
+          # ports 13000 and 11000 via Procfile-managed redis-server processes.
+          sudo systemctl stop redis-server || true
+
+      - name: Install frappe-bench
+        run: pip install frappe-bench
+
+      - name: Init bench (using local frappe checkout)
+        run: |
+          bench init frappe-bench \
+            --frappe-path "${GITHUB_WORKSPACE}/frappe" \
+            --skip-assets \
+            --no-backups \
+            --python "$(which python)" \
+            --ignore-exist
+
+      - name: Trim Procfile for CI (drop watch + schedule)
+        working-directory: frappe-bench
+        run: |
+          sed -i '/^watch:/d' Procfile
+          sed -i '/^schedule:/d' Procfile
+
+      - name: Add ERPNext to bench
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets erpnext "${GITHUB_WORKSPACE}/erpnext"
+
+      - name: Add Payments to bench (Payment Gateway DocType for test bootstrap)
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets payments "${GITHUB_WORKSPACE}/payments"
+
+      - name: Add hamilton_erp to bench
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets hamilton_erp "${GITHUB_WORKSPACE}/hamilton_erp"
+
+      - name: Install hamilton_erp test extras (hypothesis)
+        working-directory: frappe-bench
+        # The [test] extra in hamilton_erp/pyproject.toml declares hypothesis
+        # as a test-only dep. `bench get-app` already pip-installed the main
+        # package; this re-installs with the [test] extra so hypothesis lands
+        # in the bench env. Local dev gets it via /hypothesis slash command.
+        run: env/bin/pip install -e "apps/hamilton_erp[test]"
+
+      - name: Configure bench credentials
+        working-directory: frappe-bench
+        run: |
+          bench set-config -g root_login root
+          bench set-config -g root_password root
+          bench set-config -g admin_password admin
+
+      - name: Start bench in background (for redis_cache, redis_queue, worker)
+        working-directory: frappe-bench
+        run: |
+          bench start &> bench_start.log &
+          echo "Waiting for redis_cache on port 13000..."
+          for i in {1..30}; do
+            if redis-cli -p 13000 ping >/dev/null 2>&1; then
+              echo "redis_cache ready after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+          echo "Waiting for redis_queue on port 11000..."
+          for i in {1..30}; do
+            if redis-cli -p 11000 ping >/dev/null 2>&1; then
+              echo "redis_queue ready after ${i} attempts"
+              break
+            fi
+            sleep 2
+          done
+
+      - name: Create test_site (install frappe + erpnext + hamilton_erp)
+        working-directory: frappe-bench
+        run: |
+          bench new-site test_site \
+            --db-type mariadb \
+            --db-host 127.0.0.1 \
+            --db-port 3306 \
+            --mariadb-root-password root \
+            --admin-password admin \
+            --no-mariadb-socket \
+            --install-app erpnext \
+            --install-app payments \
+            --install-app hamilton_erp \
+            --verbose
+          bench --site test_site set-config allow_tests 1 --parse
+          bench --site test_site set-config server_script_enabled 1 --parse
+
+      - name: Conformance — install-app alone produces correct state (no migrate yet)
+        working-directory: frappe-bench
+        # PROVE the after_install hook produces the correct setup-wizard state
+        # WITHOUT relying on a follow-up bench migrate. Frappe Cloud deploys
+        # that run install-app without an immediate migrate must still land
+        # users in a usable desk, not the setup-wizard loop.
+        # If this fails: the install path's _ensure_no_setup_wizard_loop()
+        # call from after_install isn't firing — debug install.py, do not
+        # paper over by moving logic into the workflow.
+        run: |
+          set -e
+          dhp_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDefaultValue WHERE parent='__default' AND defkey='desktop:home_page' AND defvalue='setup-wizard'" -B -N 2>/dev/null | tail -1)
+          if [ "$dhp_count" != "0" ]; then
+            echo "::error::install conformance (pre-migrate): desktop:home_page='setup-wizard' still present (count=$dhp_count) — install path not self-sufficient, after_install didn't call _ensure_no_setup_wizard_loop"
+            exit 1
+          fi
+          echo "✓ desktop:home_page='setup-wizard' cleared by after_install (no migrate needed)"
+
+          isc=$(bench --site test_site mariadb -e "SELECT is_setup_complete FROM \`tabInstalled Application\` WHERE app_name='hamilton_erp' LIMIT 1" -B -N 2>/dev/null | tail -1)
+          if [ "$isc" != "1" ]; then
+            echo "::error::install conformance (pre-migrate): hamilton_erp is_setup_complete='$isc' — install path not self-sufficient"
+            exit 1
+          fi
+          echo "✓ hamilton_erp is_setup_complete=1 after install-app alone"
+
+          # Also verify frappe + erpnext rows are healed (they're what
+          # frappe.is_setup_complete() actually reads).
+          for app in frappe erpnext; do
+            v=$(bench --site test_site mariadb -e "SELECT is_setup_complete FROM \`tabInstalled Application\` WHERE app_name='$app' LIMIT 1" -B -N 2>/dev/null | tail -1)
+            if [ "$v" != "1" ]; then
+              echo "::error::install conformance (pre-migrate): $app is_setup_complete='$v' — install path not self-sufficient"
+              exit 1
+            fi
+            echo "✓ $app is_setup_complete=1 after install-app alone"
+          done
+
+          echo ""
+          echo "✓ install-app alone produces correct setup state — no dependency on after_migrate"
+
+      - name: Run bench migrate (fires after_migrate hook for desktop:home_page cleanup)
+        working-directory: frappe-bench
+        # bench install-app calls set_all_patches_as_completed but does NOT fire
+        # the after_migrate hook — that's bench migrate's job. ensure_setup_complete
+        # in install.py is registered on after_migrate and contains the
+        # DefaultValue desktop:home_page DELETE. Run migrate explicitly so the
+        # cleanup fires in CI same as it does on a real production deploy
+        # (deploy = install-app + migrate). Idempotent.
+        run: bench --site test_site migrate
+
+      - name: Verify install path produced expected state
+        working-directory: frappe-bench
+        # Conformance gate: prove that hamilton_erp's after_install hook
+        # (_ensure_erpnext_prereqs + _seed_hamilton_data) ran during install-app
+        # and produced the records the test suite expects. If this step fails,
+        # the install path is broken — not the workflow. Fail loudly.
+        # Same assertions production deploys should also satisfy.
+        # Note: frappe.db.exists takes positional (dt, dn) — passed via kwargs
+        # the names are dt + dn, not doctype + name.
+        run: |
+          set -e
+          assert_exists() {
+            local doctype="$1"
+            local name="$2"
+            local result
+            result=$(bench --site test_site execute frappe.db.exists --kwargs "{'dt': '$doctype', 'dn': '$name'}" 2>&1 | tail -1)
+            if [ "$result" != "$name" ]; then
+              echo "::error::install conformance: $doctype '$name' not found after install-app (got: $result)"
+              exit 1
+            fi
+            echo "✓ $doctype '$name' present"
+          }
+
+          assert_exists "Customer Group" "All Customer Groups"
+          assert_exists "Customer Group" "Individual"
+          assert_exists "Territory" "All Territories"
+          assert_exists "Territory" "Default"
+          assert_exists "Customer" "Walk-in"
+
+          # Sanity: payments app installed → Payment Gateway DocType exists.
+          # If this fails, IntegrationTestCase.setUpClass will fail on the
+          # 6 hamilton_erp doctype tests. See docs/inbox.md 2026-04-28.
+          pg_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDocType WHERE name='Payment Gateway'" -B -N 2>/dev/null | tail -1)
+          if [ "$pg_count" != "1" ]; then
+            echo "::error::install conformance: DocType 'Payment Gateway' not found (count=$pg_count); frappe/payments install failed?"
+            exit 1
+          fi
+          echo "✓ DocType 'Payment Gateway' present (frappe/payments installed)"
+
+          # Asset count assertion — must be exactly 59 per DEC-054 §1.
+          count_raw=$(bench --site test_site execute frappe.db.count --kwargs "{'dt': 'Venue Asset'}" 2>&1 | tail -1)
+          if [ "$count_raw" != "59" ]; then
+            echo "::error::install conformance: expected 59 Venue Asset records, got '$count_raw'"
+            exit 1
+          fi
+          echo "✓ Venue Asset count = 59"
+
+          # desktop:home_page row should be cleared by ensure_setup_complete.
+          # Using `bench mariadb -B -N` (batch mode, no headers) for clean
+          # output instead of `bench execute frappe.db.count` with nested
+          # filters, which doesn't parse cleanly via --kwargs JSON.
+          dhp_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDefaultValue WHERE parent='__default' AND defkey='desktop:home_page' AND defvalue='setup-wizard'" -B -N 2>/dev/null | tail -1)
+          if [ "$dhp_count" != "0" ]; then
+            echo "::error::install conformance: DefaultValue desktop:home_page='setup-wizard' still present (count='$dhp_count'); ensure_setup_complete didn't clean it"
+            exit 1
+          fi
+          echo "✓ DefaultValue desktop:home_page='setup-wizard' cleaned (count=0)"
+
+          echo ""
+          echo "✓ Install path conformance passed — after_install + after_migrate produced expected state"
+
+      - name: Run hamilton_erp tests
+        working-directory: frappe-bench
+        run: bench --site test_site run-tests --app hamilton_erp
+
+      - name: Show bench_start.log on failure
+        if: failure()
+        working-directory: frappe-bench
+        run: |
+          echo "=== bench_start.log ==="
+          cat bench_start.log || true
+          echo "=== sites/test_site/logs (if any) ==="
+          ls -la sites/test_site/logs/ 2>/dev/null || true
+          for f in sites/test_site/logs/*.log; do
+            [ -f "$f" ] || continue
+            echo "--- $f ---"
+            tail -50 "$f"
+          done

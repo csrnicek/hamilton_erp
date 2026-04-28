@@ -9,6 +9,12 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = []
 
+[project.optional-dependencies]
+# Test-only deps — installed in CI via `pip install -e ".[test]"` and locally
+# via /hypothesis slash command. Not runtime requirements; kept out of
+# `dependencies` so production installs stay lean.
+test = ["hypothesis"]
+
 [tool.bench.frappe-dependencies]
 frappe = ">=16.0.0,<17.0.0"
 erpnext = ">=16.0.0,<17.0.0"
@@ -33,7 +39,11 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["F", "E", "W", "I"]
-ignore = ["E501"]
+# E501: line-too-long (Frappe convention allows long lines).
+# W191 + E101: tab-indentation rules — Frappe convention is tabs (also declared
+# by [tool.ruff.format] indent-style = "tab" below). Lint flagging tabs while
+# format requires tabs is a contradiction; suppress the lint warnings.
+ignore = ["E501", "W191", "E101"]
 
 [tool.ruff.format]
 quote-style = "double"

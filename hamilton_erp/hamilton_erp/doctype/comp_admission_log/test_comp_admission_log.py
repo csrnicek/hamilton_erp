@@ -11,9 +11,10 @@ class TestCompAdmissionLog(IntegrationTestCase):
 		asset = frappe.get_doc(
 			{
 				"doctype": "Venue Asset",
+				"asset_code": "T-CAL1",
 				"asset_name": "Test Room CAL1",
 				"asset_category": "Room",
-				"asset_tier": "Standard",
+				"asset_tier": "Single Standard",
 				"status": "Available",
 				"display_order": 1,
 			}
