@@ -265,6 +265,129 @@ class TestOvertimeTickerContract(IntegrationTestCase):
 			)
 
 
+class TestExpandOverlayContract(IntegrationTestCase):
+	"""Regression guards for the floating-overlay tile expand (Decision 2.4).
+
+	Decision 2.4 requires a separate absolutely-positioned overlay with
+	edge-aware viewport clamping, dismissed by tap-outside or scroll. Earlier
+	implementations used an inline ``transform: scale(1.5)`` panel inside the
+	tile, which clipped at viewport edges. These tests fail loudly if a future
+	refactor reverts to the inline pattern.
+
+	The contract is asserted by reading the JS/CSS source — the alternative
+	(spinning up a headless browser to inspect computed styles) is far heavier
+	and Hamilton has no Playwright/Puppeteer infrastructure.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_js_defines_show_overlay(self):
+		"""Decision 2.4 requires a floating overlay primitive."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_show_overlay",
+			source,
+			"_show_overlay() function not found in asset_board.js — "
+			"Decision 2.4 requires a floating overlay primitive",
+		)
+
+	def test_js_defines_position_overlay(self):
+		"""Decision 2.4 requires viewport-clamped positioning."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_position_overlay",
+			source,
+			"_position_overlay() function not found in asset_board.js — "
+			"Decision 2.4 requires edge-aware viewport-clamped positioning",
+		)
+
+	def test_js_defines_hide_overlay(self):
+		"""Decision 2.4 requires explicit close (tap outside or scroll)."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_hide_overlay",
+			source,
+			"_hide_overlay() function not found in asset_board.js — "
+			"Decision 2.4 requires explicit overlay teardown",
+		)
+
+	def test_js_uses_get_bounding_client_rect(self):
+		"""Edge-aware positioning requires reading viewport rects."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"getBoundingClientRect",
+			source,
+			"getBoundingClientRect not used — Decision 2.4 viewport "
+			"clamping requires reading source-tile and container rects",
+		)
+
+	def test_js_binds_scroll_to_close(self):
+		"""Decision 2.4: 'Tap outside, OR SCROLL THE BOARD, to collapse.'"""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"scroll.hamilton-overlay",
+			source,
+			"Scroll-to-close listener not found — Decision 2.4 explicitly "
+			"requires that scrolling the board collapses an open overlay",
+		)
+
+	def test_css_defines_expand_overlay_class(self):
+		"""The overlay needs its own absolutely-positioned class."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			".hamilton-expand-overlay",
+			css,
+			".hamilton-expand-overlay class missing — overlay needs its "
+			"own positioning rule (Decision 2.4)",
+		)
+
+	def test_css_defines_source_tile_dim_class(self):
+		"""Source tile must be dimmed while overlay is shown (Decision 2.4)."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			".hamilton-source-tile",
+			css,
+			".hamilton-source-tile class missing — source tile must be "
+			"dimmed while overlay is shown (Decision 2.4)",
+		)
+
+	def test_css_no_longer_scales_expanded_tile(self):
+		"""The broken inline-scale pattern must not return.
+
+		Old behaviour was ``.hamilton-tile.hamilton-expanded { transform:
+		scale(1.5) }`` which clipped at viewport edges (Chris confirmed in
+		browser, 2026-04-28). The fix replaces this with a separate overlay.
+		If a future refactor reverts to scaling the source tile, this test
+		fails before the bug ships.
+		"""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertNotIn(
+			"transform: scale(1.5)",
+			css,
+			"transform: scale(1.5) is back in asset_board.css — this is "
+			"the broken inline-expand pattern Decision 2.4 explicitly "
+			"replaced with a floating overlay",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

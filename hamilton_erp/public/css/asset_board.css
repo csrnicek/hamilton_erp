@@ -12,6 +12,9 @@
 	display: flex;
 	flex-direction: column;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+	/* position: relative so .hamilton-expand-overlay (position: absolute)
+	   anchors to the board, not the page (Decision 2.4). */
+	position: relative;
 }
 
 .hamilton-loading {
@@ -261,32 +264,51 @@
 }
 
 /* ── Tile expand (1.5x with spring) ───────────── */
-.hamilton-tile.hamilton-expanded {
-	transform: scale(1.5);
-	transform-origin: top center;
-	z-index: 10;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+/* Source tile while overlay is open: dimmed, non-interactive, no pulse.
+   Tile stays in the grid at normal size — Decision 2.4 ("Source tile
+   stays at normal size underneath dimmed"). Mockup reference:
+   docs/design/asset_board_mockup_v7.html .tile.is-source */
+.hamilton-tile.hamilton-source-tile {
+	opacity: 0.3;
+	pointer-events: none;
+	animation: none !important;
 }
 
-.hamilton-tile.hamilton-expanded:active {
-	transform: scale(1.5);
-}
-
-/* Action panel below expanded tile */
-.hamilton-expand-panel {
+/* Floating overlay container (Decision 2.4) — absolute-positioned,
+   viewport-clamped via JS in _position_overlay(). Replaces the broken
+   inline expand panel that scaled the source tile in place. */
+.hamilton-expand-overlay {
 	position: absolute;
-	top: 100%;
-	left: -4px;
-	right: -4px;
-	padding: 4px;
+	z-index: 100;
+	min-width: 130px;
+	padding: 10px 8px;
 	display: flex;
 	flex-direction: column;
-	gap: 2px;
-	background: inherit;
-	border-radius: 0 0 4px 4px;
-	border: 3px solid;
-	border-color: inherit;
-	border-top: none;
+	gap: 4px;
+	border-radius: 6px;
+	box-shadow: 0 12px 32px rgba(0, 0, 0, 0.85);
+	/* background and border come from the inherited .hamilton-tile and
+	   .hamilton-status-{status} rules — ported from mockup pattern at
+	   docs/design/asset_board_mockup_v7.html line 980 (overlay carries
+	   asset.status class so it visually expands the tile). */
+}
+
+/* Action-buttons wrapper inside the overlay — port of mockup's
+   .tile.expanded-overlay .tile-actions rule
+   (docs/design/asset_board_mockup_v7.html line 363). */
+.hamilton-tile-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+	margin-top: 6px;
+}
+
+/* Overlay's tile-code is slightly larger than the source tile's (17px →
+   18px) — mockup parallel: .tile.expanded-overlay .tile-code at line 362
+   of docs/design/asset_board_mockup_v7.html. */
+.hamilton-expand-overlay .hamilton-tile-code {
+	font-size: 18px;
 }
 
 .hamilton-expand-info {

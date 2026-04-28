@@ -18,6 +18,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.settings = {};
 		this.active_tab = "lockers";
 		this.expanded_asset = null;
+		this.$overlay = null;
 		this.overtime_interval = null;
 		this.clock_interval = null;
 		this.init();
@@ -123,10 +124,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			}
 		});
 
-		// Click outside to collapse expanded tile
+		// Click outside to collapse expanded overlay (Decision 2.4)
 		$(document).on("click.hamilton-board", (e) => {
 			if (this.expanded_asset
-				&& !$(e.target).closest(".hamilton-tile, .hamilton-expand-panel").length) {
+				&& !$(e.target).closest(".hamilton-tile, .hamilton-expand-overlay").length) {
 				this.collapse_expanded();
 			}
 		});
@@ -294,10 +295,49 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	_expand_tile(asset, $tile) {
 		this.collapse_expanded();
 		this.expanded_asset = asset;
-		$tile.addClass("hamilton-expanded");
-		$tile.append(this._render_expand_panel(asset));
+		this._show_overlay(asset, $tile);
+	}
 
-		$tile.find("[data-action]").on("click.action", (e) => {
+	collapse_expanded() {
+		this._hide_overlay();
+		this.expanded_asset = null;
+	}
+
+	// ── Floating overlay primitive (Decision 2.4) ───────────
+	// Per decisions_log.md Part 2.4: tap-to-expand renders a separate
+	// absolutely-positioned overlay over the source tile, edge-aware
+	// clamped to viewport, dismissed by tap outside or scroll. The source
+	// tile stays in the grid (dimmed) so its row never stretches.
+	//
+	// Reference implementation: docs/design/asset_board_mockup_v7.html
+	// positionExpandedOverlay() (around line 1283).
+	_show_overlay(asset, $tile) {
+		$tile.addClass("hamilton-source-tile");
+		// Port of mockup expandedOverlayHTML() at
+		// docs/design/asset_board_mockup_v7.html line 975+.
+		// The overlay echoes the source tile's structure (status class +
+		// tile-code) so it reads as "the tile expanded" rather than "a
+		// separate panel beside the tile". Action buttons go inside a
+		// hamilton-tile-actions wrapper (mockup .tile-actions equivalent).
+		// Out-of-scope for this PR (deferred to PR 2/3/5):
+		//   - corner badge (.tile-corner-badge.ot) — PR 3
+		//   - time-text (.tile-time countdown/overtime) — PR 3
+		//   - oos-days counter (.oos-days) — PR 2
+		//   - guest-info / oos-info rich panels — PR 2/5
+		const status_cls = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
+		const code_html = `<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>`;
+		const actions_html = this._render_expand_panel(asset);
+		const $overlay = $(
+			`<div class="hamilton-expand-overlay hamilton-tile ${status_cls}">
+				${code_html}
+				<div class="hamilton-tile-actions">${actions_html}</div>
+			</div>`
+		);
+		const $board = this.wrapper.find(".hamilton-board");
+		$board.append($overlay);
+		this.$overlay = $overlay;
+
+		$overlay.find("[data-action]").on("click.action", (e) => {
 			e.stopPropagation();
 			const action = $(e.currentTarget).data("action");
 			if (action === "oos" || action === "return") {
@@ -306,12 +346,62 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				this._run_action(asset, action);
 			}
 		});
+
+		this._position_overlay($tile, $overlay);
+
+		// Scroll on the asset content area visually detaches the overlay
+		// from its source — close on first scroll (V9 M4 in mockup).
+		this.wrapper.find(".hamilton-content").on(
+			"scroll.hamilton-overlay",
+			() => this.collapse_expanded()
+		);
 	}
 
-	collapse_expanded() {
-		this.wrapper.find(".hamilton-tile.hamilton-expanded").removeClass("hamilton-expanded");
-		this.wrapper.find(".hamilton-expand-panel").remove();
-		this.expanded_asset = null;
+	_position_overlay($tile, $overlay) {
+		const tile_el = $tile.get(0);
+		const overlay_el = $overlay.get(0);
+		const board_el = this.wrapper.find(".hamilton-board").get(0);
+		if (!tile_el || !overlay_el || !board_el) return;
+
+		const t_rect = tile_el.getBoundingClientRect();
+		const b_rect = board_el.getBoundingClientRect();
+
+		// Match overlay width to source tile so the anchor reads consistently
+		overlay_el.style.width = t_rect.width + "px";
+
+		// Initial position: directly over the source tile, in board-relative coords
+		let x = t_rect.left - b_rect.left;
+		let y = t_rect.top - b_rect.top;
+		overlay_el.style.left = x + "px";
+		overlay_el.style.top = y + "px";
+
+		// Re-measure overlay after it's in the DOM to get content-driven height
+		const o_rect = overlay_el.getBoundingClientRect();
+
+		// Edge-aware clamp: shift left/up if the overlay overflows the board
+		const padding = 6;
+		const overflow_right = o_rect.right - (b_rect.right - padding);
+		const overflow_bottom = o_rect.bottom - (b_rect.bottom - padding);
+		if (overflow_right > 0) x -= overflow_right;
+		if (overflow_bottom > 0) y -= overflow_bottom;
+		// Then clamp left/top so we never push off the opposite edge
+		if (x < padding) x = padding;
+		if (y < padding) y = padding;
+
+		overlay_el.style.left = x + "px";
+		overlay_el.style.top = y + "px";
+	}
+
+	_hide_overlay() {
+		this.wrapper.find(".hamilton-content").off("scroll.hamilton-overlay");
+		this.wrapper.find(".hamilton-source-tile").removeClass("hamilton-source-tile");
+		if (this.$overlay) {
+			this.$overlay.find("[data-action]").off("click.action");
+			this.$overlay.remove();
+			this.$overlay = null;
+		}
+		// Clean up any stragglers from the old inline-expand era
+		this.wrapper.find(".hamilton-expand-overlay").remove();
 	}
 
 	_render_expand_panel(asset) {
@@ -347,7 +437,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				break;
 		}
 
-		return `<div class="hamilton-expand-panel">${info}${buttons}</div>`;
+		// Caller (_show_overlay) wraps in .hamilton-tile-actions per mockup
+		// pattern, so this returns inner content only. Mockup parallel:
+		// renderActions() returns the inner buttons, expandedOverlayHTML()
+		// wraps them in <div class="tile-actions">.
+		return `${info}${buttons}`;
 	}
 
 	// ── Reason prompt for OOS / Return ──────────────────────
