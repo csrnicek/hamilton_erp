@@ -159,3 +159,50 @@ debugging dead-end, or production surprise so the next venue build avoids repeat
 **What to do differently:** When CI fails at install or bootstrap, the first question is *"would this also fail on a fresh production deploy?"* If the answer is yes, the bug is in the app's install path, not in the CI workflow. Fix `setup/install.py` (or the relevant patch) so the install hook handles the missing precondition itself. CI then becomes a verifier — its only setup logic is `bench init` + `install-app` + run tests + assert outcomes — and the same code that makes CI pass also makes a fresh production install succeed. The pivot in PR #9 (commit `4c5d6c2`) reverted the 5 workaround commits, moved the bootstrap into `_ensure_erpnext_prereqs()` and `_seed_hamilton_data()` in `hamilton_erp/setup/install.py:after_install()`, moved the `desktop:home_page` cleanup into `ensure_setup_complete()` (after_migrate), declared `hypothesis` as a `[project.optional-dependencies] test` extra in `pyproject.toml`, and added a conformance-assertion CI step that proves the install path produced the expected records. Net: fewer lines of code, less duplication, and the install path actually works on every fresh bench — CI or production.
 
 The drift-prevention rule shipped earlier the same day (`Verify Before Claiming Done` in CLAUDE.md) earned a sibling: **"If a test/CI fix needs logic that lives only in the test/CI environment, ask whether production has that logic. If not, the fix belongs in the app."**
+
+
+## 2026-04-28 — Three-PR CI infrastructure day
+
+### Lesson: CI passing != production-ready
+
+PR #9 initially had CI workarounds (frappe/payments install via workflow, broken stress simulation skipped, vendored composite action) that made CI green without exercising the real install path. ChatGPT review caught this: "tests.yml is becoming a parallel install path."
+
+**Fix:** Pivoted to Path 1 — install path owns its setup logic (`_ensure_erpnext_prereqs`, `_seed_hamilton_data`, `_ensure_no_setup_wizard_loop` in `hamilton_erp/setup/install.py`). CI workflow trimmed to: bench init → install-app → conformance assertions → tests.
+
+**Rule going forward:** Workflow-only seed logic creates fake-green builds. The install path must produce the expected state on its own; CI just verifies it.
+
+### Lesson: Install lifecycle hooks fire on different events
+
+`ensure_setup_complete()` was called only on `after_migrate`. But `bench install-app` doesn't fire `after_migrate` — it fires `after_install`. So fresh installs (CI, new venues) never ran the heal logic.
+
+**Fix:** Refactored into `_ensure_no_setup_wizard_loop()` called from BOTH `after_install` and `after_migrate`. Pre-migrate conformance step in CI proves install-app alone produces correct state.
+
+**Rule going forward:** Any install-time logic must consider both lifecycle events. Verify in CI with a pre-migrate conformance step.
+
+### Lesson: Branch protection requires manual UI configuration
+
+The GitHub API for setting required status checks returns 404 even with admin scope on Personal Access Tokens. Manual UI step was the only path.
+
+**Fix:** Documented in PR #9 cleanup and PR #11 prep: branch protection setup is a one-time manual step at https://github.com/csrnicek/hamilton_erp/settings/branches.
+
+**Rule going forward:** When automating repo setup for new venues (DC, Philly), expect this manual step. Document it in venue_rollout_playbook.md.
+
+### Lesson: Two-AI cross-review catches drift one AI misses
+
+Claude Code building PR #9 was iterating CI workarounds. ChatGPT reviewing the same diff immediately spotted "this is becoming a parallel install path." Single-AI review would have shipped the workaround.
+
+**Rule going forward:** For infrastructure or architecturally-significant PRs, cross-review with a second AI before merge. ChatGPT is currently the chosen second reviewer.
+
+### Lesson: Stash before switching branches when working tree has divergent base
+
+Working tree had +134 line scratch in docs/inbox.md based on PR #11's cleaned blob (b5b4ea5). main carries a different blob for inbox.md. Naive `git checkout main` would have either three-way-merged into a confusing state or blocked the switch.
+
+**Fix:** `git stash push -m "..."` isolates the diff. Pop after the destination branch reaches the right base.
+
+**Rule going forward:** When working tree has uncommitted changes relative to a different blob than the destination branch, stash first.
+
+### Lesson: docs-only PRs still run full CI (and that's a feature)
+
+Branch protection gates checks at the workflow level, not the file-change level. So a docs-only PR runs the full Server Tests suite (~22 minutes). Initially felt like overhead. But it confirmed that no docs PR accidentally smuggled in a code change someone missed in review.
+
+**Rule going forward:** Don't try to skip CI for docs PRs. The 22-minute wait is the safety check.

@@ -1,9 +1,81 @@
 # Claude Memory — Extended Context for Hamilton ERP
 
-Persistent reference for Claude Code sessions. Captures best practices, planning notes,
-tooling decisions, and Phase 2 readiness that don't belong in code comments or decisions_log.md.
+Persistent reference for Claude Code sessions. Captures project state, history,
+best practices, planning notes, tooling decisions, and Phase 2 readiness that
+don't belong in code comments or decisions_log.md.
 
-**Last updated:** 2026-04-14
+**Last updated:** 2026-04-28
+
+---
+
+## Documents Map
+
+These are the durable docs in this repo. Future sessions consult them in this order:
+
+| Document | Purpose | When to consult |
+|---|---|---|
+| `CLAUDE.md` | Hard rules, conventions, PR completion template, autonomous command rules | Auto-loaded at session start. Never duplicate its content here. |
+| `docs/claude_memory.md` | Project state, what shipped, current focus, durable history | This file. Read at session start for context. |
+| `docs/decisions_log.md` | Locked design decisions (asset board V8/V9) | Before changing any asset board behavior. Follow Part 12 reversal protocol. |
+| `docs/lessons_learned.md` | What went wrong + how it was fixed | When tackling something similar to a past failure. |
+| `docs/HAMILTON_LAUNCH_PLAYBOOK.md` | Operational risks for opening weekend | Before any launch-readiness work. Top 12 risks ranked. |
+| `docs/inbox/production_handoff_audit_merged_2026-04-25.md` | Outstanding handoff items (T1/T2 lists) | Before deciding next priority work. |
+| `docs/inbox.md` | Transient scratch / triage zone (NOT durable) | Triage at start of each session. Promote durable items to this file or delete. |
+
+CLAUDE.md is the source of truth for hard rules and PR template. This file complements it with project state, never duplicates rules.
+
+---
+
+## Top of Mind — Current Focus
+
+- **Phase 1 Task 17** in progress: subtasks 17.1 + 17.2 done; 17.3-17.5 pending browser QA. Next priority work.
+- **Three-PR CI infrastructure day complete (2026-04-28).** PR #9 (CI), PR #11 (docs cleanup + Hamilton Launch Playbook), PR #12 (CLAUDE.md improvements) all merged. See history section below.
+- **Branch protection enforced on `main`.** Required status checks: `Server Tests` and `Linter`. Manual GitHub UI configuration; API-based setup blocked by token scope.
+- **Tier 0 production monitoring archived** until Hamilton launch is imminent. Plan lives in `docs/inbox.md` (committed via PR #11) and the Hamilton Launch Playbook. Do NOT prompt to start it preemptively.
+- **5 scratch notes** intentionally remain in working-tree `docs/inbox.md` (uncommitted): Throughput re-baseline, Test fixture factory, AoE bookmark, plus PR #11 + #12 MERGED audit entries. The PR MERGED entries are now promoted into this file (see history below) and can be deleted from inbox.md after PR #13 merges.
+- **Next priority:** Phase 1 Task 17 browser QA (17.3-17.5), then Tasks 18-25 toward launch readiness.
+
+---
+
+## What shipped — April 28, 2026 (three-PR CI infrastructure day)
+
+Three docs/infrastructure PRs merged in sequence. Hamilton ERP now has enforced CI, an operational risk audit, and improved Claude Code conventions.
+
+### PR #9 — CI infrastructure (merged at 98c2d2a)
+
+**What:** GitHub Actions CI that vendors the Frappe setup composite action (shared workflow lookup was broken). Install path productionized in `hamilton_erp/setup/install.py` via `_ensure_erpnext_prereqs()`, `_seed_hamilton_data()`, `_ensure_no_setup_wizard_loop()`. CI workflow runs install-app → conformance assertions → bench migrate → 464 tests.
+
+**Why it mattered:** Closed Tier 1 items T1.1 and T1.4 from production_handoff_audit_merged_2026-04-25.md. Without enforced CI, install-path drift goes undetected for days. ChatGPT cross-review caught a critical architecture issue mid-PR (CI workarounds becoming a parallel install path) — pivoted to Path 1 (install path owns its setup logic, not the workflow).
+
+**E1 fix included:** `_ensure_no_setup_wizard_loop()` runs on BOTH after_install and after_migrate. `bench install-app` doesn't fire after_migrate, so the heal must also run on after_install — caught in pre-merge safety review.
+
+### PR #11 — Post-PR-9 docs cleanup + Hamilton Launch Playbook (merged at d34c107)
+
+**What:** Surgical inbox.md split (KEEP only, 234 lines committed; DEFERRED restored as local scratch). Added `docs/HAMILTON_LAUNCH_PLAYBOOK.md` (463 lines, operational risk audit for opening weekend). Added `.claude/*.backup` to .gitignore.
+
+**Why it mattered:** PR #9 left inbox.md with 8 transient sections that needed triage. The Launch Playbook is the operational-recovery document for Hamilton opening — top 3 risks (paid-but-no-session, staff trust, cash variance) are training/process, not engineering. Per ChatGPT's framing: opening weekend is operations recovery, not software correctness.
+
+### PR #12 — CLAUDE.md improvements (merged at f0863db)
+
+**What:** Two additions to CLAUDE.md:
+- `## Frappe v16 Conventions` (line 20) — upstream doc links + 9 hard rules: tabs not spaces, frappe.tests.IntegrationTestCase, frappe.db.exists() guards before insert, no frappe.db.commit() in controllers, etc.
+- `## PR completion template` (line 263) — standardized 7-section format every Claude Code PR uses (commits, tests, CI, files, risks, rollback, merge command, open questions)
+
+**Why it mattered:** PR #9's CI marathon revealed that "follow Frappe v16 conventions" was too vague — sessions interpret it loosely against general training knowledge. Hard rules + upstream links make conventions actionable. PR template closes the ad-hoc PR summary problem.
+
+### Branch protection enforced
+
+Both `Server Tests` AND `Linter` are required status checks on `main` (set manually via GitHub UI on Apr 28). Branch protection BLOCKS merges that fail required checks. Manual UI step was needed because API tokens lacked admin scope to set required checks programmatically.
+
+### Two-AI cross-review pattern proved essential
+
+Claude Code + ChatGPT cross-review caught architectural drift one AI alone missed. Specifically: the Path 1 install pivot mid-PR-9. Going forward, treat ChatGPT review as part of the safety net for any non-trivial PR. Not optional for infrastructure work.
+
+### Other changes Apr 28
+
+- V8/ snapshot directory deleted (was untracked archive of pre-V9 design work; canonical content lives in `docs/decisions_log.md` and `docs/design/asset_board_mockup_v7.html` in main)
+- Five inbox scratch notes intentionally preserved as transient (Throughput re-baseline, Test fixture factory, AoE bookmark, plus the three PR MERGED audit entries — the latter promoted to this file in PR #13)
+- Tier 0 production monitoring archived until Hamilton launch is imminent
 
 ---
 
