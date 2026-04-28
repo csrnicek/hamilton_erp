@@ -510,6 +510,91 @@ class TestV9TimeStateModel(IntegrationTestCase):
 		)
 
 
+class TestV9OOSWorkflow(IntegrationTestCase):
+	"""Regression guards for V9 OOS modal + Return modal (Decisions 5.1-5.5, S2, S6).
+
+	V9 mandates a fixed 7-reason dropdown for Set OOS (NOT free text), a
+	conditional "Other" textarea, an audit-preview line, and a separate
+	Return-to-Service confirmation modal showing reason + days-ago context.
+
+	These tests fail if a future refactor reverts to the rejected free-text
+	Frappe Dialog approach.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_js_defines_all_seven_oos_reasons(self):
+		"""V9 Decision 5.2: 7 fixed reasons in OOS_REASONS array, "Other" last."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn("OOS_REASONS", source,
+			"OOS_REASONS constant missing — V9 Decision 5.2 mandates "
+			"a fixed list of 7 reasons.")
+		expected = [
+			"Plumbing", "Electrical", "Lock or Hardware",
+			"Cleaning required (deep)", "Damage",
+			"Maintenance scheduled", "Other",
+		]
+		for reason in expected:
+			self.assertIn(f'"{reason}"', source,
+				f"OOS reason {reason!r} missing from OOS_REASONS array.")
+
+	def test_js_defines_oos_modal_method(self):
+		"""V9 Decision 5.2 requires a proper modal (not free-text dialog)."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn("_open_oos_modal", source,
+			"_open_oos_modal() method missing — V9 Decision 5.2 requires "
+			"a custom modal with reason dropdown, not the rejected "
+			"free-text Frappe Dialog.")
+
+	def test_js_defines_return_modal_method(self):
+		"""V9 Decision 5.5 requires Return-to-Service confirmation modal."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn("_open_return_modal", source,
+			"_open_return_modal() method missing — V9 Decision 5.5 "
+			"requires a confirmation modal showing context (reason + "
+			"days-ago) before returning to service.")
+
+	def test_js_no_longer_uses_free_text_prompt_reason(self):
+		"""The free-text Frappe Dialog approach was REJECTED by Decision 5.2."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertNotIn("_prompt_reason", source,
+			"_prompt_reason() is back — that's the rejected free-text "
+			"OOS dialog approach. V9 Decisions 5.2 and 5.5 require "
+			"separate modals for Set OOS and Return to Service.")
+
+	def test_css_defines_modal_classes(self):
+		"""Modal CSS classes must be present."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		required_classes = [
+			".hamilton-modal-backdrop",
+			".hamilton-oos-modal",
+			".hamilton-oos-note-wrap",
+			".hamilton-modal-audit",
+			".hamilton-modal-context",
+			".hamilton-oos-info",
+			".hamilton-guest-info",
+		]
+		for cls in required_classes:
+			self.assertIn(cls, css,
+				f"CSS class {cls} missing — required for V9 OOS modal "
+				f"+ Return modal + tile context panels.")
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

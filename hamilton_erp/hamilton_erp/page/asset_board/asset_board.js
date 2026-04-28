@@ -11,6 +11,20 @@ const COUNTDOWN_THRESHOLD_MIN = 60;
 // surface without a user interaction. 15s is cheap on Frappe and visually
 // imperceptible. Per V9_CANONICAL_MOCKUP.html line 1498.
 const LIVE_TICK_MS = 15000;
+
+// V9 Decision 5.2: 7 fixed OOS reasons in a global list. "Other" must
+// always remain the last option — it's the required escape hatch and
+// triggers the conditional note field. Per V9_CANONICAL_MOCKUP.html
+// line 823. Phase 2 will wire this to an admin-editable DocType.
+const OOS_REASONS = [
+	"Plumbing",
+	"Electrical",
+	"Lock or Hardware",
+	"Cleaning required (deep)",
+	"Damage",
+	"Maintenance scheduled",
+	"Other",
+];
 //
 
 frappe.pages["asset-board"].on_page_load = (wrapper) => {
@@ -416,8 +430,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		$overlay.find("[data-action]").on("click.action", (e) => {
 			e.stopPropagation();
 			const action = $(e.currentTarget).data("action");
-			if (action === "oos" || action === "return") {
-				this._prompt_reason(asset, action);
+			if (action === "oos") {
+				this.collapse_expanded();
+				this._open_oos_modal(asset);
+			} else if (action === "return") {
+				this.collapse_expanded();
+				this._open_return_modal(asset);
 			} else {
 				this._run_action(asset, action);
 			}
@@ -491,26 +509,57 @@ hamilton_erp.AssetBoard = class AssetBoard {
 					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set OOS")}</button>
 				`;
 				break;
-			case "Occupied":
+			case "Occupied": {
+				// V9 Decision (mockup): guest-info panel above Vacate buttons.
+				// Mockup parallel: V9_CANONICAL_MOCKUP.html line 1086 (guest-info).
+				// Production lacks asset.guest_name; gracefully degrade to elapsed-only.
+				let guest_name_html = "";
+				if (asset.guest_name) {
+					guest_name_html = `<div class="hamilton-guest-name">${frappe.utils.escape_html(asset.guest_name)}</div>`;
+				}
+				let elapsed_html = "";
 				if (asset.session_start) {
-					info = `<div class="hamilton-expand-info">${this._format_elapsed(new Date(asset.session_start))}</div>`;
+					const elapsed = this._format_elapsed(new Date(asset.session_start));
+					elapsed_html = `<div class="hamilton-guest-elapsed">${frappe.utils.escape_html(elapsed)} ${__("elapsed")}</div>`;
+				}
+				if (guest_name_html || elapsed_html) {
+					info = `<div class="hamilton-guest-info">${guest_name_html}${elapsed_html}</div>`;
 				}
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-key">${__("Vacate \u2014 Key Return")}</button>
 					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-rounds">${__("Vacate \u2014 Rounds")}</button>
 				`;
 				break;
+			}
 			case "Dirty":
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-amber" data-action="clean">${__("Mark Clean")}</button>
 					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set OOS")}</button>
 				`;
 				break;
-			case "Out of Service":
+			case "Out of Service": {
+				// V9 Decision 5.4: tapping OOS tile shows full context
+				// (reason + who-set + days-ago) above Return button.
+				// Mockup parallel: V9_CANONICAL_MOCKUP.html line 1112 (oos-info).
+				// Production lacks asset.oos_set_by; gracefully degrade.
+				const reason = asset.reason
+					? frappe.utils.escape_html(asset.reason)
+					: __("Reason unknown");
+				const days_text = this._format_oos_days_ago(asset);
+				const meta_line = days_text
+					? `<div class="hamilton-oos-info-meta">${__("Set")}: ${frappe.utils.escape_html(days_text)}</div>`
+					: "";
+				info = `
+					<div class="hamilton-oos-info">
+						<div class="hamilton-oos-info-reason">${reason}</div>
+						${meta_line}
+					</div>
+				`;
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-green" data-action="return">${__("Return to Service")}</button>
 				`;
 				break;
+			}
 		}
 
 		// Caller (_show_overlay) wraps in .hamilton-tile-actions per mockup
@@ -520,26 +569,170 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		return `${info}${buttons}`;
 	}
 
-	// ── Reason prompt for OOS / Return ──────────────────────
-	_prompt_reason(asset, action) {
-		const title = action === "oos"
-			? __("Set OOS")
-			: __("Return to Service");
-		const d = new frappe.ui.Dialog({
-			title: title,
-			fields: [{
-				fieldtype: "Small Text",
-				fieldname: "reason",
-				label: __("Reason"),
-				reqd: 1,
-			}],
-			primary_action_label: __("Confirm"),
-			primary_action: (values) => {
-				d.hide();
-				this._run_action(asset, action, {reason: values.reason});
-			},
+	// ── OOS modal (V9 Decisions 5.1, 5.2, S2, S6) ──────────
+	// Replaces the prior free-text Frappe Dialog. Mockup parallel:
+	// openOOSModal() at V9_CANONICAL_MOCKUP.html line 1405.
+	_open_oos_modal(asset) {
+		this._close_modals();
+		const user = (frappe.boot.user.full_name || frappe.session.user || "").toUpperCase();
+		const time_str = this._format_time(new Date());
+
+		const reason_options = OOS_REASONS.map(
+			(r) => `<option value="${frappe.utils.escape_html(r)}">${frappe.utils.escape_html(r)}</option>`
+		).join("");
+
+		const $modal = $(`
+			<div class="hamilton-modal-backdrop hamilton-shown" data-modal="oos">
+				<div class="hamilton-oos-modal" onclick="event.stopPropagation()">
+					<div class="hamilton-oos-modal-title">${__("Set OOS")}</div>
+					<div class="hamilton-oos-modal-asset">${frappe.utils.escape_html(asset.asset_code || asset.name)}</div>
+					<label for="hamilton-oos-reason">${__("Reason")}</label>
+					<select id="hamilton-oos-reason" class="hamilton-oos-reason-select">
+						<option value="">— ${__("Select reason")} —</option>
+						${reason_options}
+					</select>
+					<div class="hamilton-oos-note-wrap hamilton-hidden">
+						<div class="hamilton-oos-note-header">
+							<label for="hamilton-oos-note">${__('Note (required for "Other")')}</label>
+							<button type="button" class="hamilton-oos-note-clear">${__("Clear")}</button>
+						</div>
+						<textarea id="hamilton-oos-note" placeholder="${__("Describe the issue...")}"></textarea>
+					</div>
+					<div class="hamilton-modal-audit">
+						${__("By confirming, this action will be recorded as:")}<br>
+						<strong>${__("Set out of service by")} ${frappe.utils.escape_html(user)} ${__("at")} ${time_str}</strong>
+					</div>
+					<div class="hamilton-modal-actions">
+						<button class="hamilton-modal-btn hamilton-modal-btn-cancel">${__("Cancel")}</button>
+						<button class="hamilton-modal-btn hamilton-modal-btn-confirm">${__("Confirm")}</button>
+					</div>
+				</div>
+			</div>
+		`);
+
+		this.wrapper.find(".hamilton-board").append($modal);
+
+		const $select = $modal.find(".hamilton-oos-reason-select");
+		const $note_wrap = $modal.find(".hamilton-oos-note-wrap");
+		const $note = $modal.find("#hamilton-oos-note");
+
+		// V9 S6: toggle the wrapping element so label, textarea, and Clear
+		// button all show/hide together.
+		$select.on("change", () => {
+			if ($select.val() === "Other") {
+				$note_wrap.removeClass("hamilton-hidden");
+			} else {
+				$note_wrap.addClass("hamilton-hidden");
+			}
 		});
-		d.show();
+
+		$modal.find(".hamilton-oos-note-clear").on("click", () => {
+			$note.val("").focus();
+		});
+
+		// Click backdrop to close
+		$modal.on("click", (e) => {
+			if (e.target === $modal[0]) this._close_modals();
+		});
+
+		$modal.find(".hamilton-modal-btn-cancel").on("click", () => this._close_modals());
+
+		$modal.find(".hamilton-modal-btn-confirm").on("click", async () => {
+			const reason_value = $select.val();
+			if (!reason_value) {
+				frappe.show_alert({message: __("Please select a reason"), indicator: "orange"});
+				return;
+			}
+			let final_reason = reason_value;
+			if (reason_value === "Other") {
+				const note = ($note.val() || "").trim();
+				if (!note) {
+					frappe.show_alert({message: __('Note is required for "Other"'), indicator: "orange"});
+					return;
+				}
+				final_reason = `Other: ${note}`;
+			}
+			this._close_modals();
+			await this._run_action(asset, "oos", {reason: final_reason});
+		});
+	}
+
+	// ── Return-to-Service modal (V9 Decision 5.5) ─────────
+	// Mockup parallel: openReturnModal() at V9_CANONICAL_MOCKUP.html line 1445
+	// + renderReturnModalBody() at line 1456.
+	_open_return_modal(asset) {
+		this._close_modals();
+		const user = (frappe.boot.user.full_name || frappe.session.user || "").toUpperCase();
+		const time_str = this._format_time(new Date());
+		const reason = asset.reason || __("Reason unknown");
+		const days_text = this._format_oos_days_ago(asset);
+
+		const days_row = days_text
+			? `<div class="hamilton-modal-row">
+					<span class="hamilton-modal-key">${__("Set")}:</span>
+					<span class="hamilton-modal-val">${frappe.utils.escape_html(days_text)}</span>
+				</div>`
+			: "";
+
+		const $modal = $(`
+			<div class="hamilton-modal-backdrop hamilton-shown" data-modal="return">
+				<div class="hamilton-oos-modal" onclick="event.stopPropagation()">
+					<div class="hamilton-oos-modal-title">${__("Return to Service")}</div>
+					<div class="hamilton-oos-modal-asset">${frappe.utils.escape_html(asset.asset_code || asset.name)}</div>
+					<div class="hamilton-modal-context">
+						<div class="hamilton-modal-row">
+							<span class="hamilton-modal-key">${__("Reason")}:</span>
+							<span class="hamilton-modal-val">${frappe.utils.escape_html(reason)}</span>
+						</div>
+						${days_row}
+					</div>
+					<div class="hamilton-modal-audit">
+						${__("By confirming, this action will be recorded as:")}<br>
+						<strong>${__("Returned to service by")} ${frappe.utils.escape_html(user)} ${__("at")} ${time_str}</strong>
+					</div>
+					<div class="hamilton-modal-actions">
+						<button class="hamilton-modal-btn hamilton-modal-btn-cancel">${__("Cancel")}</button>
+						<button class="hamilton-modal-btn hamilton-modal-btn-confirm">${__("Confirm reason resolved")}</button>
+					</div>
+				</div>
+			</div>
+		`);
+
+		this.wrapper.find(".hamilton-board").append($modal);
+
+		$modal.on("click", (e) => {
+			if (e.target === $modal[0]) this._close_modals();
+		});
+
+		$modal.find(".hamilton-modal-btn-cancel").on("click", () => this._close_modals());
+
+		$modal.find(".hamilton-modal-btn-confirm").on("click", async () => {
+			this._close_modals();
+			// Backend `return_asset_from_oos` API still requires a reason
+			// argument. Use a static "Resolved" marker — the audit trail
+			// captures the operator + timestamp via Frappe's standard fields.
+			await this._run_action(asset, "return", {reason: "Resolved"});
+		});
+	}
+
+	_close_modals() {
+		this.wrapper.find(".hamilton-modal-backdrop").remove();
+	}
+
+	_format_oos_days_ago(asset) {
+		// V9 mockup uses asset.oosDays + asset.oosSetBy fields. Production
+		// derives from asset.hamilton_last_status_change (the asset's own
+		// last status change timestamp). If unavailable, returns null and
+		// the caller skips rendering the row.
+		if (!asset.hamilton_last_status_change) return null;
+		const now = new Date();
+		const set_at = new Date(asset.hamilton_last_status_change);
+		const ms = now - set_at;
+		if (isNaN(ms) || ms < 0) return null;
+		const days = Math.floor(ms / 86400000);
+		if (days <= 0) return __("Today");
+		if (days === 1) return __("1 day ago");
+		return `${days} ${__("days ago")}`;
 	}
 
 	// ── Run action against API — type: "POST" per DEC-058 ──
