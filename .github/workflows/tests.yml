@@ -176,6 +176,45 @@ jobs:
           bench --site test_site set-config allow_tests 1 --parse
           bench --site test_site set-config server_script_enabled 1 --parse
 
+      - name: Conformance — install-app alone produces correct state (no migrate yet)
+        working-directory: frappe-bench
+        # PROVE the after_install hook produces the correct setup-wizard state
+        # WITHOUT relying on a follow-up bench migrate. Frappe Cloud deploys
+        # that run install-app without an immediate migrate must still land
+        # users in a usable desk, not the setup-wizard loop.
+        # If this fails: the install path's _ensure_no_setup_wizard_loop()
+        # call from after_install isn't firing — debug install.py, do not
+        # paper over by moving logic into the workflow.
+        run: |
+          set -e
+          dhp_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDefaultValue WHERE parent='__default' AND defkey='desktop:home_page' AND defvalue='setup-wizard'" -B -N 2>/dev/null | tail -1)
+          if [ "$dhp_count" != "0" ]; then
+            echo "::error::install conformance (pre-migrate): desktop:home_page='setup-wizard' still present (count=$dhp_count) — install path not self-sufficient, after_install didn't call _ensure_no_setup_wizard_loop"
+            exit 1
+          fi
+          echo "✓ desktop:home_page='setup-wizard' cleared by after_install (no migrate needed)"
+
+          isc=$(bench --site test_site mariadb -e "SELECT is_setup_complete FROM \`tabInstalled Application\` WHERE app_name='hamilton_erp' LIMIT 1" -B -N 2>/dev/null | tail -1)
+          if [ "$isc" != "1" ]; then
+            echo "::error::install conformance (pre-migrate): hamilton_erp is_setup_complete='$isc' — install path not self-sufficient"
+            exit 1
+          fi
+          echo "✓ hamilton_erp is_setup_complete=1 after install-app alone"
+
+          # Also verify frappe + erpnext rows are healed (they're what
+          # frappe.is_setup_complete() actually reads).
+          for app in frappe erpnext; do
+            v=$(bench --site test_site mariadb -e "SELECT is_setup_complete FROM \`tabInstalled Application\` WHERE app_name='$app' LIMIT 1" -B -N 2>/dev/null | tail -1)
+            if [ "$v" != "1" ]; then
+              echo "::error::install conformance (pre-migrate): $app is_setup_complete='$v' — install path not self-sufficient"
+              exit 1
+            fi
+            echo "✓ $app is_setup_complete=1 after install-app alone"
+          done
+
+          echo ""
+          echo "✓ install-app alone produces correct setup state — no dependency on after_migrate"
+
       - name: Run bench migrate (fires after_migrate hook for desktop:home_page cleanup)
         working-directory: frappe-bench
         # bench install-app calls set_all_patches_as_completed but does NOT fire

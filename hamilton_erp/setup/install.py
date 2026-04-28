@@ -16,12 +16,57 @@ def after_install():
 	Order matters: ``_ensure_erpnext_prereqs`` must run BEFORE ``_seed_hamilton_data``
 	because ``seed_hamilton_env._ensure_walkin_customer`` looks up Customer Group
 	"All Customer Groups" and Territory "All Territories".
+
+	``_ensure_no_setup_wizard_loop`` runs LAST so the desk lands in a usable
+	state immediately after ``bench install-app`` — without depending on a
+	follow-up ``bench migrate`` to fire the after_migrate hook.
 	"""
 	_ensure_erpnext_prereqs()
 	_seed_hamilton_data()
 	_create_roles()
 	_set_role_permissions()
+	_ensure_no_setup_wizard_loop()
 	frappe.db.commit()
+
+
+def _ensure_no_setup_wizard_loop():
+	"""Heal the setup-wizard flash-loop state on a fresh ERPNext install.
+
+	Two things conspire to send users into a setup-wizard redirect loop on
+	fresh ERPNext sites:
+	  1. ``tabDefaultValue`` has ``parent='__default'``,
+	     ``defkey='desktop:home_page'``, ``defvalue='setup-wizard'`` — added
+	     by ERPNext's first-run defaults.
+	  2. ``Installed Application.is_setup_complete=0`` — flipped to 1 only
+	     when the wizard runs, which we don't run unattended.
+
+	Heal both. Called from BOTH ``after_install`` (so fresh ``bench
+	install-app`` deploys land usable without a follow-up ``bench migrate``)
+	AND ``after_migrate`` (via ``ensure_setup_complete`` — so existing sites
+	re-heal on every migrate too).
+
+	Idempotent: ``frappe.db.delete`` is a no-op when no row matches;
+	``frappe.db.set_value`` only fires for rows where ``is_setup_complete=0``.
+	"""
+	# Narrow filter — only the setup-wizard pin, not other home_page configs.
+	frappe.db.delete("DefaultValue", {
+		"parent": "__default",
+		"defkey": "desktop:home_page",
+		"defvalue": "setup-wizard",
+	})
+
+	# Heal is_setup_complete on every Installed Application row that's still 0.
+	# Frappe's is_setup_complete() reads the rows for app_name in
+	# ("frappe", "erpnext"); healing more rows than that is harmless and
+	# forward-compatible for any future app whose install marks itself complete.
+	for ia in frappe.get_all(
+		"Installed Application",
+		filters={"is_setup_complete": 0},
+		fields=["name"],
+	):
+		frappe.db.set_value(
+			"Installed Application", ia.name, "is_setup_complete", 1
+		)
 
 
 def _ensure_erpnext_prereqs():
@@ -103,36 +148,17 @@ def ensure_setup_complete():
 
 	Registered as ``after_migrate`` in hooks.py. Idempotent.
 	"""
-	for app_name in ("frappe", "erpnext"):
-		current = frappe.db.get_value(
-			"Installed Application",
-			{"app_name": app_name},
-			"is_setup_complete",
-		)
-		if current != 1:
-			frappe.db.set_value(
-				"Installed Application",
-				{"app_name": app_name},
-				"is_setup_complete",
-				1,
-			)
+	# Heal both the desktop:home_page='setup-wizard' DefaultValue row AND
+	# every Installed Application.is_setup_complete=0. Logic lives in
+	# _ensure_no_setup_wizard_loop() so after_install (fresh deploys) and
+	# after_migrate (this hook) share the same code path. Idempotent.
+	_ensure_no_setup_wizard_loop()
 
 	# Sync System Settings.setup_complete so anything reading it
 	# (error log UI, some older Frappe helpers) also sees True.
 	frappe.db.set_single_value(
 		"System Settings", "setup_complete", frappe.is_setup_complete()
 	)
-
-	# Fresh ERPNext leaves DefaultValue desktop:home_page='setup-wizard' set,
-	# which redirects the desk to setup-wizard on every load — the 2026-04-11
-	# asset-board flash-loop incident. Pinned by
-	# test_regression_desktop_home_page_not_setup_wizard. Idempotent: db.delete
-	# is a no-op if the row is absent.
-	frappe.db.delete("DefaultValue", {
-		"parent": "__default",
-		"defkey": "desktop:home_page",
-		"defvalue": "setup-wizard",
-	})
 
 	frappe.db.commit()
 	frappe.clear_cache(doctype="Installed Application")
