@@ -13,7 +13,7 @@ class TestAssetStatusLog(IntegrationTestCase):
 				"doctype": "Venue Asset",
 				"asset_name": "Test Room ASL1",
 				"asset_category": "Room",
-				"asset_tier": "Standard",
+				"asset_tier": "Single Standard",
 				"status": "Available",
 				"display_order": 1,
 			}
