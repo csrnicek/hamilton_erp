@@ -3,7 +3,7 @@
 **Status:** READY FOR IMPLEMENTATION. Synthesis of three V8 reviews (Claude, Grok, Reviewer 3). All four open questions answered by Chris on 2026-04-24. Ready for Claude Code handoff.
 
 **Created:** 2026-04-24
-**Supersedes:** nothing yet — V8 remains the source-of-truth mockup (`docs/design/asset_board_mockup_v7.html` path, currently `asset_board_FINAL_v2.html`) until V9 is built.
+**Supersedes:** nothing yet — V8 remains the source-of-truth mockup (`docs/design/V9_CANONICAL_MOCKUP.html` path, currently `asset_board_FINAL_v2.html`) until V9 is built.
 **Sibling document:** `decisions_log.md` — V8 locked decisions. This plan does NOT reverse any locked decision. Where a V9 change modifies a decision, it's called out explicitly.
 
 ---

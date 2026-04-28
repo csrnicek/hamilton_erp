@@ -1,0 +1,10 @@
+{
+  "canonical_version": "V9",
+  "canonical_path": "docs/design/V9_CANONICAL_MOCKUP.html",
+  "source_commit": "1cc9125",
+  "last_verified": "2026-04-28",
+  "body_sha256": "eb307dcd9db2882d38ba3cca9a858497ab4e26309464f93a9ef326d182cf7071",
+  "hash_scope": "canonical mockup body excluding gospel block (between GOSPEL_BLOCK_START and GOSPEL_BLOCK_END sentinels, inclusive)",
+  "amendments": "M1-M5 + S1-S6 (per ship commit 1cc9125)",
+  "notes": "V9 canonical asset board mockup. Body hash excludes the top gospel block so governance wording can evolve without changing the approved design fingerprint. To change the canonical body intentionally: (1) make the change, (2) recompute body_sha256, (3) update this manifest, (4) reference the change in decisions_log.md as an amendment in the same commit. To change to V10: create V10_CANONICAL_MOCKUP.html, archive this file to docs/design/archive/, update canonical_version + canonical_path + body_sha256 in this manifest."
+}
