@@ -11,6 +11,7 @@ class TestVenueSession(IntegrationTestCase):
 		return frappe.get_doc(
 			{
 				"doctype": "Venue Asset",
+				"asset_code": "T-VS1",
 				"asset_name": "Test Room VS1",
 				"asset_category": "Room",
 				"asset_tier": "Single Standard",
