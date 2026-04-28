@@ -16,18 +16,6 @@
 # This file is intentionally NOT run during normal CI — trigger manually
 # at Task 21 and Task 25 checkpoints, and before every go-live deploy.
 
-import unittest
-
-# Stale imports against the renamed lifecycle public API. Most calls reference
-# `assign_asset` (which was renamed to `start_session_for_asset` in the
-# 2026-04-15 lifecycle refactor) and `process_refund` (which doesn't exist).
-# Tracked as Taskmaster #26 — needs careful per-test rewrite + signature
-# audit. Skipping at module level until that work lands so CI is not blocked
-# by 28 ImportErrors that predate this PR.
-
-raise unittest.SkipTest("Stale lifecycle imports — see Taskmaster #26 for fix")
-
-
 import frappe
 import unittest
 import threading
