@@ -46,6 +46,7 @@
 
 .hamilton-header-venue { color: #ccc; font-weight: 700; }
 .hamilton-header-title { color: #999; }
+.hamilton-header-shift { color: #999; }
 .hamilton-header-sep { color: #444; }
 .hamilton-header-time { color: #666; font-variant-numeric: tabular-nums; }
 
@@ -710,4 +711,30 @@
 }
 .hamilton-guest-info .hamilton-guest-elapsed {
 	color: #9ca3af;
+}
+
+/* Vacate sub-buttons — V9 Decision 4.6.
+   Tap "Vacate" parent → expand to Key Return / Rounds sub-buttons in
+   styled red-tinted container. Mockup parallel: V9_CANONICAL_MOCKUP.html
+   line 503 (.vacate-subs CSS). */
+.hamilton-vacate-subs {
+	display: none;
+	flex-direction: column;
+	gap: 3px;
+	width: 100%;
+	margin-top: 3px;
+	padding: 3px;
+	background: rgba(239, 68, 68, 0.1);
+	border-radius: 3px;
+	border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.hamilton-vacate-subs.hamilton-vacate-subs-shown {
+	display: flex;
+}
+.hamilton-vacate-sub-btn {
+	background: rgba(239, 68, 68, 0.25);
+	border: 1px solid #ef4444;
+	color: #fca5a5;
+	font-size: 11px;
+	padding: 6px 6px;
 }

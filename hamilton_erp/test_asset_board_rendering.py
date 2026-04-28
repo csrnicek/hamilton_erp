@@ -595,6 +595,94 @@ class TestV9OOSWorkflow(IntegrationTestCase):
 				f"+ Return modal + tile context panels.")
 
 
+class TestV9VacateAndTabsAndHeader(IntegrationTestCase):
+	"""Regression guards for V9 Vacate sub-buttons + tab list + header shift.
+
+	Decisions covered: 1.1 (tab order), 1.2 (visibility), 4.6 (vacate sub-
+	buttons), 6.1 (header shift indicator).
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_js_tabs_include_vip_per_v9_spec(self):
+		"""V9 Decision 1.1 mandates VIP tab between Double and Waitlist."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			'id: "vip"', source,
+			"VIP tab missing from tabs getter — V9 Decision 1.1 lists "
+			"VIP as one of the 6 category tabs.",
+		)
+
+	def test_js_tabs_have_filter_for_auto_hide_empty(self):
+		"""V9 Decision 1.2: tab visibility uses has-at-least-one-asset rule."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"this.assets.some(t.filter)", source,
+			"Auto-hide-empty visibility check missing — V9 Decision 1.2 "
+			"requires tabs to hide when no asset matches their filter.",
+		)
+
+	def test_js_vacate_uses_parent_button_pattern(self):
+		"""V9 Decision 4.6: Vacate parent button → sub-buttons.
+
+		Tap "Vacate" → expands to Key Return / Rounds. Direct vacate-key /
+		vacate-rounds buttons WITHOUT a parent step is a Decision 4.6 violation.
+		"""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			'data-action="vacate-toggle"', source,
+			"vacate-toggle action missing — V9 Decision 4.6 requires a "
+			"parent Vacate button that expands to sub-buttons.",
+		)
+		self.assertIn(
+			"vacate_subs_open", source,
+			"vacate_subs_open state flag missing — required to track "
+			"whether sub-buttons are expanded.",
+		)
+
+	def test_js_header_includes_shift_indicator(self):
+		"""V9 Decision 6.1: header shows current shift label."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton-header-shift", source,
+			"hamilton-header-shift class missing — V9 Decision 6.1 "
+			"requires shift indicator in the header.",
+		)
+		self.assertIn(
+			"_compute_shift_label", source,
+			"_compute_shift_label() helper missing.",
+		)
+
+	def test_css_defines_vacate_subs_classes(self):
+		"""Vacate sub-buttons CSS must be present."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			".hamilton-vacate-subs", css,
+			".hamilton-vacate-subs CSS rule missing — required for V9 "
+			"Decision 4.6 sub-buttons UI.",
+		)
+		self.assertIn(
+			".hamilton-vacate-subs-shown", css,
+			".hamilton-vacate-subs-shown CSS rule missing — required to "
+			"display sub-buttons when parent Vacate is tapped.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
