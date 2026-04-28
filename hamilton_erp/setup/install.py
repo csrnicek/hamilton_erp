@@ -140,7 +140,17 @@ def ensure_setup_complete():
 
 
 def _create_roles():
-	"""Create Hamilton-specific roles if they do not already exist."""
+	"""Create Hamilton-specific roles and grant Administrator the Operator role.
+
+	Administrator needs ``Hamilton Operator`` to access the Asset Board page
+	and the whitelisted ``hamilton_erp.api`` endpoints. Frappe grants
+	Administrator implicit "all permissions" but role-based UI checks
+	(asset-board route, page permissions) test ``frappe.has_permission`` which
+	is role-driven. ``test_environment_health.test_administrator_has_hamilton_operator_role``
+	pins this contract; ``restore_dev_state()`` re-applies it after destructive
+	tests. This installs it once at app-install time so fresh deploys (CI,
+	new Frappe Cloud sites) start in the same state without manual setup.
+	"""
 	for role_name in ("Hamilton Operator", "Hamilton Manager", "Hamilton Admin"):
 		if not frappe.db.exists("Role", role_name):
 			frappe.get_doc(
@@ -150,6 +160,15 @@ def _create_roles():
 					"desk_access": 1,
 				}
 			).insert(ignore_permissions=True)
+
+	# Assign Hamilton Operator to Administrator. Idempotent.
+	if frappe.db.exists("User", "Administrator") and frappe.db.exists("Role", "Hamilton Operator"):
+		admin = frappe.get_doc("User", "Administrator")
+		existing_roles = {r.role for r in admin.roles}
+		if "Hamilton Operator" not in existing_roles:
+			admin.append("roles", {"role": "Hamilton Operator"})
+			admin.save(ignore_permissions=True)
+			frappe.logger().info("hamilton_erp: assigned Hamilton Operator role to Administrator")
 
 
 def _set_role_permissions():
