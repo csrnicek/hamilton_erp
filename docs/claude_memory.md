@@ -18,6 +18,7 @@ These are the durable docs in this repo. Future sessions consult them in this or
 | `docs/claude_memory.md` | Project state, what shipped, current focus, durable history | This file. Read at session start for context. |
 | `docs/decisions_log.md` | Locked design decisions (asset board V8/V9) | Before changing any asset board behavior. Follow Part 12 reversal protocol. |
 | `docs/lessons_learned.md` | What went wrong + how it was fixed | When tackling something similar to a past failure. |
+| `docs/design/V9_CANONICAL_MOCKUP.html` | V9 locked mockup; gospel reference for Asset Board UI implementation | Before writing any asset board JS/CSS. Port verbatim, only change selectors. Do not interpret. |
 | `docs/HAMILTON_LAUNCH_PLAYBOOK.md` | Operational risks for opening weekend | Before any launch-readiness work. Top 12 risks ranked. |
 | `docs/inbox/production_handoff_audit_merged_2026-04-25.md` | Outstanding handoff items (T1/T2 lists) | Before deciding next priority work. |
 | `docs/inbox.md` | Transient scratch / triage zone (NOT durable) | Triage at start of each session. Promote durable items to this file or delete. |
@@ -73,7 +74,7 @@ Claude Code + ChatGPT cross-review caught architectural drift one AI alone misse
 
 ### Other changes Apr 28
 
-- V8/ snapshot directory deleted (was untracked archive of pre-V9 design work; canonical content lives in `docs/decisions_log.md` and `docs/design/asset_board_mockup_v7.html` in main)
+- V8/ snapshot directory deleted (was untracked archive of pre-V9 design work; canonical content lives in `docs/decisions_log.md` and `docs/design/V9_CANONICAL_MOCKUP.html` in main)
 - Five inbox scratch notes intentionally preserved as transient (Throughput re-baseline, Test fixture factory, AoE bookmark, plus the three PR MERGED audit entries — the latter promoted to this file in PR #13)
 - Tier 0 production monitoring archived until Hamilton launch is imminent
 
@@ -765,7 +766,7 @@ Source: `github.com/mohamed-ameer/Frappe-ERPNext-Tutorial-Mastery`
 
 **V9 is live on `main`.** Squash commit `1cc9125` ("feat(asset-board): ship V9 — apply M1-M5 + S1-S6 + countdown colour reversal") merged PR #8 into `main` on 2026-04-24. **PR #8 is merged and closed.** The `feature/asset-board-ui-rebuild` remote branch was deleted as part of the squash merge.
 
-**Locked source of truth:** `docs/design/asset_board_mockup_v7.html` is now the V9 source-of-truth mockup. All 68 interactive tests pass. Do not edit it without first checking `docs/decisions_log.md` and following the Part 12 protocol for reversing a locked decision.
+**Locked source of truth:** `docs/design/V9_CANONICAL_MOCKUP.html` is now the V9 source-of-truth mockup. All 68 interactive tests pass. Do not edit it without first checking `docs/decisions_log.md` and following the Part 12 protocol for reversing a locked decision.
 
 **V9 integration plan archived:** `docs/design/archive/v9_integration_plan.md` (moved from `docs/design/` via `git mv` in commit `9eb5ff9`). Treat the archived plan as historical — V9 is shipped, the plan is no longer a live spec.
 

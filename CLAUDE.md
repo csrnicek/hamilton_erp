@@ -17,6 +17,34 @@ pattern.
 
 When in doubt, the answer is "let me check first."
 
+## V9 Canonical Mockup — Gospel Reference
+
+The file `docs/design/V9_CANONICAL_MOCKUP.html` is the locked, approved V9
+specification for the Asset Board UI. **This file is the gospel reference.**
+
+**Rules for Claude:**
+
+1. When implementing or modifying any Asset Board UI code, port from this file.
+   Do not interpret the design spec — port the mockup verbatim, only changing
+   selectors that differ between mockup and production conventions
+   (`.tile` → `.hamilton-tile`, etc.).
+2. If the mockup and production disagree on visual or behavioral specifics,
+   the mockup wins. Production drift is the bug.
+3. Do not modify the canonical mockup file casually. Changes require explicit
+   Chris approval and should be documented as amendments in
+   `docs/decisions_log.md`.
+4. If a future design change fully supersedes this file, the next Claude
+   session should create a new dated canonical file (e.g.,
+   `V10_CANONICAL_MOCKUP.html`) — do not edit the V9 file in place.
+
+**For port-from-mockup work:**
+- Read the mockup's relevant function/CSS section
+- Read production's current implementation
+- Bring production into byte-for-byte alignment with the mockup, only
+  changing selectors as needed
+- Verify in browser that production matches the mockup
+- Add regression tests guarding the ported pattern
+
 ## Frappe v16 Conventions
 
 When writing any Frappe code, consult these sources before writing:

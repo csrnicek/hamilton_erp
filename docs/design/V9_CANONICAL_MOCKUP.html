@@ -1,4 +1,68 @@
 <!DOCTYPE html>
+<!-- GOSPEL_BLOCK_START -->
+<!--
+================================================================================
+V9 CANONICAL MOCKUP — GOSPEL REFERENCE FOR ASSET BOARD UI
+
+This file is INTENDED to be the canonical V9 specification for the Asset
+Board UI. Whether it currently IS canonical depends on verification checks
+below — do not assume canonicality just because this comment claims it.
+
+VERIFY BEFORE TRUSTING (perform these checks in order):
+
+  1. CANONICAL CHAIN INTACT:
+     Check that no successor exists. Look for:
+       - docs/design/V10_CANONICAL_MOCKUP.html or higher
+       - any other V*_CANONICAL_MOCKUP.html in docs/design/
+     If a successor exists alongside this file, the canonical chain is
+     broken. STOP. Flag the discrepancy to the user. Do not use this file
+     as authoritative until the chain is repaired (typically by archiving
+     this file to docs/design/archive/).
+
+  2. MANIFEST POINTS HERE:
+     Check docs/design/canonical_mockup_manifest.json. Confirm:
+       - canonical_path matches this file's path
+       - canonical_version matches the V-number in this filename
+     If the manifest disagrees with this file, the manifest wins — it's
+     the machine-verifiable source of truth. This file may be stale.
+
+  3. CONTENT INTEGRITY:
+     The governance test test_canonical_mockup_body_fingerprint_matches_manifest
+     verifies the body of this file (excluding this gospel block) matches the
+     SHA-256 in the manifest. If that test is failing in CI, this file's
+     design content has been edited without going through the canonical-bump
+     process. The body is suspect.
+
+  4. RECENCY:
+     Last verified canonical: 2026-04-28. If today is more than 90 days
+     after that date, double-check that no design decisions in
+     docs/decisions_log.md have superseded content here. Stale verification
+     dates are a yellow flag, not an automatic invalidation.
+
+ONLY AFTER ALL FOUR CHECKS PASS:
+
+  This file is canonical V9. Port from it verbatim per CLAUDE.md rule 1
+  ("V9 Canonical Mockup — Gospel Reference"). When the mockup and production
+  disagree, the mockup wins. Production drift is the bug.
+
+IF ANY CHECK FAILS:
+
+  Do NOT use this file as authoritative. Flag the discrepancy to the user
+  and stop the task. The governance regime exists precisely to prevent
+  silent drift — a failing check means the regime is doing its job.
+
+CROSS-REFERENCE:
+  - Locked decisions: docs/decisions_log.md (Parts 1-12)
+  - Canonical manifest: docs/design/canonical_mockup_manifest.json
+  - V9 amendment plan: docs/design/archive/v9_integration_plan.md
+  - Governance tests: hamilton_erp/test_canonical_mockup_governance.py
+  - Implementation: hamilton_erp/hamilton_erp/page/asset_board/
+
+Contains all V9 amendments: M1-M5 + S1-S6 (per ship commit 1cc9125,
+"feat(asset-board): ship V9 — apply M1-M5 + S1-S6 + countdown colour reversal")
+================================================================================
+-->
+<!-- GOSPEL_BLOCK_END -->
 <html lang="en">
 <head>
 <meta charset="UTF-8">

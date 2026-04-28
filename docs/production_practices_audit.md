@@ -239,7 +239,7 @@ Below is what hamilton_erp has *today* (2026-04-27, branch `fix/ci-vendor-setup-
 
 ### 19. Frontend
 - Asset board page DocType: `hamilton_erp/page/asset_board/asset_board.json`.
-- `docs/design/asset_board_mockup_v7.html` (69 KB), `docs/design/asset_board_ui.md` (5.7 KB), V9 commits 2026-04-27.
+- `docs/design/V9_CANONICAL_MOCKUP.html` (69 KB), `docs/design/asset_board_ui.md` (5.7 KB), V9 commits 2026-04-27.
 - 9 `.js` files.
 - **Missing**: no bundle analyzer; no Lighthouse CI; no browser support matrix; no INP measurement; no error boundaries doc.
 

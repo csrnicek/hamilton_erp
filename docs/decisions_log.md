@@ -3,7 +3,7 @@
 **Status:** LOCKED. Decisions on this page are FINAL and must not be re-opened without an explicit discussion and documented reversal.
 
 **Last updated:** 2026-04-24
-**Source-of-truth mockup:** `docs/design/asset_board_mockup_v7.html`
+**Source-of-truth mockup:** `docs/design/V9_CANONICAL_MOCKUP.html`
 **PR:** #8 on branch `feature/asset-board-ui-rebuild`
 **Mockup interactive tests:** 59 automated tests, all passing (pulse visibility, tile sizing, state transitions, modal flows, tab configuration, countdown behaviour)
 
