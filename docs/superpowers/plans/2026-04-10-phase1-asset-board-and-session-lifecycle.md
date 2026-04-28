@@ -2591,6 +2591,8 @@ Removing the Task 9 `TODO(task-11)` markers in `lifecycle.py` (lines ~500 and ~5
   }
   ```
 
+> **Superseded by V9 (2026-04-24, commit 1cc9125):** The `data-asset-code` DOM attribute requirement no longer applies. See `docs/decisions_log.md` Part 2 V9 Amendment for current tile attribute spec.
+
 - [ ] **Step 2: Expand `asset_board.css`**
 
   Append to `hamilton_erp/hamilton_erp/public/css/asset_board.css`:

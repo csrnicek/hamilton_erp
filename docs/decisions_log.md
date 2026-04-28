@@ -91,6 +91,18 @@ Tiles NEVER stretch their row — the expanded view is a separate absolutely-pos
 
 Pulsing red badge in tab label. Count includes all overtime tiles across all categories, plus all OOS tiles. When zero, badge hidden.
 
+### Amendment 2026-04-24 (V9 ship 1cc9125): data-asset-code removed from tile DOM attributes
+
+V9 deliberately removed `data-asset-code` from the tile's DOM attributes. Rationale and current state:
+
+- `data-asset-name` (Frappe docname / primary key) is now the sole canonical DOM lookup key for tiles
+- `asset_code` continues to render as the visible top-left label inside `.hamilton-tile-code` div, but is no longer queryable as a DOM attribute
+- All JS selectors use `[data-asset-name="..."]` exclusively (see `asset_board.js` around line 558)
+- Two commits in repo history touched the literal string `data-asset-code`: 029ff98 (V8 add), 1cc9125 (V9 remove)
+- Zero downstream code, CSS, or tests reference the missing attribute
+
+Original Task 17.4 spec ("verify data-asset-code exists") is officially superseded by this amendment.
+
 ---
 
 ## Part 3 — Time-status states (Occupied tiles)
