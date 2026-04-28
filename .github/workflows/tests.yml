@@ -53,6 +53,20 @@ jobs:
           ref: version-16
           path: erpnext
 
+      - name: Checkout payments (develop — no version-16 branch yet)
+        # frappe/payments has not cut a version-16 branch (only v14, v15,
+        # v15-hotfix, develop as of 2026-04-28). Required so Frappe's
+        # IntegrationTestCase.setUpClass dependency walk can resolve the
+        # Payment Gateway DocType for hamilton_erp's 6 doctype tests
+        # (transitive Link via User → ERPNext POS chain → Payment Gateway).
+        # Switch to version-16 once frappe/payments cuts that branch.
+        # See docs/inbox.md 2026-04-28 entry for production deploy implications.
+        uses: actions/checkout@v4
+        with:
+          repository: frappe/payments
+          ref: develop
+          path: payments
+
       - name: Setup Python 3.14
         uses: actions/setup-python@v5
         with:
@@ -100,6 +114,10 @@ jobs:
       - name: Add ERPNext to bench
         working-directory: frappe-bench
         run: bench get-app --skip-assets erpnext "${GITHUB_WORKSPACE}/erpnext"
+
+      - name: Add Payments to bench (Payment Gateway DocType for test bootstrap)
+        working-directory: frappe-bench
+        run: bench get-app --skip-assets payments "${GITHUB_WORKSPACE}/payments"
 
       - name: Add hamilton_erp to bench
         working-directory: frappe-bench
@@ -152,6 +170,7 @@ jobs:
             --admin-password admin \
             --no-mariadb-socket \
             --install-app erpnext \
+            --install-app payments \
             --install-app hamilton_erp \
             --verbose
           bench --site test_site set-config allow_tests 1 --parse
@@ -195,6 +214,16 @@ jobs:
           assert_exists "Territory" "All Territories"
           assert_exists "Territory" "Default"
           assert_exists "Customer" "Walk-in"
+
+          # Sanity: payments app installed → Payment Gateway DocType exists.
+          # If this fails, IntegrationTestCase.setUpClass will fail on the
+          # 6 hamilton_erp doctype tests. See docs/inbox.md 2026-04-28.
+          pg_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDocType WHERE name='Payment Gateway'" -B -N 2>/dev/null | tail -1)
+          if [ "$pg_count" != "1" ]; then
+            echo "::error::install conformance: DocType 'Payment Gateway' not found (count=$pg_count); frappe/payments install failed?"
+            exit 1
+          fi
+          echo "✓ DocType 'Payment Gateway' present (frappe/payments installed)"
 
           # Asset count assertion — must be exactly 59 per DEC-054 §1.
           count_raw=$(bench --site test_site execute frappe.db.count --kwargs "{'dt': 'Venue Asset'}" 2>&1 | tail -1)

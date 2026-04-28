@@ -112,7 +112,7 @@ Custom Frappe/ERPNext v16 app for Club Hamilton — a men's bathhouse in Hamilto
 Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lifecycle.md`
 - 25 tasks, TDD, Subagent-Driven Development
 - Test harness: 26 tests passing (6 lifecycle, 3 locks, 17 venue_asset)
-- 6 pre-existing setUpClass failures in Phase 0 stub doctypes — known, out of scope
+- 6 pre-existing IntegrationTestCase setUpClass failures from transitive Link-field dependency on Payment Gateway. NOT actually stubs — real tests with real assertions. Frappe's `IntegrationTestCase.setUpClass` walks every Link-field on the test's DocType recursively; for shift_record/comp_admission_log/cash_reconciliation/cash_drop/venue_session/asset_status_log, the chain ends at Payment Gateway which lives in `frappe/payments` (not in vanilla frappe + erpnext). Local dev benches that have frappe/payments installed pass; CI now installs frappe/payments@develop to fix this (see .github/workflows/tests.yml). Production deploys may also need frappe/payments — see docs/inbox.md 2026-04-28 entry.
 
 ## Workflow rules
 
@@ -162,7 +162,9 @@ Review files are saved at:
 ## Common Issues and Solutions
 
 ### Tests fail with setUpClass errors
-Phase 0 stub doctypes fail with setUpClass — ignore unless they appear in the 5 core test modules.
+If failures are in the 6 doctype tests (shift_record/comp_admission_log/cash_reconciliation/cash_drop/venue_session/asset_status_log) with `DoesNotExistError: DocType Payment Gateway not found` — frappe/payments isn't installed in the bench. CI installs it from develop branch automatically; for local dev: `bench get-app https://github.com/frappe/payments && bench --site SITE install-app payments`.
+
+Other setUpClass errors warrant investigation — they're not the documented Payment Gateway issue.
 
 ### Redis lock contention during tests
 A previous crash left a Redis key. Wait 15s for TTL expiry, or `redis-cli FLUSHDB` (test site ONLY).
