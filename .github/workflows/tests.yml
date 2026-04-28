@@ -205,12 +205,15 @@ jobs:
           echo "✓ Venue Asset count = 59"
 
           # desktop:home_page row should be cleared by ensure_setup_complete.
-          dhp_raw=$(bench --site test_site execute frappe.db.count --kwargs "{'dt': 'DefaultValue', 'filters': {'parent': '__default', 'defkey': 'desktop:home_page', 'defvalue': 'setup-wizard'}}" 2>&1 | tail -1)
-          if [ "$dhp_raw" != "0" ]; then
-            echo "::error::install conformance: DefaultValue desktop:home_page='setup-wizard' still present (count=$dhp_raw); ensure_setup_complete didn't clean it"
+          # Using `bench mariadb -B -N` (batch mode, no headers) for clean
+          # output instead of `bench execute frappe.db.count` with nested
+          # filters, which doesn't parse cleanly via --kwargs JSON.
+          dhp_count=$(bench --site test_site mariadb -e "SELECT COUNT(*) FROM tabDefaultValue WHERE parent='__default' AND defkey='desktop:home_page' AND defvalue='setup-wizard'" -B -N 2>/dev/null | tail -1)
+          if [ "$dhp_count" != "0" ]; then
+            echo "::error::install conformance: DefaultValue desktop:home_page='setup-wizard' still present (count='$dhp_count'); ensure_setup_complete didn't clean it"
             exit 1
           fi
-          echo "✓ DefaultValue desktop:home_page='setup-wizard' cleaned"
+          echo "✓ DefaultValue desktop:home_page='setup-wizard' cleaned (count=0)"
 
           echo ""
           echo "✓ Install path conformance passed — after_install + after_migrate produced expected state"
