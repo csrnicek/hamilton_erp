@@ -388,6 +388,128 @@ class TestExpandOverlayContract(IntegrationTestCase):
 		)
 
 
+class TestV9TimeStateModel(IntegrationTestCase):
+	"""Regression guards for the V9 3-state time model (Decision 3.1).
+
+	V9 explicitly REJECTED the prior 2-state warning/overtime model
+	(Part 10 of decisions_log.md). The correct model is:
+	  normal:    remaining > 60       → no text on tile
+	  countdown: 0 < remaining <= 60  → red "Xm left"
+	  overtime:  remaining <= 0       → red "Xm late" + OT badge + pulse
+
+	These tests fail loudly if a future refactor reverts to the rejected
+	2-stage warning/overtime model.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_js_defines_countdown_threshold_constant(self):
+		"""V9 Decision 3.1 requires COUNTDOWN_THRESHOLD_MIN = 60."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"COUNTDOWN_THRESHOLD_MIN = 60",
+			source,
+			"COUNTDOWN_THRESHOLD_MIN constant missing or wrong value. "
+			"V9 Decision 3.1 mandates 60 minutes as the countdown threshold.",
+		)
+
+	def test_js_defines_compute_time_status(self):
+		"""3-state classifier function must exist."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_compute_time_status",
+			source,
+			"_compute_time_status() function missing. V9 Decision 3.1 "
+			"requires a 3-state classifier (normal/countdown/overtime).",
+		)
+
+	def test_js_uses_15s_live_tick(self):
+		"""V9 Decision 3.7: live tick cadence is 15 seconds."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"LIVE_TICK_MS = 15000",
+			source,
+			"LIVE_TICK_MS constant missing or wrong value. V9 Decision 3.7 "
+			"mandates 15-second live-tick cadence (was 30s in production).",
+		)
+
+	def test_js_does_not_implement_rejected_warning_state(self):
+		"""V9 Decision 3.2 + Part 10: 2-state warning/overtime REJECTED.
+
+		The hamilton-warning class was the visible artifact of the rejected
+		two-stage model. If this string reappears, the rejected design
+		shipped again.
+		"""
+		with open(self._js_path()) as f:
+			js = f.read()
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertNotIn(
+			'addClass("hamilton-warning"', js,
+			"hamilton-warning class is being added — that's the rejected "
+			"V6 two-stage warning state. V9 Decision 3.2 requires single "
+			"overtime state.",
+		)
+		self.assertNotIn(
+			".hamilton-warning", css,
+			"hamilton-warning CSS rule still present — V9 Decision 3.2 "
+			"removed the two-stage warning state.",
+		)
+
+	def test_css_defines_countdown_text_style(self):
+		"""Countdown text must be red (V9 Amendment 2026-04-24)."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			".hamilton-tile-time", css,
+			".hamilton-tile-time class missing — V9 Decision 3.1 requires "
+			"inline countdown/overtime text on occupied tiles.",
+		)
+
+	def test_css_defines_ot_corner_badge_top_centered(self):
+		"""V9 Decision 3.4: OT badge sits centered on top border, not in corner."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			".hamilton-tile-corner-badge.hamilton-corner-ot", css,
+			"OT corner badge CSS rule missing — V9 Decision 3.4 requires "
+			"the OT badge to hang off the top border (corner placement "
+			"REJECTED).",
+		)
+
+	def test_css_pulse_animation_includes_background_flash(self):
+		"""V9 Decision 3.5: pulse must include >25-unit brightness swing.
+
+		Box-shadow alone produced ~17 unit swing in V8 visual review, too
+		subtle. V9 added background-color flash to bump perceptible brightness.
+		"""
+		with open(self._css_path()) as f:
+			css = f.read()
+		self.assertIn(
+			"hamilton-pulse-strong", css,
+			"hamilton-pulse-strong keyframe missing — V9 Decision 3.5 "
+			"requires bg-color flash for visible pulse.",
+		)
+		self.assertIn(
+			"background-color: #6b1a1a", css,
+			"Pulse keyframe missing the bright-flash background-color step. "
+			"V9 Decision 3.5 mandates a >25-unit brightness swing.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

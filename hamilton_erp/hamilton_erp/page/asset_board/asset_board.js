@@ -1,4 +1,16 @@
 frappe.provide("hamilton_erp");
+
+// V9 Decision 3.1: 3-state time model on occupied tiles.
+//   normal:    remaining > 60       → no text on tile
+//   countdown: 0 < remaining <= 60  → red "Xm left"
+//   overtime:  remaining <= 0       → red "Xm late" + OT badge + pulse
+// Per V9_CANONICAL_MOCKUP.html line 932 and decisions_log.md Part 3.1.
+const COUNTDOWN_THRESHOLD_MIN = 60;
+
+// V9 Decision 3.7: live-tick cadence so countdown→overtime transitions
+// surface without a user interaction. 15s is cheap on Frappe and visually
+// imperceptible. Per V9_CANONICAL_MOCKUP.html line 1498.
+const LIVE_TICK_MS = 15000;
 //
 
 frappe.pages["asset-board"].on_page_load = (wrapper) => {
@@ -152,7 +164,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		}
 
 		this._render_footer();
-		this.refresh_overtime_overlays();
+		// _render_tile() now embeds time-state (countdown/overtime) directly,
+		// so no post-render mutation pass is needed (V9 Decision 3.1 port).
 		this._bind_tile_events();
 	}
 
@@ -186,22 +199,17 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	// ── Watch tab ───────────────────────────────────────────
+	// Per V9 Decision 3.2: single overtime state (no warning). Watch tab
+	// shows OOS + OVERTIME tiles only. Mockup parallel: isWatched() at
+	// V9_CANONICAL_MOCKUP.html line 941.
 	_render_watch_content() {
-		const now = new Date();
-		const grace = this.settings.grace_minutes || 15;
 		const attention = [];
 
 		for (const a of this.assets) {
 			if (a.status === "Out of Service") {
 				attention.push({...a, _watch: "oos"});
-			} else if (a.status === "Occupied" && a.session_start) {
-				const elapsed = (now - new Date(a.session_start)) / 60000;
-				const stay = a.expected_stay_duration || 360;
-				if (elapsed > stay + grace) {
-					attention.push({...a, _watch: "overtime"});
-				} else if (elapsed > stay) {
-					attention.push({...a, _watch: "warning"});
-				}
+			} else if (this._compute_time_status(a) === "overtime") {
+				attention.push({...a, _watch: "overtime"});
 			}
 		}
 
@@ -211,14 +219,14 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			</div>`;
 		}
 
-		const warn_ot = attention.filter((a) => a._watch !== "oos");
+		const overtime = attention.filter((a) => a._watch === "overtime");
 		const oos = attention.filter((a) => a._watch === "oos");
 		let html = "";
 
-		// Group warning/overtime by category
-		if (warn_ot.length > 0) {
+		// Group overtime tiles by category
+		if (overtime.length > 0) {
 			const groups = {};
-			for (const a of warn_ot) {
+			for (const a of overtime) {
 				const cat = a.asset_tier || a.asset_category;
 				if (!groups[cat]) groups[cat] = [];
 				groups[cat].push(a);
@@ -263,15 +271,83 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	// Security: every user-facing value is escaped with frappe.utils.escape_html.
 	// The test_security_audit.py XSS tests pin this contract by checking the
 	// literal string "frappe.utils.escape_html" appears in each interpolation.
+	// Port of mockup computeTimeStatus() at V9_CANONICAL_MOCKUP.html line 933.
+	// 3-state model (V9 Decision 3.1): null | 'normal' | 'countdown' | 'overtime'.
+	// Replaces production's prior 2-state warning/overtime model (which was
+	// explicitly REJECTED by Part 10 of decisions_log.md).
+	_compute_time_status(asset) {
+		if (asset.status !== "Occupied" || !asset.session_start) return null;
+		const now = new Date();
+		const elapsed_min = (now - new Date(asset.session_start)) / 60000;
+		const stay = asset.expected_stay_duration || 360;
+		const remaining = stay - elapsed_min;
+		if (remaining <= 0) return "overtime";
+		if (remaining <= COUNTDOWN_THRESHOLD_MIN) return "countdown";
+		return "normal";
+	}
+
 	_render_tile(asset) {
+		// Port of mockup tileHTML() at V9_CANONICAL_MOCKUP.html line 990.
+		// Tile classes: status + (countdown|overtime if applicable). The
+		// hamilton-source-tile class for dimming is added separately by
+		// _show_overlay() since production renders the overlay as a sibling
+		// element rather than re-rendering the whole board.
 		const status_cls = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
+		const ts = this._compute_time_status(asset);
+		const classes = ["hamilton-tile", status_cls];
+		if (ts === "countdown") classes.push("hamilton-countdown");
+		if (ts === "overtime") classes.push("hamilton-overtime");
+
+		// Corner badge — only on overtime tiles. V9 Decision 3.4 mandates
+		// tab-on-top-border position (corner placement was REJECTED).
+		let corner_badge = "";
+		if (ts === "overtime") {
+			corner_badge = `<span class="hamilton-tile-corner-badge hamilton-corner-ot">OT</span>`;
+		}
+
+		// OOS day counter (bottom-right) — V8 addition. Conditional on
+		// asset.oos_days being supplied by the API. If backend doesn't
+		// enrich, no counter renders (graceful degrade).
+		let oos_days_html = "";
+		if (asset.status === "Out of Service" && asset.oos_days != null) {
+			oos_days_html = `<span class="hamilton-oos-days">${frappe.utils.escape_html(String(asset.oos_days))}d</span>`;
+		}
+
+		// Time text on tile — V9 Decision 3.3 wording:
+		//   countdown → "Xm left" (red)
+		//   overtime  → "Xm late" / "Xh Xm late" (red)
+		//   normal    → no text (keeps board quiet)
+		let time_html = "";
+		if (ts === "countdown") {
+			const elapsed_min = (new Date() - new Date(asset.session_start)) / 60000;
+			const stay = asset.expected_stay_duration || 360;
+			const remaining = Math.max(0, Math.floor(stay - elapsed_min));
+			time_html = `<div class="hamilton-tile-time hamilton-countdown">${this._format_minutes(remaining)} left</div>`;
+		} else if (ts === "overtime") {
+			const elapsed_min = (new Date() - new Date(asset.session_start)) / 60000;
+			const stay = asset.expected_stay_duration || 360;
+			const over_by = Math.floor(elapsed_min - stay);
+			time_html = `<div class="hamilton-tile-time">${this._format_minutes(over_by)} late</div>`;
+		}
+
 		return `
-			<div class="hamilton-tile ${status_cls}"
+			<div class="${classes.join(" ")}"
 			     data-asset-name="${frappe.utils.escape_html(asset.name)}"
 			     data-status="${frappe.utils.escape_html(asset.status)}">
+				${corner_badge}
 				<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>
+				${time_html}
+				${oos_days_html}
 			</div>
 		`;
+	}
+
+	_format_minutes(minutes) {
+		// Port of mockup fmtElapsed() at V9_CANONICAL_MOCKUP.html line 947.
+		const h = Math.floor(minutes / 60);
+		const m = minutes % 60;
+		if (h === 0) return `${m}m`;
+		return `${h}h ${m}m`;
 	}
 
 	// ── Tile expand / collapse ──────────────────────────────
@@ -621,57 +697,33 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	get_watch_count() {
-		const now = new Date();
-		const grace = this.settings.grace_minutes || 15;
+		// Per V9 Decision 3.2: single overtime state (no warning).
+		// Watch count = OOS + OVERTIME (not warning, not countdown).
 		let count = 0;
 		for (const a of this.assets) {
 			if (a.status === "Out of Service") {
 				count++;
-			} else if (a.status === "Occupied" && a.session_start) {
-				const elapsed = (now - new Date(a.session_start)) / 60000;
-				const stay = a.expected_stay_duration || 360;
-				if (elapsed > stay) count++;
+			} else if (this._compute_time_status(a) === "overtime") {
+				count++;
 			}
 		}
 		return count;
 	}
 
-	// ── Overtime ticker (Task 19) ───────────────────────────
+	// ── Live tick (V9 Decision 3.7) ─────────────────────────
+	// Re-render the active tab on a 15s cadence so countdown→overtime
+	// transitions surface without user interaction. Skip the tick if an
+	// overlay or modal is open so in-flight DOM (form selections, typed
+	// notes) is preserved. Mockup parallel: liveTick() at line 1498 of
+	// V9_CANONICAL_MOCKUP.html.
 	start_overtime_ticker() {
 		this.overtime_interval = setInterval(() => {
-			this.refresh_overtime_overlays();
+			// Skip during expanded overlay — the source-tile dim + overlay
+			// would be wiped by a re-render and recreated mid-interaction.
+			if (this.expanded_asset) return;
+			this.render_active_tab();
 			this._update_tab_badges();
-		}, 30_000);
-	}
-
-	refresh_overtime_overlays() {
-		const grace = this.settings.grace_minutes || 15;
-		const now = new Date();
-		for (const asset of this.assets) {
-			const $tile = this.wrapper.find(
-				`.hamilton-tile[data-asset-name="${$.escapeSelector(asset.name)}"]`
-			);
-			if (!$tile.length) continue;
-
-			$tile.removeClass("hamilton-warning hamilton-overtime");
-			$tile.find(".hamilton-time-badge").remove();
-
-			if (asset.status !== "Occupied" || !asset.session_start) continue;
-
-			const start = new Date(asset.session_start);
-			const elapsed_min = (now - start) / 60000;
-			const stay = asset.expected_stay_duration || 360;
-
-			if (elapsed_min > stay + grace) {
-				$tile.addClass("hamilton-overtime");
-				const over = Math.floor(elapsed_min - stay);
-				$tile.append(`<div class="hamilton-time-badge badge-ot">${over}m late</div>`);
-			} else if (elapsed_min > stay) {
-				$tile.addClass("hamilton-warning");
-				const over = Math.floor(elapsed_min - stay);
-				$tile.append(`<div class="hamilton-time-badge badge-warn">&#9201; ${over}m late</div>`);
-			}
-		}
+		}, LIVE_TICK_MS);
 	}
 
 	// ── Header clock ────────────────────────────────────────
