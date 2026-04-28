@@ -19,8 +19,11 @@ When in doubt, the answer is "let me check first."
 
 ## V9 Canonical Mockup — Gospel Reference
 
-The file `docs/design/V9_CANONICAL_MOCKUP.html` is the locked, approved V9
-specification for the Asset Board UI. **This file is the gospel reference.**
+The file `docs/design/V9_CANONICAL_MOCKUP.html` is INTENDED to be the canonical
+V9 specification for the Asset Board UI. Whether it currently IS canonical
+depends on the verification checks in the gospel block at the top of the file
+(canonical chain intact, manifest points here, content integrity via fingerprint
+test, recency). Verify those checks before trusting the file as authoritative.
 
 **Rules for Claude:**
 
@@ -34,7 +37,7 @@ specification for the Asset Board UI. **This file is the gospel reference.**
    Chris approval and should be documented as amendments in
    `docs/decisions_log.md`.
 4. If a future design change fully supersedes this file, the next Claude
-   session should create a new dated canonical file (e.g.,
+   session should create a new version-numbered canonical file (e.g.,
    `V10_CANONICAL_MOCKUP.html`) — do not edit the V9 file in place.
 
 **For port-from-mockup work:**

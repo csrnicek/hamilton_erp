@@ -23,6 +23,7 @@ Stronger future protections (deferred):
   - Policy that governance tests cannot be changed in the same PR as the
     canonical mockup itself
 """
+import ast
 import os
 
 import frappe
@@ -77,4 +78,64 @@ class TestGovernanceTestPresence(IntegrationTestCase):
 				f"regime requires all listed test methods. If a method has "
 				f"been intentionally renamed or removed, update "
 				f"EXPECTED_TEST_METHODS in this presence guard accordingly.",
+			)
+
+	def test_governance_test_methods_have_assertions(self):
+		"""Each governance test method must contain at least one assertion call.
+
+		Closes Probe 4 of the 2026-04-28 adversarial review: a method body
+		replaced with `pass` while keeping the method name intact would pass
+		the name-only check above but silently do nothing. AST parsing
+		confirms the body actually contains an assertion call.
+		"""
+		path = os.path.join(_hamilton_erp_root(), self.GOVERNANCE_TEST_PATH)
+		with open(path) as f:
+			tree = ast.parse(f.read())
+
+		ASSERTION_NAMES = {
+			"assertEqual", "assertNotEqual",
+			"assertTrue", "assertFalse",
+			"assertIn", "assertNotIn",
+			"assertIsNone", "assertIsNotNone",
+			"assertGreater", "assertGreaterEqual",
+			"assertLess", "assertLessEqual",
+			"assertRaises", "assertRaisesRegex",
+			"assertAlmostEqual",
+			"fail",
+		}
+
+		for node in ast.walk(tree):
+			if not isinstance(node, ast.FunctionDef):
+				continue
+			if node.name not in self.EXPECTED_TEST_METHODS:
+				continue
+
+			has_assertion = False
+			for sub in ast.walk(node):
+				if isinstance(sub, ast.Call):
+					func = sub.func
+					if isinstance(func, ast.Attribute):
+						if func.attr in ASSERTION_NAMES:
+							has_assertion = True
+							break
+				if isinstance(sub, ast.Assert):
+					has_assertion = True
+					break
+
+			self.assertTrue(
+				has_assertion,
+				f"\nGovernance test method '{node.name}' contains no\n"
+				f"assertion calls. The method body appears to be empty,\n"
+				f"`pass`-only, or otherwise non-functional.\n"
+				f"\n"
+				f"Each governance test must contain at least one assertion\n"
+				f"call (e.g., self.assertEqual, self.assertTrue, self.fail).\n"
+				f"\n"
+				f"To recover:\n"
+				f"  1. If the method was intentionally weakened: don't.\n"
+				f"     Restore the method body from a known-good commit:\n"
+				f"     git checkout {self.GOVERNANCE_TEST_PATH}\n"
+				f"  2. If the assertion was renamed or moved: ensure the\n"
+				f"     governance test method body contains a call from\n"
+				f"     the recognized assertion list.",
 			)
