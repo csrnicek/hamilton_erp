@@ -1,18 +1,10 @@
 import unittest
-
-# Phase 0 doctype stub — auto-generated test scaffold. setUpClass requires
-# Phase 1+ fixtures (Walk-in Customer, valid asset/session links) that the
-# stub itself can't produce, so the test class fails to initialize at module
-# load. Documented in CLAUDE.md as "6 pre-existing setUpClass failures in
-# Phase 0 stub doctypes — known, out of scope". Skipping at module level
-# until the stub is built out into a real doctype with proper test fixtures.
-raise unittest.SkipTest("Phase 0 stub doctype — out of scope per CLAUDE.md")
-
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import add_to_date, now_datetime
 
 
+@unittest.skip("Phase 0 stub doctype — out of scope per CLAUDE.md")
 class TestVenueSession(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
