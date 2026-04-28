@@ -39,6 +39,40 @@ jobs:
         with:
           path: hamilton_erp
 
+      - name: Enforce decisions_log update for manifest changes
+        if: github.event_name == 'pull_request'
+        working-directory: hamilton_erp
+        run: |
+          # Fetch origin/main so we have the base ref. Two-tree diff (..)
+          # is used instead of three-dot (...) because actions/checkout@v4
+          # uses fetch-depth: 1 by default — the shallow history doesn't
+          # contain a merge-base for three-dot diff to walk back to.
+          # Two-tree diff just compares the two trees directly, no history
+          # walk required.
+          git fetch --no-tags --depth=1 origin main
+
+          CHANGED=$(git diff --name-only origin/main..HEAD)
+
+          if echo "$CHANGED" | grep -q '^docs/design/canonical_mockup_manifest.json$'; then
+            if ! echo "$CHANGED" | grep -q '^docs/decisions_log.md$'; then
+              echo "ERROR: PR modifies docs/design/canonical_mockup_manifest.json"
+              echo "       without modifying docs/decisions_log.md"
+              echo ""
+              echo "Per the manifest's notes field, any canonical mockup body"
+              echo "change must reference an amendment in decisions_log.md in"
+              echo "the same commit. This prevents silent drift between the"
+              echo "canonical mockup and its locked design decisions."
+              echo ""
+              echo "If your change is purely cosmetic to the manifest (e.g.,"
+              echo "fixing a typo in the notes field that does NOT affect"
+              echo "body_sha256), this check is currently a strict gate."
+              echo "Open an issue if you have a legitimate manifest-only"
+              echo "change that should be exempt."
+              exit 1
+            fi
+          fi
+          echo "Coupling check passed."
+
       - name: Checkout frappe (version-16)
         uses: actions/checkout@v4
         with:

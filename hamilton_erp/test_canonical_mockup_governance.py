@@ -42,6 +42,73 @@ class TestCanonicalMockupGovernance(IntegrationTestCase):
 	is built to avoid.
 	"""
 
+	def _load_manifest_or_fail(self):
+		"""Load the canonical mockup manifest, converting raw Python errors
+		(FileNotFoundError, JSONDecodeError, KeyError) into clean assertion
+		failures with operator recovery guidance.
+
+		Improves the failure UX of probes 1.1, 1.2, 1.3, 1.5 from the
+		2026-04-28 adversarial review — those previously produced raw
+		Python tracebacks with no recovery hint.
+		"""
+		manifest_path = os.path.join(
+			_hamilton_erp_root(), "docs", "design",
+			"canonical_mockup_manifest.json"
+		)
+
+		if not os.path.isfile(manifest_path):
+			self.fail(
+				f"\nCanonical mockup manifest is missing at {manifest_path}.\n"
+				f"\n"
+				f"This file is the source of truth for which mockup is\n"
+				f"canonical and what its body fingerprint should be. It must\n"
+				f"not be deleted.\n"
+				f"\n"
+				f"To recover:\n"
+				f"  1. If accidental: revert with\n"
+				f"     git checkout docs/design/canonical_mockup_manifest.json\n"
+				f"  2. If intentional: that's a process failure. The manifest\n"
+				f"     must exist whenever a canonical mockup exists. Restore\n"
+				f"     from a known-good commit and consult the team before\n"
+				f"     removing the regime."
+			)
+
+		try:
+			with open(manifest_path) as f:
+				manifest = json.load(f)
+		except json.JSONDecodeError as e:
+			self.fail(
+				f"\nCanonical mockup manifest at {manifest_path} contains\n"
+				f"invalid JSON: {e}\n"
+				f"\n"
+				f"To recover:\n"
+				f"  1. Verify the file is well-formed JSON. Expected fields:\n"
+				f"     canonical_version, canonical_path, source_commit,\n"
+				f"     body_sha256, hash_scope.\n"
+				f"  2. If unsure what changed, revert with:\n"
+				f"     git checkout docs/design/canonical_mockup_manifest.json"
+			)
+
+		required_keys = ["canonical_version", "canonical_path",
+		                 "body_sha256", "source_commit"]
+		missing = [k for k in required_keys if k not in manifest]
+		if missing:
+			self.fail(
+				f"\nCanonical mockup manifest is missing required fields:\n"
+				f"  {missing}\n"
+				f"\n"
+				f"The manifest must contain all of: {required_keys}\n"
+				f"\n"
+				f"To recover:\n"
+				f"  1. Add the missing fields. body_sha256 should be the\n"
+				f"     SHA-256 of the canonical mockup body (excluding\n"
+				f"     gospel block sentinels).\n"
+				f"  2. If the manifest was reset to {{}}, revert with:\n"
+				f"     git checkout docs/design/canonical_mockup_manifest.json"
+			)
+
+		return manifest
+
 	def test_exactly_one_canonical_mockup_exists(self):
 		"""Only ONE V*_CANONICAL_MOCKUP.html may exist in docs/design/.
 
@@ -67,10 +134,23 @@ class TestCanonicalMockupGovernance(IntegrationTestCase):
 			r"canonical[_\-]?mockup.*\.html?", re.IGNORECASE
 		)
 
-		all_files = os.listdir(design_dir)
-		canonicals = sorted(f for f in all_files if canonical_pattern.match(f))
-		permissive_matches = [f for f in all_files if bypass_pattern.search(f)]
-		bypass_attempts = sorted(f for f in permissive_matches if f not in canonicals)
+		# Recursive scan via os.walk, excluding archive/ subdirectory.
+		# Subdirectories like docs/design/draft/ would otherwise allow a
+		# near-canonical-named file to evade detection (Probe 5 of the
+		# 2026-04-28 adversarial review).
+		all_paths = []
+		for root, dirs, files in os.walk(design_dir):
+			# Skip archive/ — superseded canonicals legitimately live there
+			if "archive" in root.split(os.sep):
+				continue
+			for fname in files:
+				rel = os.path.relpath(os.path.join(root, fname), design_dir)
+				all_paths.append(rel)
+
+		# Match against the basename for the patterns
+		canonicals = sorted(p for p in all_paths if canonical_pattern.match(os.path.basename(p)))
+		permissive_matches = [p for p in all_paths if bypass_pattern.search(os.path.basename(p))]
+		bypass_attempts = sorted(p for p in permissive_matches if p not in canonicals)
 
 		self.assertEqual(
 			bypass_attempts, [],
@@ -91,13 +171,20 @@ class TestCanonicalMockupGovernance(IntegrationTestCase):
 		)
 
 	def test_v9_canonical_mockup_present(self):
-		"""V9_CANONICAL_MOCKUP.html must exist as the current canonical."""
-		path = os.path.join(_design_dir(), "V9_CANONICAL_MOCKUP.html")
+		"""The current canonical (per manifest) must exist on disk."""
+		manifest = self._load_manifest_or_fail()
+
+		canonical_path = os.path.join(
+			_hamilton_erp_root(), manifest["canonical_path"]
+		)
 		self.assertTrue(
-			os.path.isfile(path),
-			f"V9_CANONICAL_MOCKUP.html not found at {path}. "
-			f"If a successor (V10+) exists, this test should be updated and "
-			f"V9 should live in docs/design/archive/.",
+			os.path.isfile(canonical_path),
+			f"Canonical mockup file declared in manifest "
+			f"({manifest['canonical_path']}) not found at {canonical_path}. "
+			f"Either: (a) the manifest's canonical_path field has been "
+			f"redirected to a wrong path, or (b) the canonical file has "
+			f"been moved/deleted. Verify the file exists and the manifest "
+			f"path matches reality.",
 		)
 
 	def test_no_stale_mockup_filenames_in_design_dir(self):
@@ -166,11 +253,7 @@ class TestCanonicalMockupGovernance(IntegrationTestCase):
 		(b) The change is unintentional. Revert with:
 		      git checkout docs/design/V9_CANONICAL_MOCKUP.html
 		"""
-		manifest_path = os.path.join(
-			_design_dir(), "canonical_mockup_manifest.json"
-		)
-		with open(manifest_path) as f:
-			manifest = json.load(f)
+		manifest = self._load_manifest_or_fail()
 
 		canonical_path = os.path.join(
 			_hamilton_erp_root(), manifest["canonical_path"]
