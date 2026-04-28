@@ -206,3 +206,19 @@ Working tree had +134 line scratch in docs/inbox.md based on PR #11's cleaned bl
 Branch protection gates checks at the workflow level, not the file-change level. So a docs-only PR runs the full Server Tests suite (~22 minutes). Initially felt like overhead. But it confirmed that no docs PR accidentally smuggled in a code change someone missed in review.
 
 **Rule going forward:** Don't try to skip CI for docs PRs. The 22-minute wait is the safety check.
+
+## 2026-04-28 — PR #16 governance findings deferred
+
+Three adversarial reviews on PR #16 surfaced findings deliberately not addressed in that PR. Documented here so future hardening can pick them up if they prove to be real problems:
+
+1. Same-PR coupling attack: A PR that changes both V9_CANONICAL_MOCKUP.html and canonical_mockup_manifest.json (with matching new hash) but does NOT update decisions_log.md will pass all CI tests. Mitigation: code review (human + claude-review) should catch unexplained body changes. Hard enforcement deferred — would generate false positives on cosmetic manifest fixes.
+
+2. Test method body integrity: test_governance_test_presence.py checks method NAMES exist, not method BODIES. A future session could replace a governance test body with `pass` while keeping the name. Mitigation: code review. Hard enforcement (test fingerprinting) deferred as overkill.
+
+3. M2 data-dependency rule gap: CLAUDE.md says "port the mockup verbatim" but some mockup features need backend data not in production. Future sessions hitting this will need explicit guidance. Deferred to dedicated PR informed by PR 1's experience.
+
+4. Bench worktree isolation doesn't work: Frappe bench symlinks apps/hamilton_erp to ~/hamilton_erp regardless of git worktree location. Destructive testing requires either a separate bench install or in-place backup/restore — never trust worktree isolation for bench-run probes.
+
+5. CODEOWNERS / branch protection / change ceremony for governance files: Currently anyone with merge rights can change governance artifacts. Real regulated-industry hardening would add CODEOWNERS for docs/design/ and require dual approval. Deferred — out of scope for solo-developer phase.
+
+These findings represent the diminishing-returns tail of three adversarial reviews. They're documented as known limitations, not active bugs.
