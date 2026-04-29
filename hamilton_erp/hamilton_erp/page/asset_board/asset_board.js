@@ -923,15 +923,15 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			? `<button class="hamilton-footer-bulk" data-category="${bulk_category}">${__("Mark All Clean")}</button>`
 			: "";
 
+		// V9 Decision 6.2: footer shows 3 status counts (Available / Occupied / OOS).
+		// Dirty count is tracked but not displayed in the footer per spec \u2014
+		// dirty tiles are visible in the section above the footer with their
+		// own count. The "Mark All Clean" button still appears when dirty>0.
 		$footer.html(`
 			<div class="hamilton-footer-counts">
 				<span class="hamilton-footer-item">
 					<span class="hamilton-footer-dot dot-available"></span>
 					${__("Available")} ${counts.available}
-				</span>
-				<span class="hamilton-footer-item">
-					<span class="hamilton-footer-dot dot-dirty"></span>
-					${__("Dirty")} ${counts.dirty}
 				</span>
 				<span class="hamilton-footer-item">
 					<span class="hamilton-footer-dot dot-occupied"></span>

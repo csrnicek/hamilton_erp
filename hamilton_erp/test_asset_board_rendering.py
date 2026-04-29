@@ -683,6 +683,69 @@ class TestV9VacateAndTabsAndHeader(IntegrationTestCase):
 		)
 
 
+class TestV9CosmeticPolish(IntegrationTestCase):
+	"""Regression guards for V9 S3 button sizing + Decision 6.2 footer counts."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_css_action_buttons_use_v9_s3_sizing(self):
+		"""V9 S3: primary buttons 12px font + 7px/6px padding for 50+ staff."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		# The .hamilton-action-btn rule should include 12px font and ~7px padding
+		# (port of mockup .action-btn at line 444). The previous V6 sizing (8px
+		# font, 5px/4px padding) was rejected for tablet readability.
+		self.assertNotIn(
+			"font-size: 8px;", css.split(".hamilton-action-btn")[1].split("}")[0]
+			if ".hamilton-action-btn" in css else "",
+			".hamilton-action-btn still uses 8px font — V9 S3 requires "
+			"12px for shape recognition by 50+ staff at tablet glass.",
+		)
+		self.assertIn(
+			"padding: 7px 6px;", css,
+			"V9 S3 padding (7px 6px on .hamilton-action-btn) missing.",
+		)
+
+	def test_css_primary_buttons_use_solid_fill(self):
+		"""V9 line 462: primary buttons use solid fills, not low-saturation
+		hover-states from V6."""
+		with open(self._css_path()) as f:
+			css = f.read()
+		# V9 primary buttons: hamilton-btn-green = #22c55e + #052e13 text
+		self.assertIn("#22c55e", css,
+			"V9 primary green color #22c55e missing.")
+		self.assertIn("#ef4444", css,
+			"V9 primary red color #ef4444 missing.")
+
+	def test_js_footer_drops_dirty_count_per_v9_spec(self):
+		"""V9 Decision 6.2: footer shows Available / Occupied / OOS only.
+
+		The Dirty count was extra production cosmetic — V9 spec lists 3
+		footer counts, not 4. Section header above the tile grid still
+		shows the dirty count.
+		"""
+		with open(self._js_path()) as f:
+			source = f.read()
+		# Find the _render_footer body and verify Dirty count is not rendered
+		# in the footer template.
+		footer_section_match = source.split("_render_footer")[1].split("_update_tab_badges")[0] if "_render_footer" in source else ""
+		self.assertNotIn(
+			"${__(\"Dirty\")}", footer_section_match,
+			"Footer still renders __(\"Dirty\") count — V9 Decision 6.2 "
+			"specifies 3 footer counts (Available / Occupied / OOS).",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
