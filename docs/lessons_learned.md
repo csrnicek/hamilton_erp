@@ -115,14 +115,14 @@ debugging dead-end, or production surprise so the next venue build avoids repeat
 
 ---
 
-## Lesson: `frappe.flags.in_test` vs `frappe.in_test` — paired change required
+## Lesson: `frappe.flags.in_test` vs `frappe.in_test` — two independent attributes, must clear both
 
-- **What happened:** Code using `frappe.flags.in_test` worked under `bench run-tests` but is actually deprecated in Frappe v16. The correct attribute is `frappe.in_test` (a module-level global, not a flags attribute).
-- **Time cost:** ~20 minutes.
-- **Root cause:** Frappe v16 moved the test flag from `frappe.flags.in_test` to `frappe.in_test`. Both exist but `frappe.flags.in_test` may not be reliably set in all contexts (e.g., pytest without bench runner).
-- **The fix:** Update production code (lifecycle.py) to use `frappe.in_test` and update all test scaffolding to match. This is a paired change — updating one without the other silently breaks test-mode detection.
-- **Prevention for next venue:** Grep for `frappe.flags.in_test` during code review. Always use `frappe.in_test`.
-- **Relevant commit/DEC:** N/A — Frappe v16 migration knowledge
+- **What happened:** PRs #5/#6/#7 (E2E tests, Apr 14) defined a `real_logs()` context manager that toggled `frappe.flags.in_test` to make `_make_asset_status_log` write real audit logs during E2E tests. But the guard reads `frappe.in_test`, which is a *separate* module-level attribute. The toggle silently no-op'd: the guard still saw `True`, the audit log path was skipped, and any "exactly N log entries" assertion would fail. The bug went undetected for two weeks because the PRs sat stale; surfaced 2026-04-29 when PR #26 consolidated them and re-ran their tests against current main.
+- **Time cost:** ~30 minutes to find and fix during the PR #26 consolidation.
+- **Root cause:** Frappe v16 has *both* `frappe.in_test` (module-level boolean at `frappe/__init__.py:83`) and `frappe.local.flags.in_test` (request-scoped flag). Frappe's own test runner sets both via `frappe.tests.utils.toggle_test_mode(enable)`. They are NOT aliased — toggling one leaves the other unchanged, and code that reads only one silently no-ops when the other was the one toggled.
+- **The fix:** A `real_logs()` helper that toggles **both** attributes, with a docstring pointing back to this lesson. Canonical version in `hamilton_erp/test_e2e_phase1.py::real_logs`; reused verbatim in `test_stress_simulation.py`.
+- **Prevention for next venue:** Grep for `frappe.flags.in_test = ` and `frappe.in_test = ` in test code; ensure any toggle pairs them. Reuse `real_logs()` rather than re-rolling. The frappe.tests.utils.toggle_test_mode() helper is the official "set both" entry point — prefer it for new code.
+- **Relevant commit/DEC:** PR #26 (consolidated H10/H11/H12 E2E), commit fixing `real_logs()` to clear both attributes.
 
 ---
 
@@ -152,7 +152,89 @@ debugging dead-end, or production surprise so the next venue build avoids repeat
 
 ---
 
-## 2026-04-27 — CI bootstrap trap
+## 2026-04-29 — Overnight autonomous run lessons
+
+Six PRs landed/queued in a single overnight session (#24 through #29). The substance of the work — backend enrichment, schema pinning, E2E coverage, stress sim rewrite — is in the PRs and inbox. These are the lessons that generalize beyond the work itself:
+
+### Lesson 1: Frappe test threads need an explicit `frappe.db.commit()`
+
+**What happened:** PR #29's first CI run looked fine locally (`frappe.db.commit()` not necessary because the test runner committed at request boundary). I assumed `frappe.destroy()` would also commit. It does the opposite — it closes the connection with the transaction in whatever state it was, and any uncommitted writes get rolled back when the connection is dropped. The two threading tests in `TestStressConcurrentAssign` and `TestStressCrossAssetIsolation` showed `success=0` even when the lock and lifecycle calls had clearly executed.
+
+**Root cause:** Frappe relies on the HTTP request boundary to auto-commit. Test threads have no request boundary. Without an explicit `frappe.db.commit()` after a successful operation, the transaction never reaches durable state.
+
+**The fix:** Each thread body runs `frappe.db.commit()` immediately after its lifecycle call, with a `frappe.db.rollback()` in the except path. Documented inline in `hamilton_erp/test_stress_simulation.py::_attempt_assign`.
+
+**Prevention:** When writing any thread body that calls a Frappe controller, the structure is `frappe.init` → `frappe.connect` → operation → `frappe.db.commit()` → `frappe.destroy()`. CLAUDE.md bans `frappe.db.commit()` in *controllers*; tests are not controllers and need it.
+
+---
+
+### Lesson 2: Cross-thread MVCC visibility — main connection's snapshot won't see thread commits
+
+**What happened:** Even after the threading bug above was fixed, the post-condition `assertEqual(asset.status, "Occupied")` in `test_two_threads_only_one_wins` failed locally. The thread had committed; the main connection's `frappe.get_doc(...)` still saw "Available".
+
+**Root cause:** MariaDB defaults to REPEATABLE READ. The test's main connection started its transaction (and snapshot) at `setUp` when it inserted the asset. The thread then committed an UPDATE — but that commit is invisible to the main connection until it ends its own snapshot.
+
+**The fix:** Call `frappe.db.rollback()` on the main connection before re-reading post-thread state. That releases the snapshot; the next `get_value` sees committed reality. See `test_stress_simulation.py:147` for the exact pattern.
+
+**Prevention:** Any test that asserts on state written by a thread must either rollback the main connection first or use a fresh `frappe.db.get_value` call that explicitly sidesteps the cached snapshot.
+
+---
+
+### Lesson 3: Test site name varies between local and CI — capture `frappe.local.site`
+
+**What happened:** Local stress sim tests used `frappe.init(site="hamilton-unit-test.localhost")` in thread bodies. Locally they passed; CI failed with `IncorrectSitePath: 404 Not Found: hamilton-unit-test.localhost does not exist`.
+
+**Root cause:** Local dev bench creates `hamilton-unit-test.localhost`. CI workflow (`.github/workflows/tests.yml`) creates `test_site`. Hardcoding either name is hostile to the other environment.
+
+**The fix:** In `setUp`, capture `self.site = frappe.local.site` and pass `self.site` into `frappe.init(site=self.site)` in the thread body. The runner's site is always available on `frappe.local`. See `test_stress_simulation.py:108` for the pattern.
+
+**Prevention:** Grep for `frappe.init(site="` literal strings — they should not exist in tests. Use `frappe.local.site`.
+
+---
+
+### Lesson 4: Stale PRs need their tests re-run against current main, not just rebased
+
+**What happened:** PRs #5, #6, #7 were 95 commits behind main. They had `claude-review SUCCESS` from April 14 but predated the Server Tests CI workflow. Rebasing them and merging would have looked sound — but the tests would have failed in the new CI, because they depended on a test-helper bug (`real_logs()` toggling the wrong attribute, see Lesson 1 in this section). The bug only became visible by re-running the tests against current main.
+
+**Root cause:** A "successful" review on a PR snapshot in time does not survive long enough drift. The tests were green when the PR was opened because the production code at that time *also* read `frappe.flags.in_test`; the production code changed in a later commit to read `frappe.in_test`, and the test scaffolding never followed.
+
+**The fix:** Replace-not-rebase for PRs >50 commits behind main, or at minimum run their tests locally against current main before merging.
+
+**Prevention:** Treat any PR more than ~30 commits behind main as needing local test verification, not just CI re-run on the same branch. The CI configuration may have changed; the production code definitely has.
+
+---
+
+### Lesson 5: Schema snapshot pinning catches silent API regressions
+
+**What happened:** PR #24 added `guest_name` and `oos_set_by` fields to `get_asset_board_data`. The existing schema snapshot test used `assertGreaterEqual` against a base set of `REQUIRED_ASSET_FIELDS` — new fields could be silently dropped from the API payload and no test would fail. PR #25 pinned both new fields explicitly so any future regression that drops them fails CI loudly.
+
+**Why this matters:** API payload regressions are some of the most expensive bugs because they only surface in the consuming UI. The schema snapshot test is cheap — one set membership check per field — and turns silent regressions into loud failures.
+
+**Prevention:** Every new field added to `get_asset_board_data` (or any whitelisted read API) should be added to `REQUIRED_ASSET_FIELDS` in the same PR. Make this a checklist item in the PR template, or enforce it via CI.
+
+---
+
+### Lesson 6: Taskmaster estimates can be wildly wrong when the API has shifted underneath
+
+**What happened:** Taskmaster Task 26 said "Estimated 15 minutes" for "Replace `from hamilton_erp.lifecycle import assign_asset` references". Reality: 42 tests in `test_stress_simulation.py` were already `@unittest.skip`'d for weeks, the old `assign_asset` had a different signature than the new `start_session_for_asset`, the old `vacate_asset` is now `vacate_session` with a new required parameter, the `acquire_lock` and `release_lock` functions don't exist (only the context manager), and the `assignment_status` field was renamed to `status`. A 15-minute import rewrite is actually a 2-3 hour structural rewrite.
+
+**Root cause:** The estimate was written when the imports were the only thing wrong. As the rest of the codebase refactored, the gap widened, but the estimate did not get re-evaluated. The task description still read "stale imports" when the reality was "stale everything".
+
+**The fix:** Delete + replace, not line-by-line repair. PR #29 dropped the 1007-line legacy file (-920) and replaced it with a focused 287-line file (+287) of 11 actually-running stress tests scoped to Phase 1.
+
+**Prevention:** When picking up a Taskmaster task that's been pending more than a few weeks, re-read the actual code before trusting the estimate. If the gap between the task description and current state has widened, write a fresh task spec instead of executing the stale one.
+
+---
+
+### Lesson 7: Batched lookups for list-enrichment APIs — no N+1
+
+**What happened:** PR #24 added `guest_name` (from Venue Session) and `oos_set_by` (from Asset Status Log → User) to every asset in the `get_asset_board_data` payload. The naïve approach is one extra SELECT per asset (×59 assets × 2 fields = 118 round trips). The implementation uses 4 batched queries instead: one for assets, one for sessions filtered by `current_session IN (...)`, one for status logs filtered by `venue_asset IN (...) AND new_status = 'Out of Service'`, one for users filtered by `name IN (...)`. Then in-Python lookup against dicts.
+
+**Why this matters:** On a 59-asset board this is the difference between a ~60ms response and a ~600ms response. The latter is well outside the 1-second tile-render budget set in `phase1_design.md`.
+
+**Prevention:** When enriching a list response with related-doctype fields, the structure is always: collect the join keys → one batched `frappe.get_all` per doctype with `filters={...: ["in", keys]}` → assemble dicts in Python. See `hamilton_erp/api.py::get_asset_board_data` for the canonical pattern.
+
+---
 
 **What happened:** PR #9 set up GitHub Actions CI for hamilton_erp. The Tests workflow failed at every step of the install path on a fresh runner: missing `apps/frappe`, wrong Python version, wrong Node version, Redis ordering wrong, missing `hypothesis`, missing seed data, missing ERPNext root records, fresh-ERPNext `desktop:home_page='setup-wizard'` row. I fixed each in turn — 12 commits — and ended up with the workflow YAML containing inline Python heredocs that created Customer Group + Territory roots, raw SQL DELETE for the `tabDefaultValue` row, and a standalone `pip install hypothesis`. Each fix advanced the workflow by one step but accumulated a parallel install path that production would never run. Frappe Cloud deploys would have hit every one of those errors freshly because none of the workarounds existed in app code.
 
