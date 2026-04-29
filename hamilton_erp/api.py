@@ -94,6 +94,10 @@ def get_asset_board_data() -> dict:
 			"status", "current_session", "expected_stay_duration", "display_order",
 			"last_vacated_at", "last_cleaned_at", "hamilton_last_status_change",
 			"version",
+			# OOS reason — read by asset_board.js OOS expand panel and
+			# Return-to-Service modal. Without this field both call sites
+			# fall back to "Reason unknown" forever (user-visible bug).
+			"reason",
 		],
 		filters={"is_active": 1},
 		order_by="display_order asc",

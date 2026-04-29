@@ -144,6 +144,10 @@ class TestGetAssetBoardData(IntegrationTestCase):
 			# V9 Decision E11 — oos-info panel in expanded OOS overlay.
 			# None for non-OOS tiles; resolved from Asset Status Log → User for OOS.
 			"oos_set_by",
+			# OOS reason from Venue Asset.reason — read by asset_board.js
+			# OOS expand panel and Return-to-Service modal. Pinned here per
+			# LL-017 so this field cannot silently drop from the payload.
+			"reason",
 		}
 		REQUIRED_SETTINGS_FIELDS = {
 			"grace_minutes",
