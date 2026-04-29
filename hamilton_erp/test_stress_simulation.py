@@ -83,6 +83,37 @@ def _make_test_asset(prefix: str, *, display_order: int = 9000) -> str:
 	return doc.name
 
 
+def _cleanup_stress_state():
+	"""Clean up committed state from stress tests (assets, sessions, Redis).
+
+	`tearDown`'s `frappe.db.rollback()` only undoes the test's *uncommitted*
+	writes. The setUp uses `.insert(...) + frappe.db.commit()` to publish the
+	asset to other connections, and the threading tests commit explicitly.
+	Both leave durable rows that survive rollback.
+
+	If we don't clean up, `_next_session_number` (which falls back to
+	`_db_max_seq_for_prefix` when the Redis key is cold) sees the high
+	max sequence from our committed sessions. Other tests that expect a
+	fresh start at `---0001` (e.g. `TestSessionNumberGenerator.test_first_call_returns_0001`)
+	then get e.g. `---0071`. Local runs don't typically surface this; CI
+	does because it runs all modules in one bench invocation.
+
+	Steps: delete Sessions for STRESS-* assets, delete the assets, delete
+	today's Redis session counter.
+	"""
+	frappe.db.sql("""
+		DELETE FROM `tabVenue Session`
+		WHERE venue_asset IN (
+			SELECT name FROM `tabVenue Asset` WHERE asset_code LIKE 'STRESS-%%'
+		)
+	""")
+	frappe.db.sql("DELETE FROM `tabVenue Asset` WHERE asset_code LIKE 'STRESS-%%'")
+	frappe.db.commit()
+	year, month, day = frappe.utils.nowdate().split("-")
+	# Raw .delete() matches the raw .set / .incr path the generator uses.
+	frappe.cache().delete(f"hamilton:session_seq:{int(day)}-{int(month)}-{int(year)}")
+
+
 # ---------------------------------------------------------------------------
 # TestStressConcurrentAssign — only one of N concurrent assigns wins.
 # ---------------------------------------------------------------------------
@@ -110,6 +141,7 @@ class TestStressConcurrentAssign(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
+		_cleanup_stress_state()
 
 	def _attempt_assign(self, operator: str, results: dict, errors: list):
 		"""Thread body — own Frappe connection, isolated transaction.
@@ -200,6 +232,7 @@ class TestStressLockBehavior(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
+		_cleanup_stress_state()
 
 	def test_held_lock_rejects_second_acquire(self):
 		"""While asset A's lock is held, a second acquire on A raises."""
@@ -252,6 +285,7 @@ class TestStressSessionNumberSequence(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
+		_cleanup_stress_state()
 
 	def test_25_sequential_session_numbers_are_unique(self):
 		numbers = [lifecycle._next_session_number() for _ in range(25)]
@@ -296,6 +330,7 @@ class TestStressBulkTurnoverCycles(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
+		_cleanup_stress_state()
 
 	def test_ten_full_turnover_cycles(self):
 		CYCLES = 10
@@ -344,6 +379,7 @@ class TestStressCrossAssetIsolation(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
+		_cleanup_stress_state()
 
 	def _assign_one(self, asset_name: str, results: dict, errors: list):
 		"""Thread body — explicit commit, see TestStressConcurrentAssign for why."""
