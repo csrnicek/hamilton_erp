@@ -627,13 +627,29 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				// V9 Decision 5.4: tapping OOS tile shows full context
 				// (reason + who-set + days-ago) above Return button.
 				// Mockup parallel: V9_CANONICAL_MOCKUP.html line 1112 (oos-info).
-				// Production lacks asset.oos_set_by; gracefully degrade.
+				// Mockup format: "Set by M. CHEN · 4 days ago"
 				const reason = asset.reason
 					? frappe.utils.escape_html(asset.reason)
 					: __("Reason unknown");
 				const days_text = this._format_oos_days_ago(asset);
-				const meta_line = days_text
-					? `<div class="hamilton-oos-info-meta">${__("Set")}: ${frappe.utils.escape_html(days_text)}</div>`
+				const who_text = asset.oos_set_by
+					? `${__("by")} ${frappe.utils.escape_html(asset.oos_set_by)}`
+					: "";
+				// Combinations:
+				//   who + days → "Set by M. CHEN · 4 days ago"
+				//   who only   → "Set by M. CHEN"
+				//   days only  → "Set: 4 days ago"
+				//   neither    → omitted
+				let meta_text = "";
+				if (who_text && days_text) {
+					meta_text = `${__("Set")} ${who_text} · ${frappe.utils.escape_html(days_text)}`;
+				} else if (who_text) {
+					meta_text = `${__("Set")} ${who_text}`;
+				} else if (days_text) {
+					meta_text = `${__("Set")}: ${frappe.utils.escape_html(days_text)}`;
+				}
+				const meta_line = meta_text
+					? `<div class="hamilton-oos-info-meta">${meta_text}</div>`
 					: "";
 				info = `
 					<div class="hamilton-oos-info">
@@ -753,10 +769,22 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const reason = asset.reason || __("Reason unknown");
 		const days_text = this._format_oos_days_ago(asset);
 
-		const days_row = days_text
+		// V9 mockup format: "Set by M. CHEN · 4 days ago" — combined who+when.
+		const set_by_who = asset.oos_set_by
+			? `${__("by")} ${frappe.utils.escape_html(asset.oos_set_by)}`
+			: "";
+		let set_value = "";
+		if (set_by_who && days_text) {
+			set_value = `${set_by_who} · ${frappe.utils.escape_html(days_text)}`;
+		} else if (set_by_who) {
+			set_value = set_by_who;
+		} else if (days_text) {
+			set_value = frappe.utils.escape_html(days_text);
+		}
+		const days_row = set_value
 			? `<div class="hamilton-modal-row">
 					<span class="hamilton-modal-key">${__("Set")}:</span>
-					<span class="hamilton-modal-val">${frappe.utils.escape_html(days_text)}</span>
+					<span class="hamilton-modal-val">${set_value}</span>
 				</div>`
 			: "";
 

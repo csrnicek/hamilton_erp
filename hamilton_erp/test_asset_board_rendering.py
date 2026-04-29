@@ -746,6 +746,89 @@ class TestV9CosmeticPolish(IntegrationTestCase):
 		)
 
 
+class TestV9PanelEnrichment(IntegrationTestCase):
+	"""Regression guards for V9 panel data enrichment (E8/E11).
+
+	The asset board API enriches each asset with:
+	- guest_name (only for Occupied tiles, from Venue Session.full_name)
+	- oos_set_by (only for OOS tiles, resolved from Asset Status Log)
+
+	These tests verify the API returns the fields with correct shape.
+	"""
+
+	def test_api_returns_guest_name_field_on_every_asset(self):
+		"""guest_name must be present (None or string) on every asset row."""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			self.assertIn(
+				"guest_name", a,
+				f"Asset {a.get('asset_code')} missing guest_name field. "
+				f"V9 D6/E8 requires the API to enrich every asset row.",
+			)
+
+	def test_api_returns_oos_set_by_field_on_every_asset(self):
+		"""oos_set_by must be present (None or string) on every asset row."""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			self.assertIn(
+				"oos_set_by", a,
+				f"Asset {a.get('asset_code')} missing oos_set_by field. "
+				f"V9 E11 requires the API to enrich every asset row.",
+			)
+
+	def test_api_does_not_set_guest_name_for_non_occupied(self):
+		"""guest_name should be None for non-Occupied assets."""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			if a["status"] != "Occupied":
+				self.assertIsNone(
+					a["guest_name"],
+					f"Asset {a.get('asset_code')} (status {a['status']}) "
+					f"has unexpected guest_name={a['guest_name']!r}. "
+					f"Only Occupied tiles should carry guest_name.",
+				)
+
+	def test_api_does_not_set_oos_set_by_for_non_oos(self):
+		"""oos_set_by should be None for non-OOS assets."""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			if a["status"] != "Out of Service":
+				self.assertIsNone(
+					a["oos_set_by"],
+					f"Asset {a.get('asset_code')} (status {a['status']}) "
+					f"has unexpected oos_set_by={a['oos_set_by']!r}. "
+					f"Only OOS tiles should carry oos_set_by.",
+				)
+
+
+class TestV9PanelEnrichmentJSContract(IntegrationTestCase):
+	"""JS-side contract: rendered overlay reads guest_name and oos_set_by
+	from the asset payload. Guards that JS stays in sync with API enrichment.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	def test_js_reads_guest_name_from_asset(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"asset.guest_name", source,
+			"JS doesn't read asset.guest_name — V9 D6/E8 contract broken.",
+		)
+
+	def test_js_reads_oos_set_by_from_asset(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"asset.oos_set_by", source,
+			"JS doesn't read asset.oos_set_by — V9 E11 contract broken.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
