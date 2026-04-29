@@ -67,6 +67,33 @@ class TestGetAssetBoardData(IntegrationTestCase):
 		self.assertIn("session_start", r001)
 		self.assertIsNotNone(r001["session_start"])
 
+	def test_v9_enrichment_fields_present_on_every_asset(self):
+		"""V9 D6/E8 + E11: guest_name and oos_set_by must be present
+		(possibly None) on every asset row.
+
+		The fields-present contract matters for the JS — `_render_expand_panel`
+		does `asset.guest_name || ""` and `asset.oos_set_by ? ... : ""` and
+		those checks rely on the field always existing in the dict. If the
+		API sometimes omits the field instead of setting None, JS gets
+		`undefined` which doesn't follow the same truthy semantics in some
+		template-string contexts.
+
+		Note: the actual data-flow tests (lifecycle → log → User → field)
+		are non-trivial in IntegrationTestCase because lifecycle's
+		_make_asset_status_log short-circuits when frappe.in_test is True
+		(by design — see lifecycle.py line 86). Field-presence here is
+		the cheapest contract guard; deeper flow tests live as deferred
+		work in docs/inbox.md.
+		"""
+		data = api.get_asset_board_data()
+		for a in data["assets"]:
+			self.assertIn("guest_name", a,
+				f"Asset {a.get('asset_code')} missing guest_name field — "
+				f"V9 D6/E8 contract violated.")
+			self.assertIn("oos_set_by", a,
+				f"Asset {a.get('asset_code')} missing oos_set_by field — "
+				f"V9 E11 contract violated.")
+
 	def test_schema_snapshot_pins_asset_board_fields(self):
 		"""Schema snapshot — fail LOUDLY on any field rename or removal.
 
@@ -108,9 +135,15 @@ class TestGetAssetBoardData(IntegrationTestCase):
 			"last_cleaned_at",
 			"hamilton_last_status_change",
 			"version",
-			# Enrichment field — added by get_asset_board_data after the
-			# base query. Not in Venue Asset's DocType, but the JS reads it.
+			# Enrichment fields — added by get_asset_board_data after the
+			# base query. Not in Venue Asset's DocType, but the JS reads them.
 			"session_start",
+			# V9 Decision D6/E8 — guest-info panel in expanded Occupied overlay.
+			# None for non-Occupied tiles; full_name from Venue Session for Occupied.
+			"guest_name",
+			# V9 Decision E11 — oos-info panel in expanded OOS overlay.
+			# None for non-OOS tiles; resolved from Asset Status Log → User for OOS.
+			"oos_set_by",
 		}
 		REQUIRED_SETTINGS_FIELDS = {
 			"grace_minutes",
