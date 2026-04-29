@@ -521,3 +521,33 @@ Ranked by ROI:
 - **`test_api_phase1.py::TestAssetBoardHTTPVerb`** — only test driving through `frappe.handler.execute_cmd` with spoofed verb. Documented in DEC-058. Keep.
 - **`test_database_advanced.py::TestDatabaseIndexes` (7 tests)** — pin Hamilton's index requirements (Frappe doesn't auto-create on Link fields). Keep all 7.
 
+
+---
+
+# Browser test session 2026-04-29 — V9 production verification
+
+**Result:** All 6 critical V9 launch-blockers from yesterday confirmed fixed. 25 tests run. Production matches V9 spec for the locker + room lifecycle.
+
+## Bugs to fix
+
+1. **RTS modal shows "Reason unknown"** — OOS reason captured at SET OOS isn't read back on Return-to-Service. Same root cause likely affects asset-record persistence. Repro: OOS L029 with "Lock or Hardware" → click L029 → modal shows "Reason unknown" instead.
+
+2. **RTS modal "SET" line missing timestamp** — shows "by Administrator" but should match OOS audit format ("by ADMINISTRATOR at HH:MM AM/PM").
+
+3. **Watch tab missing active-state styling** — selected tab looks identical whether on it or not. Other tabs invert correctly.
+
+4. **No "dirty since X minutes" timer on dirty tiles** — V9 spec wanted this for cleaner prioritization. Missing on both lockers and rooms.
+
+## Decisions to log in decisions_log.md
+
+- **Tab badge = Available count only** (sellable now). Verified consistent across Lockers, Single, Double, GH Room.
+- **Watch badge = OT + OOS combined** (everything needing attention).
+- **Watch tab grouping by sub-category subtitles** (e.g. "Single Standard 4") — extends to all tabs per earlier V9.1 amendment discussion.
+- **Header PM SHIFT + ADMINISTRATOR are read-only** by design. Shift change / logout live on dedicated pages, not header.
+
+## Minor
+
+- Expanded tile shows "26h 24m elapsed" but collapsed tile shows "26h 24m late" — pick one word.
+
+## Already queued (no action needed)
+- L029 audit log query.
