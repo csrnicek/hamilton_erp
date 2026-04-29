@@ -267,3 +267,67 @@ This is a 2-3 hour rewrite, not 15 minutes. Either rewrite from scratch against 
 **Other notes**
 - Frappe v16 module attribute gotcha: `frappe.in_test` (module-level boolean at frappe/__init__.py:83) and `frappe.local.flags.in_test` (request-scoped flag) are **independent**. The test runner sets both via `frappe.tests.utils.toggle_test_mode(enable)`. If your code reads one and you toggle the other, you get silent no-ops. Worth a one-line entry in `docs/lessons_learned.md` next time it gets a sweep.
 - `_make_asset_status_log` (lifecycle.py:86) is the only place in the codebase reading `frappe.in_test`. E2E tests that need real audit logs use the `real_logs()` context manager from `test_e2e_phase1.py`.
+
+---
+
+## 2026-04-29 — Visual regression testing research
+
+**Recommendation: Do not adopt now. Defer to Phase 2 trigger.** When you do adopt, use **Playwright Python (`pytest-playwright`) with built-in `toHaveScreenshot`**, baselines generated on Linux CI only, no third-party SaaS.
+
+### Why not now (Phase 1, single venue)
+
+1. Phase 1 risk profile doesn't justify it. Single viewport, one operator, behind staff login. Blast radius is "operator notices and tells Chris," not customer-facing.
+2. False-positive tax falls entirely on Chris (beginner solo dev). Once you accept three "diff is fine, accept new baseline" PRs in a row without looking, the suite is dead weight.
+3. No Storybook → all snapshots are full-page → any layout change anywhere invalidates every baseline. Highest-churn form of visual regression.
+4. Existing tests (`test_asset_board_rendering.py` substring contracts + manual QA) cover ~80% of what matters.
+5. Tool landscape is moving — picking a stale tool today (BackstopJS, Loki) wastes effort; picking the right one (Playwright) is cheaper in 6 months when `pytest-playwright` is more mature.
+
+### When to revisit — any one of these
+
+- **Trigger A — multi-venue:** second venue (Ottawa or DC) goes live with per-venue CSS branding. Branding drift is what visual regression is uniquely good at catching.
+- **Trigger B — Phase 2 POS work begins.** POS UI is more complex (forms, totals, cash flow) and customer-facing. Add visual regression at the start, not retrofit.
+- **Trigger C — first production visual bug.** The day Chris merges a CSS change that breaks the Asset Board layout in production and a substring test failed to catch it.
+- **Trigger D — Frappe v17 upgrade.** Major framework upgrades reliably change parent-page CSS.
+
+### Tool landscape (as of 2026-04-29, verified via web)
+
+| Tool | Status | Cost | Verdict |
+|---|---|---|---|
+| **Playwright `toHaveScreenshot`** | Active, built into `pytest-playwright` | Free OSS | **Pick this when trigger fires.** |
+| **Percy (BrowserStack)** | Active SaaS | Free 5K/mo, paid $199/mo+ | Overkill for one venue. Vendor risk. |
+| **Chromatic** | Active SaaS, Storybook-tied | Free 5K/mo, Pro $149/mo | No Storybook → skip. |
+| **BackstopJS** | **STALE** (last commit 2024-09-07, ~19 mo idle) | Free OSS | Skip — wrong direction. |
+| **reg-suit** | Active (release 2026-03-16) | Free OSS, BYO storage | Just the comparison half; couples to Node. Skip unless you outgrow Playwright's built-in diffing. |
+| **Loki** | **STALE** (~18 mo since last release) | Free OSS | Storybook-only, skip on both counts. |
+| **Cypress + plugin** | Active | Free OSS | Frappe community moved off it. Skip. |
+
+### Frappe community standard
+
+There is none. `frappe/erpnext_ui_tests` (Cypress, last push 2022, 16 stars) is abandoned. Newer Frappe apps (`frappe/insights`, `frappe/wiki`, `frappe/meet`) use **Playwright for behavioral E2E** but no pixel-diff regression. Hamilton would be ahead of the curve if it adopted visual regression at all.
+
+### When trigger fires — setup shape
+
+1. Add `pytest-playwright` to dev requirements; `playwright install chromium` in CI.
+2. Create `tests/visual/` with 3–5 scenario tests (empty board, mid-occupancy with overtime tile, expanded panel open).
+3. Add a `visual-tests` GitHub Actions job that depends on the existing `tests` job, on `ubuntu-latest` (matches baseline platform).
+4. Generate baselines once on CI with `--update-snapshots`, commit to `tests/visual/__snapshots__/`.
+5. PRs on every change: failures upload diff PNGs as workflow artifacts.
+
+**Why Playwright Python over alternatives:** Python-native (matches `bench run-tests`); no SaaS account or quota; mask + animation handling solves dynamic content (`mask=[locator]` for timestamps, `animations="disabled"` for color flashes); Frappe ecosystem direction (community already moved to Playwright). Scales to multi-venue by parameterizing base URL.
+
+**Estimated effort to deploy first version:** ~1 day (Opus reasoning for dynamic-content masking).
+
+**Estimated maintenance per UI change:** 5–30 min depending on whether new scenarios or just new locators.
+
+### Cheapest catch-the-most-bugs upgrade right now (NOT visual regression)
+
+Add **2 Playwright behavioral tests** (no screenshots): load `/app/asset-board`, assert 59 tiles render, assert each tile has one of the four expected status classes. Half a day of effort. Catches CSS-only regressions, parent-container swaps, and runtime bugs that produce syntactically-correct DOM that renders wrong — none of which `test_asset_board_rendering.py` substring tests can catch. **Track as a new Taskmaster task before Task 25.**
+
+### Sources
+
+- Playwright `toHaveScreenshot` docs (playwright.dev)
+- `pytest-playwright-visual-snapshot` (iloveitaly, last push 2026-04-27, active)
+- Percy / Chromatic pricing pages (verified 2026-04-29)
+- BackstopJS / Loki staleness verified via GitHub last-commit dates
+- `frappe/erpnext_ui_tests` abandonment verified (last push 2022-11-30, 16 stars)
+- Frappe community Playwright adoption verified via `gh search code` against frappe org
