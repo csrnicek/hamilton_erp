@@ -103,6 +103,10 @@ class TestStressConcurrentAssign(IntegrationTestCase):
 
 	def setUp(self):
 		self.asset_name = _make_test_asset("STRESS-CA", display_order=9001)
+		# Capture the test runner's site name. Local dev uses
+		# "hamilton-unit-test.localhost"; CI uses "test_site". Hardcoding
+		# the dev name silently breaks CI with `IncorrectSitePath`.
+		self.site = frappe.local.site
 
 	def tearDown(self):
 		frappe.db.rollback()
@@ -118,7 +122,7 @@ class TestStressConcurrentAssign(IntegrationTestCase):
 		a controller.)
 		"""
 		try:
-			frappe.init(site="hamilton-unit-test.localhost")
+			frappe.init(site=self.site)
 			frappe.connect()
 			try:
 				lifecycle.start_session_for_asset(self.asset_name, operator=operator)
@@ -336,6 +340,7 @@ class TestStressCrossAssetIsolation(IntegrationTestCase):
 			_make_test_asset("STRESS-CI", display_order=9030 + i)
 			for i in range(self.N_ASSETS)
 		]
+		self.site = frappe.local.site
 
 	def tearDown(self):
 		frappe.db.rollback()
@@ -343,7 +348,7 @@ class TestStressCrossAssetIsolation(IntegrationTestCase):
 	def _assign_one(self, asset_name: str, results: dict, errors: list):
 		"""Thread body — explicit commit, see TestStressConcurrentAssign for why."""
 		try:
-			frappe.init(site="hamilton-unit-test.localhost")
+			frappe.init(site=self.site)
 			frappe.connect()
 			try:
 				lifecycle.start_session_for_asset(asset_name, operator="Administrator")
