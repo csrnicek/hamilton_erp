@@ -59,17 +59,31 @@ def get_asset_board_data() -> dict:
 			             expected_stay_duration, display_order,
 			             last_vacated_at, last_cleaned_at,
 			             hamilton_last_status_change, version,
-			             session_start (only for Occupied)}, ... ],
+			             session_start (only for Occupied),
+			             guest_name (only for Occupied, V9 D6/E8),
+			             oos_set_by (only for OOS, V9 E11)}, ... ],
 			"settings": {grace_minutes, default_stay_duration_minutes, ...},
 		}
 
 	Enrichment is deliberately batched: after pulling the asset list, we
 	collect every `current_session` for Occupied rows and fetch their
-	`session_start` values in a single `frappe.get_all(..., "name in ...)`
-	call. A naive loop over `get_value` would be 1 + N round trips; this
-	path is guaranteed to be 2 queries regardless of occupancy. The
+	`session_start` and `full_name` values in a single batched query. For
+	OOS rows we batch-query Asset Status Log for the most-recent
+	OOS-transition operator, then resolve user IDs to full names in one
+	more batched query. Total queries: 1 (assets) + 1 (sessions) + 1
+	(status logs) + 1 (users) = 4, regardless of occupancy. A naive loop
+	over `get_value` would be 1 + N round trips. The
 	`test_get_asset_board_data_under_one_second` perf baseline in
 	`test_api_phase1.py` guards against future N+1 regressions.
+
+	V9 panel enrichment (Phase 1 closeout, 2026-04-29):
+	- guest_name: feeds the .hamilton-guest-info panel in expanded
+	  Occupied overlay. Walk-in (anonymous) sessions have full_name=None,
+	  which the JS gracefully renders as elapsed-only.
+	- oos_set_by: feeds the .hamilton-oos-info-meta line in expanded OOS
+	  overlay ("Set by M. CHEN · 4 days ago"). Resolved from Asset Status
+	  Log → User.full_name. Days-ago is computed client-side from
+	  hamilton_last_status_change (already in the asset payload).
 	"""
 	frappe.has_permission("Venue Asset", "read", throw=True)
 
@@ -86,21 +100,79 @@ def get_asset_board_data() -> dict:
 		limit=500,
 	)
 
-	# Batched session_start lookup — one query for all occupied tiles
+	# Batched session lookup — one query for all occupied tiles.
+	# Pulls session_start AND full_name (V9 guest-info panel D6/E8).
+	# full_name is used for the Occupied tile's guest-info display; falls
+	# back to None for Walk-in (anonymous) sessions.
 	occupied_session_ids = [
 		a["current_session"] for a in assets
 		if a["status"] == "Occupied" and a.get("current_session")
 	]
-	session_starts: dict[str, object] = {}
+	session_data: dict[str, dict] = {}
 	if occupied_session_ids:
 		rows = frappe.get_all(
 			"Venue Session",
-			fields=["name", "session_start"],
+			fields=["name", "session_start", "full_name"],
 			filters={"name": ["in", occupied_session_ids]},
 		)
-		session_starts = {r["name"]: r["session_start"] for r in rows}
+		session_data = {r["name"]: r for r in rows}
 	for a in assets:
-		a["session_start"] = session_starts.get(a.get("current_session"))
+		sess = session_data.get(a.get("current_session")) or {}
+		a["session_start"] = sess.get("session_start")
+		# V9 D6/E8: guest_name for Occupied tile guest-info panel
+		a["guest_name"] = sess.get("full_name") or None
+
+	# V9 E11: who set this asset Out of Service?
+	# Batched lookup of the most-recent Asset Status Log entry where
+	# new_status='Out of Service' for each currently-OOS asset. Returns
+	# the operator's full name (or User docname as fallback).
+	oos_asset_names = [
+		a["name"] for a in assets if a["status"] == "Out of Service"
+	]
+	oos_operators: dict[str, str] = {}
+	if oos_asset_names:
+		# Fetch all OOS-transition log entries for these assets in one
+		# query, then keep the most-recent per asset.
+		log_rows = frappe.get_all(
+			"Asset Status Log",
+			fields=["venue_asset", "operator", "timestamp"],
+			filters={
+				"venue_asset": ["in", oos_asset_names],
+				"new_status": "Out of Service",
+			},
+			order_by="timestamp desc",
+		)
+		seen: set[str] = set()
+		latest_by_asset: dict[str, str] = {}
+		operator_user_ids: set[str] = set()
+		for r in log_rows:
+			asset_name = r["venue_asset"]
+			if asset_name in seen:
+				continue
+			seen.add(asset_name)
+			latest_by_asset[asset_name] = r["operator"] or ""
+			if r["operator"]:
+				operator_user_ids.add(r["operator"])
+		# Resolve user IDs to full names in a single query.
+		user_full_names: dict[str, str] = {}
+		if operator_user_ids:
+			user_rows = frappe.get_all(
+				"User",
+				fields=["name", "full_name"],
+				filters={"name": ["in", list(operator_user_ids)]},
+			)
+			user_full_names = {
+				u["name"]: (u.get("full_name") or u["name"]) for u in user_rows
+			}
+		for asset_name, user_id in latest_by_asset.items():
+			if user_id:
+				oos_operators[asset_name] = user_full_names.get(user_id, user_id)
+	for a in assets:
+		# V9 E11: oos_set_by for OOS-info panel in expanded overlay
+		a["oos_set_by"] = (
+			oos_operators.get(a["name"])
+			if a["status"] == "Out of Service" else None
+		)
 
 	return {"assets": assets, "settings": _get_hamilton_settings()}
 
