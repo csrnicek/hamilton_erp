@@ -232,3 +232,38 @@ After adding, optionally also add `Linter` and `claude-review` if you want them 
 ## 2026-04-28 — Hamilton Launch Playbook
 
 Hamilton Launch Playbook V2 added at docs/HAMILTON_LAUNCH_PLAYBOOK.md — opening-weekend operational risk audit with go/no-go checklist, top 12 risks, front desk runbook, and technical preflight. Review before scheduling opening week prep work.
+
+---
+
+## 2026-04-29 — Overnight autonomous run
+
+**PRs landed (squash-merged to main):**
+- **PR #24** — `fix(asset-board): backend enrichment for V9 panels (E8/E11)` — `api.get_asset_board_data` now returns `guest_name` (from Venue Session) and `oos_set_by` (from Asset Status Log → User.full_name). Batched lookups, no N+1. JS panel rendering updated for both expanded panel and Return-to-Service modal.
+- **PR #25** — `test(asset-board): pin V9 enrichment fields in schema snapshot` — `guest_name` and `oos_set_by` now in `REQUIRED_ASSET_FIELDS`. Removed two integration tests that hit the `frappe.in_test` short-circuit in `_make_asset_status_log`. Field-presence guard remains.
+- **PR #26** — `test(phase1): consolidate H10+H11+H12 E2E tests for Tasks 22-24` — 18 tests, supersedes stale PRs #5, #6, #7 (95 commits behind). Fixes a latent bug in their `real_logs()` context manager: it toggled `frappe.flags.in_test` but `_make_asset_status_log` reads `frappe.in_test` (different module attribute, see lifecycle.py:86 vs frappe/__init__.py:83). Fixed version clears both. _**Status: in CI when this note was written.**_
+- **PR #27** — `docs(reviews): pre-Task-25 3-AI deploy review prompts` — paired blind + context-aware review prompts for the Task 25 Frappe Cloud deploy checkpoint. _**Status: queued for auto-merge.**_
+
+**Tomorrow-Chris: close stale PRs**
+PRs #5, #6, #7 should be closed with comment pointing at PR #26. They predated the Server Tests CI workflow and contain the `frappe.flags.in_test` bug described above.
+
+**Task 26 — scope is bigger than estimated**
+Taskmaster says "Estimated 15 minutes" for fixing stale imports in `test_stress_simulation.py`. Reality:
+- 42 tests in the file, **all 42 are currently `@unittest.skip`-decorated** (so file does not fail CI, but contributes zero coverage).
+- The stale imports include `assign_asset` (renamed to `start_session_for_asset`, signature changed from positional to keyword-only with new `customer` param), `vacate_asset` (renamed to `vacate_session`, new required `vacate_method` param), and `acquire_lock`/`release_lock` (these don't exist — `locks.py` only exposes the `asset_status_lock` context manager).
+- Old API took `admission_type` (Walk-in/Member); new API has no equivalent (membership system is Phase 4).
+- Many tests reference `assignment_status` field which is now just `status`.
+
+This is a 2-3 hour rewrite, not 15 minutes. Either rewrite from scratch against the live API or delete the file and replace with a new stress simulation suite scoped to the current state machine. Recommend deletion + new file rather than line-by-line rewrite — too much divergence.
+
+**Phase 1 task status after tonight (Taskmaster IDs)**
+- 1-19: done (pre-existing)
+- 20: Asset Board realtime listeners — pending, frontend, needs design spec check before code
+- 21: Bulk Mark All Clean confirmation dialog — pending, frontend, 3-AI checkpoint after this task
+- 22, 23, 24: in PR #26 (E2E coverage). After #26 lands these can flip to "done" in Taskmaster.
+- 25: Frappe Cloud deploy + manual QA — pending, requires owner + browser. Review prompts now live in `docs/reviews/review_task25_blind.md` + `review_task25_context.md` (PR #27).
+- 26: stale stress simulation — see scope note above. Defer to a dedicated session.
+- 27: re-seed local test site — local environment housekeeping, no PR. One bench console invocation.
+
+**Other notes**
+- Frappe v16 module attribute gotcha: `frappe.in_test` (module-level boolean at frappe/__init__.py:83) and `frappe.local.flags.in_test` (request-scoped flag) are **independent**. The test runner sets both via `frappe.tests.utils.toggle_test_mode(enable)`. If your code reads one and you toggle the other, you get silent no-ops. Worth a one-line entry in `docs/lessons_learned.md` next time it gets a sweep.
+- `_make_asset_status_log` (lifecycle.py:86) is the only place in the codebase reading `frappe.in_test`. E2E tests that need real audit logs use the `real_logs()` context manager from `test_e2e_phase1.py`.
