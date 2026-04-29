@@ -222,3 +222,185 @@ Three adversarial reviews on PR #16 surfaced findings deliberately not addressed
 5. CODEOWNERS / branch protection / change ceremony for governance files: Currently anyone with merge rights can change governance artifacts. Real regulated-industry hardening would add CODEOWNERS for docs/design/ and require dual approval. Deferred — out of scope for solo-developer phase.
 
 These findings represent the diminishing-returns tail of three adversarial reviews. They're documented as known limitations, not active bugs.
+# Lessons Learned — 2026-04-28 (Day 4)
+
+## Context
+
+Marathon session focused on hardening PR #16's canonical mockup governance, then pivoting to actual production fixes for the asset board. Surfaced major patterns about how Claude (chat), Claude Code, and Chris should collaborate going forward.
+
+---
+
+## The big lesson: stop overusing chat-Claude as middleware
+
+**Pattern observed today:**
+Chris asks Claude (chat) for a plan. Claude (chat) writes a 200-line prompt. Chris pastes into Claude Code. Claude Code executes. Claude (chat) interprets the result. Repeat 30 times.
+
+**Cost:**
+A documentation-file governance regime took 8+ hours of high-friction work because every step was mediated through chat-Claude writing prompts. Real production bugs in the asset board sat unfixed all day.
+
+**Better pattern:**
+1. Chris tells Claude Code the outcome they want, in plain English, at the highest possible level
+2. Claude Code plans, executes, groups work into PRs, auto-merges on green
+3. Claude Code reports at PR boundaries or when genuinely stuck
+4. Chat-Claude is consulted only for interpretation of results, sanity checks on plans, or when Chris wants a second opinion
+
+**Concrete example that worked:**
+At end of day, Chris said: "Fix every divergence in your Phase 2 diff report so production matches V9. Group into PRs as you see fit. Auto-merge each when green. Only stop and ask if you're genuinely blocked."
+
+That single sentence kicked off 5 PRs running autonomously. No micromanagement needed.
+
+**Concrete example that didn't work:**
+Three rounds of adversarial review on PR #16 (a docs-only PR) with chat-Claude writing each prompt. Each round predicted findings instead of trusting Claude Code to find them. Each round cost ~30 minutes. Net new actionable findings vs first review: maybe 30%.
+
+---
+
+## Patterns that compound badly
+
+### 1. Predicting findings vs verifying findings
+
+Chat-Claude tends to frame "what an adversarial review will probably find" as if it were already a finding. This amplifies anxiety and justifies more reviews. The first PR #16 senior dev review went well. The second adversarial review found real things. The third was hitting diminishing returns. The "expert review" was overkill.
+
+**Rule:** Run the review. See what it actually finds. Don't ship hardening for predicted findings.
+
+### 2. Over-disambiguation in prompts
+
+Chat-Claude tends to write prompts that try to anticipate every edge case. This makes prompts long, brittle, and over-prescriptive. Claude Code can usually handle ambiguity if given a clear outcome.
+
+**Rule:** When writing prompts for Claude Code, default to terse. Add detail only when a specific failure mode is likely.
+
+### 3. Hardening governance instead of fixing production
+
+We spent 8 hours hardening tests around a design reference file (V9_CANONICAL_MOCKUP.html — a static HTML mockup, not running production code). Meanwhile, the actual asset board operators will use at Hamilton has 60 divergences from the locked design, including 6 that will block launch.
+
+**Rule:** When facing a choice between "harden the rules" and "fix the actual product," fix the product first. Rules can be hardened against future drift; broken UX can't be hardened away.
+
+---
+
+## Mockup-as-gospel pattern works
+
+PR #16's "port the mockup verbatim, don't reinterpret" rule is the right pattern. It surfaced 60 production divergences immediately when applied honestly. Each previous Claude session had translated the spec instead of porting the mockup, and drift compounded.
+
+**Rule going forward:** Every Phase 1+ task that touches asset board UI should start with "what does V9_CANONICAL_MOCKUP.html do for this — find it and port it." When mockup and production disagree, mockup wins.
+
+---
+
+## Adversarial review pattern (when to use, when not)
+
+**Use it for:**
+- Genuinely high-risk PRs (security, money, irreversible actions)
+- When a PR will be the foundation of significant future work
+- When previous PRs in the lineage already had bugs that adversarial review would have caught
+
+**Don't use it for:**
+- Routine PRs (most PRs)
+- Documentation-only changes
+- Internal tooling improvements
+- Anything where the cost of fixing in follow-up exceeds the cost of finding pre-merge
+
+**When using it, do this once, not three times:**
+- Implementation
+- Senior dev review
+- Adversarial review (one source — Claude Code OR ChatGPT, not both for the same PR)
+- Fix what's found
+- Merge
+
+The "keep hardening until reviewers stop finding things" pattern hits diminishing returns fast. Two rounds is usually enough.
+
+---
+
+## Bench symlink defeats worktree isolation
+
+Tried to run destructive probes in a temporary git worktree (`/tmp/hamilton_pr16_probe`). Frappe bench symlinks `apps/hamilton_erp` to `~/hamilton_erp`, so tests run against the main repo regardless of which worktree is checked out.
+
+**Implication:** Destructive testing requires either (a) a separate bench install, or (b) in-place backup/restore in the main repo with a strict STOP-ON-DIRTY rule.
+
+We used in-place with backups today. It worked, but Claude Code crashes mid-probe would leave the working tree corrupted. For future destructive probing, set up a separate bench install.
+
+---
+
+## Branch protection is enforced
+
+Direct push to main is rejected by GitHub branch protection (GH006 error). Every change goes through a PR with passing CI. This means:
+- The "change ceremony" the adversarial review flagged as missing is partially in place
+- We don't need CODEOWNERS for the solo-developer phase
+- Auto-merge is safe because CI gates merging
+
+**Caveat:** Branch protection is useful, but CI only protects what tests actually cover. Green CI means the tested contracts passed, not that the product is production-ready. Today's experience proves this — the asset board passed all CI tests for weeks while having 60 visible divergences from the locked design that no test covered.
+
+**Rule:** Don't bother adding CODEOWNERS or required reviewers until a second engineer joins. But don't mistake green CI for "the product works." Browser verification on real test data is still required.
+
+---
+
+## Honesty rule applies to chat-Claude too
+
+Chris's standing rule: "Before saying work is 'saved' or 'done,' verify by reading actual files/code. Distinguish 'spec/design committed' vs 'implementation working in running code.'"
+
+Chat-Claude drifted from this several times today by:
+- Predicting what reviews would find as if findings were verified
+- Framing PR #16 hardening as "bulletproof production code" when it was governance for a docs file
+- Letting Chris's gut checks ("what are we running these tests on?") deflect twice before acknowledging
+
+**Rule for chat-Claude:** Apply the honesty rule symmetrically. Don't frame predictions as findings. Don't frame minor work as critical. When the user's gut catches something, take it seriously immediately, not after the third nudge.
+
+---
+
+## What actually worked today
+
+Despite all the friction, we accomplished:
+
+1. **PR #14:** V9 documentation reference fix (data-asset-code amendment)
+2. **PR #16:** Locked V9 mockup as canonical with manifest + governance tests + sentinel markers
+3. **PR #17:** Documented deferred findings (lessons_learned bridge entry)
+4. **PR #18:** Closed 5 demonstrated attacks (same-PR coupling, test integrity, subdirectory bypass, manifest path redirection, manifest UX)
+5. **Comprehensive V9 vs production diff:** 60 divergences identified, 6 critical, 14 significant, 40 minor
+6. **5 follow-up PRs queued and running autonomously** (PR #15 overlay primitive, #19 time-state model, #20 OOS workflow, #21 vacate+tabs, #22 cosmetic polish)
+
+The diff report alone is hours of work that nobody had done before. The governance regime is genuinely hardened against silent drift. Tomorrow we wake up with PRs already merged and the asset board significantly closer to V9.
+
+---
+
+## Workflow rules to add or reinforce
+
+### Add to standing workflow
+
+1. **High-level prompt rule:** When kicking off Claude Code work, default to one-sentence outcome statements. Add detail only when a specific failure mode is likely. Example: "Fix every V9 divergence, group into PRs, auto-merge each green, report at PR boundaries."
+
+2. **Adversarial review budget:** Maximum two rounds per PR (senior + adversarial). After that, ship and address residual risks in follow-up PRs.
+
+3. **Mockup-first for UI work:** Every UI task starts with `cat docs/design/V9_CANONICAL_MOCKUP.html` to load the spec into context, then porting the relevant sections verbatim.
+
+4. **Production-vs-rules priority:** When facing a choice between hardening rules and fixing production, fix production first.
+
+5. **Browser verification is non-negotiable for UI work:** Green CI does not equal working UI. Phase 1+ UI tasks must end with Chris clicking through the relevant flows in a real browser against the test site, against the V9 mockup as reference. "Done" only after that.
+
+### Reinforce existing rules
+
+- **Verify before claiming done** — applied to chat-Claude predictions too
+- **Inbox.md as bridge** — used today for the lessons we're capturing now
+- **Mockup as gospel** — proven by today's diff report
+
+---
+
+## Open items at end of day (2026-04-28)
+
+- 5 PRs queued and running: #15 (CI in progress), #19 (committed locally), #20-22 (planned)
+- Backend data enrichment deferred (E8 guest_name, E11 oos_set_by, E9 oos_days)
+- Hamilton launch readiness still has multiple gaps
+- Pre-Task-25 work approaching: three pre-handoff research prompts in docs/hamilton_pre_handoff_prompts.md
+- Test coverage gap items 1-4 and 8-14 still pending review
+- Frappe Cloud production hosting for Hamilton not yet set up
+
+## Tomorrow's recommended start
+
+1. Read this entry first thing
+2. Check the 5 queued PRs — most or all should be merged
+3. Browser-test the asset board against V9 mockup; confirm critical workflows work
+4. If all 5 PRs merged cleanly: pivot to backend data enrichment (E8/E9/E11) or to Phase 1 Task 22+
+5. If any PR got stuck: read the stuck report, decide scope of intervention
+
+Do NOT start tomorrow by running adversarial reviews on yesterday's work. The governance is locked. Move forward.
+
+---
+
+*Captured 2026-04-28 ~17:30 by chat-Claude at Chris's request, after Chris correctly identified that chat-Claude was over-mediating and slowing down work. Edited based on second-pass review feedback that suggested softer language and a CI/coverage caveat.*
+
