@@ -49,6 +49,7 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-022 | AI Workflow | S2 | Don't use ChatGPT as prompt middleware |
 | LL-023 | AI Workflow | S2 | Adversarial review budget — two rounds, not three |
 | LL-024 | AI Workflow | S2 | Taskmaster estimates can be wildly wrong when the API has shifted |
+| LL-032 | AI Workflow | S3 | Batch small same-file docs additions into one PR |
 | LL-025 | Operational | S3 | Redis uses non-default ports on local bench |
 | LL-026 | Operational | S2 | `property_setter.json` must exist even if empty |
 | LL-027 | Operational | S2 | Bench symlink defeats `git worktree` isolation |
@@ -384,6 +385,19 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Detection:** The task description and the current code disagree on function names, signatures, or doctype fields.
 - **Prevention for next venue:** When picking up a Taskmaster task that's been pending more than a few weeks, re-read the actual code before trusting the estimate. If the gap has widened, write a fresh task spec.
 - **References:** PR #29.
+
+### LL-032 — Batch small same-file docs additions into one PR
+
+- **Category:** AI Workflow
+- **Severity:** S3
+- **Applies to:** Sequential session work that piles up additions to `docs/inbox.md`, `docs/lessons_learned.md`, or other shared docs files
+- **What happened:** During the 2026-04-29 session, four sequential prompts each asked for "append findings to docs/inbox.md, one PR, auto-merge on green" — visual regression research, AI bloat audit, test suite redundancy audit, and the docs-batching lesson itself. Each prompt was treated as one PR. Four PRs against the same file is four CI runs (~20 min Server Tests each) of branch-protection serialization for what could have been one squash commit and one CI run.
+- **Time cost:** ~60 minutes of CI wall time per extra PR cycle. The work itself is the same; the PR overhead is pure waste.
+- **Root cause:** Defaulting to "one prompt → one PR" when prompts are atomic from the user's perspective. The user gave four atomic prompts; each was treated as atomic on the PR side too. But the file only updates one way — appending — and the destinations were the same file, so they could have been bundled.
+- **The fix:** When sequential additions target the same shared docs file, default to one PR with sections separated by `---` and a single squash commit message that lists each section. Ask once if unsure.
+- **Detection:** Two or more queued PRs both target the same docs file (e.g. both modify `docs/inbox.md`); each is small (<100 lines added); each would auto-merge.
+- **Prevention for next venue:** Extend session-start checklist: "If multiple small docs PRs are queued for the same file, batch them." A single PR with three subsections is faster, easier to review, and produces a cleaner history.
+- **References:** This session, 2026-04-29 — PR #33 (visual regression research) shipped as its own PR before user said "combine the queued audits into one PR."
 
 ---
 
