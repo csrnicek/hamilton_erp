@@ -248,6 +248,13 @@ Pins Frappe v16 framework contracts that Hamilton ERP relies on. If a Frappe upg
 | `test_role_permissions_exist_for_venue_asset` | Venue Asset has permissions for all 3 Hamilton roles |
 | `test_track_changes_enabled_on_venue_session` | Venue Session has `track_changes = 1` |
 | `test_track_changes_enabled_on_shift_record` | Shift Record has `track_changes = 1` |
+| `test_track_changes_enabled_on_venue_asset` | Venue Asset has `track_changes = 1` |
+| `test_track_changes_enabled_on_cash_drop` | Cash Drop has `track_changes = 1` |
+| `test_track_changes_enabled_on_cash_reconciliation` | Cash Reconciliation has `track_changes = 1` |
+| `test_track_changes_enabled_on_comp_admission_log` | Comp Admission Log has `track_changes = 1` |
+| `test_track_changes_enabled_on_hamilton_board_correction` | Hamilton Board Correction has `track_changes = 1` |
+| `test_track_changes_enabled_on_hamilton_settings` | Hamilton Settings has `track_changes = 1` |
+| `test_track_changes_explicitly_disabled_on_asset_status_log` | Asset Status Log has `track_changes = 0` (audit log itself — tracking is recursive) |
 | `test_venue_session_autoname_is_hash` | Venue Session uses `hash` autoname (DEC-033) |
 | `test_venue_asset_autoname_is_series` | Venue Asset uses `VA-.####` naming series |
 
