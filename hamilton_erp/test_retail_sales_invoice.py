@@ -89,6 +89,27 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			"creation hook for the 'Goods In Transit' warehouse.",
 		)
 
+	def test_stock_entry_type_material_receipt_seeded(self):
+		"""Stock Entry Type "Material Receipt" must exist or
+		``_seed_stock`` (used by every TestSubmitRetailSale and
+		TestSubmitRetailSaleHardening test) fails with
+		``LinkValidationError: Could not find Stock Entry Type:
+		Material Receipt``.
+
+		ERPNext's setup wizard seeds the standard Stock Entry Types via
+		``erpnext/setup/setup_wizard/operations/install_fixtures.py``, but
+		Hamilton skips the wizard. Same install-time gap class as
+		Warehouse Type "Transit" — fixed by explicit seeding in
+		``_ensure_erpnext_prereqs``.
+		"""
+		self.assertTrue(
+			frappe.db.exists("Stock Entry Type", "Material Receipt"),
+			"Stock Entry Type 'Material Receipt' must be seeded by "
+			"_ensure_erpnext_prereqs — required by ``_seed_stock`` test "
+			"helpers and any future Hamilton flow that creates Stock Entry "
+			"records of type Material Receipt.",
+		)
+
 	def test_hamilton_cost_center_exists(self):
 		company = _hamilton_company()
 		self.assertIsNotNone(company)

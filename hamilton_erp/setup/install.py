@@ -194,6 +194,30 @@ def _ensure_erpnext_prereqs():
 			"name": "Transit",
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Warehouse Type 'Transit'")
+	# Stock Entry Type "Material Receipt" is the SAME class of CI fresh-install
+	# gap as Warehouse Type "Transit" above: ERPNext's setup wizard
+	# (``erpnext/setup/setup_wizard/operations/install_fixtures.py``)
+	# seeds the standard Stock Entry Types, but the wizard never runs on
+	# Hamilton's unattended installs. ``test_retail_sales_invoice``'s
+	# ``_seed_stock`` helper creates Stock Entry docs with
+	# ``stock_entry_type="Material Receipt"`` to populate Bin counts before
+	# submit_retail_sale tests; without the type record, the Stock Entry
+	# fails with ``LinkValidationError: Could not find Stock Entry Type:
+	# Material Receipt``. Seeded matching the wizard's exact spec
+	# (``purpose="Material Receipt", is_standard=1``).
+	#
+	# Only "Material Receipt" is seeded because that's the only Stock Entry
+	# Type Hamilton's flows currently use. If future Hamilton work uses
+	# other standard types (Material Issue, Material Transfer, etc.), seed
+	# them here too — same idempotent pattern.
+	if not frappe.db.exists("Stock Entry Type", "Material Receipt"):
+		frappe.get_doc({
+			"doctype": "Stock Entry Type",
+			"name": "Material Receipt",
+			"purpose": "Material Receipt",
+			"is_standard": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Stock Entry Type 'Material Receipt'")
 
 
 def _seed_hamilton_data():
