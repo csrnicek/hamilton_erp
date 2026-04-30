@@ -244,7 +244,6 @@ Pins Frappe v16 framework contracts that Hamilton ERP relies on. If a Frappe upg
 |---|---|
 | `test_frappe_in_test_flag_is_true` | `frappe.in_test` is True during test execution |
 | `test_override_doctype_class_loads_correctly` | `HamiltonSalesInvoice` mixin has expected methods |
-| `test_scheduler_job_is_importable` | `check_overtime_sessions` is importable and callable |
 | `test_after_migrate_hook_is_importable` | `ensure_setup_complete` is importable and callable |
 | `test_role_permissions_exist_for_venue_asset` | Venue Asset has permissions for all 3 Hamilton roles |
 | `test_track_changes_enabled_on_venue_session` | Venue Session has `track_changes = 1` |
