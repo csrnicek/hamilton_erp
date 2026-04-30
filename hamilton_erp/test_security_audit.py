@@ -26,6 +26,7 @@ import ast
 import re
 from pathlib import Path
 
+import frappe
 from frappe.tests import IntegrationTestCase
 
 
@@ -368,6 +369,57 @@ class TestAssetBoardXSS(IntegrationTestCase):
 				f"${{{expr}}} — this is an XSS vector. Wrap with "
 				"frappe.utils.escape_html(asset.status).",
 			)
+
+
+# ───────────────────────────────────────────────────────────────────────
+# Task 25 permissions checklist item 5: no Front Desk self-escalation
+# ───────────────────────────────────────────────────────────────────────
+
+class TestNoFrontDeskSelfEscalation(IntegrationTestCase):
+	"""Hamilton Operator (=Front Desk) must not have permissions that
+	would let an operator change their own role or anyone else's.
+
+	Specifically: the Operator role must NOT have write/create/delete
+	permission on User, Role, DocPerm, Has Role, or Custom DocPerm.
+	If any of these slip in via a future Custom DocPerm fixture or a
+	stray PermissionError, this test fails before deploy.
+
+	The check runs at the database level (Custom DocPerm + DocPerm
+	tables) rather than via `frappe.permissions.has_permission` because
+	we want to catch the static configuration regression — not the
+	per-request runtime behavior, which is harder to test in
+	IntegrationTestCase.
+	"""
+
+	ESCALATION_RISK_DOCTYPES = [
+		"User",
+		"Role",
+		"DocPerm",
+		"Custom DocPerm",
+		"Has Role",
+		"Role Profile",
+	]
+	FORBIDDEN_FLAGS = ("write", "create", "delete", "submit", "cancel", "amend")
+
+	def test_hamilton_operator_cannot_mutate_escalation_doctypes(self):
+		role = "Hamilton Operator"
+		for dt in self.ESCALATION_RISK_DOCTYPES:
+			for table in ("DocPerm", "Custom DocPerm"):
+				rows = frappe.get_all(
+					table,
+					filters={"parent": dt, "role": role},
+					fields=["name"] + list(self.FORBIDDEN_FLAGS),
+				)
+				for r in rows:
+					granted = [f for f in self.FORBIDDEN_FLAGS if r.get(f)]
+					self.assertEqual(
+						granted, [],
+						f"Hamilton Operator has forbidden permission(s) on "
+						f"{dt!r} via {table} ({r['name']}): {granted}. "
+						"Front Desk operators must not be able to modify "
+						"users, roles, or permissions — that's the "
+						"self-escalation path Task 25 item 5 guards against.",
+					)
 
 
 def tearDownModule():
