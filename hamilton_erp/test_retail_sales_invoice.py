@@ -110,6 +110,32 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			"records of type Material Receipt.",
 		)
 
+	def test_fiscal_year_covers_today(self):
+		"""A Fiscal Year covering today's date must exist or every
+		transaction (Sales Invoice, Stock Entry, etc.) raises
+		``FiscalYearError``. ERPNext's setup wizard creates one; Hamilton
+		skips the wizard. Third in the Warehouse Type "Transit" / Stock
+		Entry Type "Material Receipt" / Fiscal Year fresh-install gap
+		family — fixed by explicit seeding in ``_ensure_erpnext_prereqs``.
+		"""
+		from datetime import date
+		today_iso = date.today().strftime("%Y-%m-%d")
+		covering = frappe.get_all(
+			"Fiscal Year",
+			filters={
+				"year_start_date": ["<=", today_iso],
+				"year_end_date": [">=", today_iso],
+			},
+			fields=["name"],
+			limit=1,
+		)
+		self.assertTrue(
+			covering,
+			f"No Fiscal Year covers {today_iso}. ERPNext requires an "
+			"active Fiscal Year for any transaction's posting_date. "
+			"_ensure_erpnext_prereqs must seed the current calendar year.",
+		)
+
 	def test_hamilton_cost_center_exists(self):
 		company = _hamilton_company()
 		self.assertIsNotNone(company)

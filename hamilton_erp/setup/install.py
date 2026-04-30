@@ -218,6 +218,48 @@ def _ensure_erpnext_prereqs():
 			"is_standard": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Stock Entry Type 'Material Receipt'")
+	# Fiscal Year for the current calendar year — third in the same class
+	# of fresh-install gap as Warehouse Type "Transit" and Stock Entry Type
+	# "Material Receipt". ERPNext raises ``FiscalYearError`` when any
+	# transaction (Sales Invoice, Stock Entry, etc.) is created with a
+	# posting_date that doesn't fall inside an existing Fiscal Year. The
+	# setup wizard normally creates the FY covering today; Hamilton's
+	# unattended install skips the wizard.
+	#
+	# Hamilton's fiscal year aligns with the calendar year (Jan 1 - Dec 31)
+	# unless a future numbered-corp election changes that. Seeding the
+	# current calendar year covers all install/test paths; year-rollover
+	# is handled by a future patch (run before Dec 31 each year, or have
+	# a scheduled task auto-create next year's FY).
+	#
+	# The Fiscal Year is created with no ``companies`` child rows, which
+	# means it applies globally on this site (every Company's transactions
+	# use it). For multi-tenant scenarios that ever land, restrict by
+	# adding the Hamilton company name to the ``companies`` child table.
+	from datetime import date as _date
+	current_year = _date.today().year
+	fiscal_name = str(current_year)
+	# Belt-and-suspenders check: if a FY with a different name already
+	# covers today (e.g., "FY 2026" or "2026-2027"), skip seeding to avoid
+	# duplicate-FY conflicts. Use a direct frappe.get_all rather than SQL.
+	today_iso = _date.today().strftime("%Y-%m-%d")
+	covering = frappe.get_all(
+		"Fiscal Year",
+		filters={
+			"year_start_date": ["<=", today_iso],
+			"year_end_date": [">=", today_iso],
+		},
+		fields=["name"],
+		limit=1,
+	)
+	if not covering and not frappe.db.exists("Fiscal Year", fiscal_name):
+		frappe.get_doc({
+			"doctype": "Fiscal Year",
+			"year": fiscal_name,
+			"year_start_date": f"{current_year}-01-01",
+			"year_end_date": f"{current_year}-12-31",
+		}).insert(ignore_permissions=True)
+		frappe.logger().info(f"hamilton_erp: created Fiscal Year {fiscal_name!r}")
 
 
 def _seed_hamilton_data():
