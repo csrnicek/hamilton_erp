@@ -1088,6 +1088,28 @@ class TestV91RetailFoundation(IntegrationTestCase):
 		self.assertIn("item_group", src,
 			"asset_board.js retail tabs don't carry item_group reference for filtering.")
 
+	def test_retail_tab_badge_counts_in_stock_only(self):
+		"""V9 Amendment 2026-04-29 A29-2: tab badge = available count only.
+
+		Retail's equivalent of 'Available' is 'stock > 0'. Out-of-stock
+		items should NOT count toward the badge — operators read tab
+		badges to answer 'what can I sell right now?'.
+		"""
+		with open(self._js_path()) as f:
+			src = f.read()
+		# Both code paths (initial render in render_shell + live update in
+		# _update_tab_badges) must filter retail badge by stock > 0.
+		self.assertIn(
+			"get_retail_in_stock_count", src,
+			"asset_board.js missing get_retail_in_stock_count helper — "
+			"retail tab badge will count all items including out-of-stock.",
+		)
+		self.assertIn(
+			"Number(it.stock) > 0", src,
+			"asset_board.js doesn't filter retail badge by stock > 0 — "
+			"violates A29-2 (tab badge = available count only).",
+		)
+
 	def test_css_defines_retail_tile_classes(self):
 		with open(self._css_path()) as f:
 			src = f.read()

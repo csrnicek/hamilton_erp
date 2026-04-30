@@ -147,8 +147,13 @@ hamilton_erp.AssetBoard = class AssetBoard {
 					badge = `<span class="hamilton-badge hamilton-badge-watch">${count}</span>`;
 				}
 			} else if (t.retail) {
-				// Retail badge: count of Items in this Item Group.
-				const count = this.items.filter(t.item_filter).length;
+				// V9 spec consistency (Amendment 2026-04-29 A29-2): tab badge =
+				// available count only. For retail, "available" means in-stock
+				// (stock > 0). Out-of-stock SKUs don't count toward the
+				// "what can I sell right now?" signal.
+				const count = this.items.filter(
+					(it) => t.item_filter(it) && Number(it.stock) > 0
+				).length;
 				badge = `<span class="hamilton-badge hamilton-badge-available">${count}</span>`;
 			} else if (!t.placeholder) {
 				const count = this.get_tab_available_count(t);
@@ -1026,6 +1031,9 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				if (count > 0) {
 					$tab.append(`<span class="hamilton-badge hamilton-badge-watch">${count}</span>`);
 				}
+			} else if (tab.retail) {
+				const count = this.get_retail_in_stock_count(tab);
+				$tab.append(`<span class="hamilton-badge hamilton-badge-available">${count}</span>`);
 			} else if (!tab.placeholder && !tab.feature_flag) {
 				const count = this.get_tab_available_count(tab);
 				$tab.append(`<span class="hamilton-badge hamilton-badge-available">${count}</span>`);
@@ -1035,6 +1043,15 @@ hamilton_erp.AssetBoard = class AssetBoard {
 
 	get_tab_available_count(tab) {
 		return this.assets.filter(tab.filter).filter((a) => a.status === "Available").length;
+	}
+
+	get_retail_in_stock_count(tab) {
+		// V9 spec consistency (Amendment 2026-04-29 A29-2): tab badge counts
+		// only items operators can sell right now. Retail equivalent of
+		// "Available" is "stock > 0".
+		return this.items.filter(
+			(it) => tab.item_filter(it) && Number(it.stock) > 0
+		).length;
 	}
 
 	get_watch_count() {
