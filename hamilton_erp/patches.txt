@@ -9,3 +9,4 @@
 hamilton_erp.patches.v0_1.seed_hamilton_env
 hamilton_erp.patches.v0_1.rename_glory_hole_to_gh_room
 hamilton_erp.patches.v0_1.seed_hamilton_accounting
+hamilton_erp.patches.v0_1.seed_canadian_nickel_rounding

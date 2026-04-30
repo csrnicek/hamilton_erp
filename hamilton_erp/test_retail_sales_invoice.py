@@ -270,13 +270,17 @@ class TestSubmitRetailSale(IntegrationTestCase):
 		self.assertAlmostEqual(float(si.grand_total), 7.91, places=2)
 
 	def test_submit_returns_correct_change(self):
-		# qty=2 × $3.50 → net=$7.00, HST=$0.91, grand=$7.91; cash=$20 → change=$12.09
+		# qty=2 × $3.50 → net=$7.00, HST=$0.91, grand=$7.91 (pre-rounding).
+		# Canadian nickel rounding: $7.91 → rounded $7.90.
+		# cash=$20 → change=$20.00 - $7.90 = $12.10.
 		result = submit_retail_sale(
 			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
 			cash_received=20.00,
 		)
 		self.assertAlmostEqual(result["grand_total"], 7.91, places=2)
-		self.assertAlmostEqual(result["change"], 12.09, places=2)
+		self.assertAlmostEqual(result["rounded_total"], 7.90, places=2)
+		self.assertAlmostEqual(result["rounding_adjustment"], -0.01, places=2)
+		self.assertAlmostEqual(result["change"], 12.10, places=2)
 
 	def test_submit_records_cash_payment(self):
 		result = submit_retail_sale(
@@ -549,6 +553,278 @@ class TestSubmitRetailSaleHardening(IntegrationTestCase):
 			cash_received=20.00,
 		)
 		self.assertIn("sales_invoice", result)
+
+
+class TestCanadianCashRounding(IntegrationTestCase):
+	"""Canadian penny-elimination rule (2013): cash transactions round to
+	the nearest 5¢; HST is computed on the unrounded subtotal first; the
+	rounding_adjustment posts as a separate GL entry to the Round Off
+	account; card / electronic payments settle to the cent.
+
+	Reference: Government of Canada Budget 2012 backgrounder; Wikipedia
+	"Cash rounding"; ERPNext's
+	``frappe.utils.data.round_based_on_smallest_currency_fraction``.
+	See docs/decisions_log.md Amendment 2026-04-30 (c).
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.company = _hamilton_company()
+		if not cls.company:
+			return
+		cls.abbr = frappe.db.get_value("Company", cls.company, "abbr")
+		cls.warehouse = f"{HAMILTON_WAREHOUSE_BASE} - {cls.abbr}"
+
+	def setUp(self):
+		super().setUp()
+		if not _hamilton_company():
+			self.skipTest("Hamilton company not seeded.")
+		self._seed_stock("WAT-500", 100)
+
+	def _seed_stock(self, item_code: str, qty: float):
+		if not frappe.db.exists("Item", item_code):
+			self.skipTest(f"Item {item_code} not seeded.")
+		se = frappe.new_doc("Stock Entry")
+		se.update({
+			"company": self.company,
+			"stock_entry_type": "Material Receipt",
+			"purpose": "Material Receipt",
+		})
+		se.append("items", {
+			"item_code": item_code,
+			"qty": qty,
+			"t_warehouse": self.warehouse,
+			"basic_rate": 1.00,
+		})
+		se.insert(ignore_permissions=True)
+		se.submit()
+
+	# ---------------------------------------------------------------
+	# Seed verification — Currency + Round Off Account
+	# ---------------------------------------------------------------
+
+	def test_cad_currency_smallest_fraction_is_nickel(self):
+		"""``Currency CAD.smallest_currency_fraction_value`` must be 0.05.
+
+		This is what makes ERPNext's
+		``round_based_on_smallest_currency_fraction`` produce nickel
+		increments instead of cents. Without this, the
+		``disable_rounded_total=0`` branch in submit_retail_sale would
+		round to the cent (a no-op), defeating the whole point.
+		"""
+		value = flt(frappe.db.get_value(
+			"Currency", "CAD", "smallest_currency_fraction_value"
+		))
+		self.assertAlmostEqual(value, 0.05, places=4,
+			msg="CAD smallest_currency_fraction_value should be 0.05 "
+			"(Canadian nickel rounding).")
+
+	def test_company_round_off_account_linked(self):
+		"""Company.round_off_account must be set so rounding_adjustment posts."""
+		round_off = frappe.db.get_value(
+			"Company", self.company, "round_off_account"
+		)
+		self.assertIsNotNone(round_off,
+			f"Company {self.company!r} has no round_off_account; "
+			"rounding_adjustment GL entry will fail to post.")
+		self.assertTrue(frappe.db.exists("Account", round_off),
+			f"round_off_account {round_off!r} does not exist as an Account.")
+
+	def test_company_round_off_cost_center_linked(self):
+		"""Company.round_off_cost_center must also be set."""
+		cc = frappe.db.get_value(
+			"Company", self.company, "round_off_cost_center"
+		)
+		self.assertIsNotNone(cc,
+			"Company.round_off_cost_center is unset; round-off GL entry "
+			"will fail without one.")
+
+	# ---------------------------------------------------------------
+	# Payment-method gate (the rounding decision)
+	# ---------------------------------------------------------------
+
+	def test_should_round_to_nickel_helper(self):
+		"""The internal gate: Cash → True, anything else → False."""
+		from hamilton_erp.api import _should_round_to_nickel
+		self.assertTrue(_should_round_to_nickel("Cash"),
+			"Cash sales must round per Canadian penny-elimination rule.")
+		self.assertFalse(_should_round_to_nickel("Card"),
+			"Card sales must settle to the exact cent.")
+		# Defensive: anything that isn't 'Cash' (including future methods
+		# that haven't been added yet, or typos) should not round.
+		self.assertFalse(_should_round_to_nickel("Bitcoin"))
+		self.assertFalse(_should_round_to_nickel(""))
+		self.assertFalse(_should_round_to_nickel("CASH"))  # case-sensitive
+
+	def test_payment_method_default_is_cash(self):
+		"""Omitting payment_method defaults to Cash (rounding applies)."""
+		# No payment_method param → Cash → SI's disable_rounded_total=0.
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		si = frappe.get_doc("Sales Invoice", result["sales_invoice"])
+		self.assertEqual(int(si.disable_rounded_total or 0), 0,
+			"Cash sale must NOT have disable_rounded_total set.")
+
+	def test_payment_method_card_not_yet_implemented(self):
+		"""payment_method='Card' is rejected as Phase 2 next iteration.
+
+		The rounding gate (_should_round_to_nickel) correctly returns False
+		for Card, but the end-to-end Card flow (merchant adapter,
+		merchant_transaction_id capture, terminal integration) ships
+		separately. Throwing here is the correct contract until that lands.
+		"""
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			submit_retail_sale(
+				items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+				cash_received=10.00,
+				payment_method="Card",
+			)
+		self.assertIn("Card", str(ctx.exception))
+
+	def test_payment_method_unknown_rejected(self):
+		"""Unknown payment methods are rejected at function entry."""
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			submit_retail_sale(
+				items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+				cash_received=10.00,
+				payment_method="Bitcoin",
+			)
+		self.assertIn("Unsupported payment method", str(ctx.exception))
+
+	# ---------------------------------------------------------------
+	# Rounding math — the actual nickel rounding behavior
+	# ---------------------------------------------------------------
+
+	def test_cash_sale_rounds_grand_total_to_nearest_nickel(self):
+		"""net=$7.00, HST=$0.91, grand=$7.91 → rounded=$7.90 (down to nickel)."""
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		si = frappe.get_doc("Sales Invoice", result["sales_invoice"])
+		self.assertAlmostEqual(float(si.grand_total), 7.91, places=2)
+		self.assertAlmostEqual(float(si.rounded_total), 7.90, places=2)
+		self.assertAlmostEqual(float(si.rounding_adjustment), -0.01, places=2)
+
+	def test_hst_computed_on_unrounded_subtotal_not_rounded_total(self):
+		"""CRA rule: tax is calculated to the cent BEFORE the final cash
+		rounding. The HST line on the SI must be the exact 13% × subtotal,
+		never derived from the rounded total."""
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		si = frappe.get_doc("Sales Invoice", result["sales_invoice"])
+		# Subtotal $7.00 × 13% = $0.91 (exact). Anything other than $0.91
+		# means rounding leaked into the tax math.
+		self.assertAlmostEqual(float(si.taxes[0].tax_amount), 0.91, places=2,
+			msg="HST must be 13% × $7.00 = $0.91; rounding leaked into tax.")
+
+	def test_change_uses_rounded_total_not_grand_total(self):
+		"""Cash change is cash_received - rounded_total (not - grand_total).
+
+		For grand=$7.91, rounded=$7.90, cash=$20.00:
+		  - WRONG: $20 - $7.91 = $12.09 (UX shows penny that doesn't exist)
+		  - RIGHT: $20 - $7.90 = $12.10 (matches what operator gives back)
+		"""
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		self.assertAlmostEqual(result["change"], 12.10, places=2,
+			msg="Change must be computed against rounded_total, not grand_total.")
+
+	def test_payment_amount_uses_rounded_total(self):
+		"""SI.payments[0].amount = rounded_total (what was actually
+		collected), not grand_total. Otherwise paid_amount drifts and
+		outstanding_amount != 0."""
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		si = frappe.get_doc("Sales Invoice", result["sales_invoice"])
+		self.assertAlmostEqual(float(si.payments[0].amount), 7.90, places=2)
+		self.assertAlmostEqual(float(si.outstanding_amount), 0.0, places=2,
+			msg="Outstanding must be 0; rounded_total + change = paid in full.")
+
+	def test_rounding_adjustment_posts_to_round_off_account(self):
+		"""On submit, the 1¢ rounding loss appears as a GL entry on
+		Company.round_off_account (Path B accounting per the research)."""
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+		)
+		round_off = frappe.db.get_value(
+			"Company", self.company, "round_off_account"
+		)
+		gl_entries = frappe.get_all(
+			"GL Entry",
+			filters={
+				"voucher_no": result["sales_invoice"],
+				"account": round_off,
+			},
+			fields=["debit", "credit"],
+		)
+		self.assertEqual(len(gl_entries), 1,
+			f"Expected exactly 1 GL entry on Round Off account "
+			f"({round_off!r}); got {len(gl_entries)}.")
+		# grand=$7.91 → rounded=$7.90 → 1¢ loss → debit Round Off $0.01.
+		entry = gl_entries[0]
+		net = flt(entry.get("debit")) - flt(entry.get("credit"))
+		self.assertAlmostEqual(net, 0.01, places=2,
+			msg="Round Off entry should reflect the 0.01 cash rounding loss "
+			"(debit - credit = 0.01).")
+
+	# ---------------------------------------------------------------
+	# Rounding pattern — exhaustive terminal-digit check vs CRA rule
+	# ---------------------------------------------------------------
+
+	def test_rounding_pattern_matches_cra_rule(self):
+		"""Verify Frappe's algorithm matches the Government of Canada
+		penny-elimination rule:
+		  1, 2 → round down to 0
+		  3, 4 → round up to 5
+		  6, 7 → round down to 5
+		  8, 9 → round up to next 0
+
+		Tests against ``round_based_on_smallest_currency_fraction`` directly
+		so the contract is verified independent of any Sales Invoice plumbing.
+		"""
+		from frappe.utils.data import round_based_on_smallest_currency_fraction
+		cases = [
+			# (input, expected, comment)
+			(10.00, 10.00, "0 → 0 (no change)"),
+			(10.01, 10.00, "1 → 0 (round down)"),
+			(10.02, 10.00, "2 → 0 (round down)"),
+			(10.03, 10.05, "3 → 5 (round up)"),
+			(10.04, 10.05, "4 → 5 (round up)"),
+			(10.05, 10.05, "5 → 5 (no change)"),
+			(10.06, 10.05, "6 → 5 (round down)"),
+			(10.07, 10.05, "7 → 5 (round down)"),
+			(10.08, 10.10, "8 → 10 (round up across dime)"),
+			(10.09, 10.10, "9 → 10 (round up across dime)"),
+		]
+		for input_val, expected, comment in cases:
+			with self.subTest(input=input_val, expected=expected, rule=comment):
+				actual = round_based_on_smallest_currency_fraction(
+					input_val, "CAD", 2
+				)
+				self.assertAlmostEqual(actual, expected, places=2,
+					msg=f"CRA rule violated: {input_val} should round to "
+					f"{expected} ({comment}); got {actual}.")
+
+	def test_card_path_helper_indicates_no_rounding(self):
+		"""Even though Card payments throw NotImplementedError today, the
+		rounding gate is already correctly OFF for Card. When Phase 2 next
+		iteration removes the throw, the rounding contract is already in
+		place — this test pins that contract."""
+		from hamilton_erp.api import _should_round_to_nickel
+		self.assertFalse(_should_round_to_nickel("Card"),
+			"Card payments must not round; the gate is the contract that "
+			"survives the Card-flow implementation in Phase 2 next.")
 
 
 def tearDownModule():

@@ -2,6 +2,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 def after_install():
@@ -332,6 +333,8 @@ def _ensure_hamilton_accounting():
 	_ensure_ontario_hst_template(company, abbr)
 	_ensure_cash_mode_of_payment_account(company, abbr)
 	_ensure_default_stock_warehouse(abbr)
+	_ensure_round_off_account_linked(company, abbr)
+	_ensure_cad_nickel_rounding()
 
 
 def _ensure_hamilton_company() -> str:
@@ -682,3 +685,102 @@ def _ensure_pos_profile():
 	frappe.logger().info(
 		f"hamilton_erp: created POS Profile {HAMILTON_POS_PROFILE_NAME!r}"
 	)
+
+
+# ---------------------------------------------------------------------------
+# Canadian penny-elimination rounding (2013) — cash sales round to nickel
+# ---------------------------------------------------------------------------
+#
+# Per the 2013 Canadian penny-elimination rule, cash transactions round to
+# the nearest 5¢ and the rounding adjustment posts as a separate GL entry
+# to the Round Off account. Two seed steps are required:
+#
+#   1. ``_ensure_round_off_account_linked``: links the auto-created
+#      "Round Off - {abbr}" account on Company so ERPNext's
+#      ``make_gle_for_rounding_adjustment`` has somewhere to post.
+#   2. ``_ensure_cad_nickel_rounding``: sets
+#      ``Currency CAD.smallest_currency_fraction_value = 0.05`` so
+#      ERPNext's ``round_based_on_smallest_currency_fraction`` produces
+#      nickel-incremented ``rounded_total`` values.
+#
+# The payment-method gate (Cash → round, Card → exact-cent) lives in
+# ``hamilton_erp.api.submit_retail_sale``, which sets per-invoice
+# ``disable_rounded_total=1`` for non-cash payments to override the global
+# Currency setting. See docs/decisions_log.md Amendment 2026-04-30 (c).
+
+
+def _ensure_round_off_account_linked(company: str, abbr: str):
+	"""Link "Round Off - {abbr}" + Hamilton cost center on Company.
+
+	Standard CoA creates the Round Off account but does NOT auto-link it
+	on the Company. Without the link, submitting any Sales Invoice with a
+	non-zero ``rounding_adjustment`` fails with
+	"Round Off Account not configured for the Company".
+
+	Idempotent: only writes when the field is currently unset, so an
+	operator-customized account/cost-center is preserved.
+	"""
+	round_off_account = f"Round Off - {abbr}"
+	cost_center = f"{HAMILTON_COST_CENTER_BASE} - {abbr}"
+
+	if not frappe.db.exists("Account", round_off_account):
+		frappe.logger().warning(
+			f"hamilton_erp: Account {round_off_account!r} missing — "
+			f"Round Off Account not linked on {company!r}"
+		)
+		return
+
+	current_account = frappe.db.get_value("Company", company, "round_off_account")
+	if not current_account:
+		frappe.db.set_value("Company", company, "round_off_account", round_off_account)
+		frappe.logger().info(
+			f"hamilton_erp: linked round_off_account = {round_off_account!r} "
+			f"on Company {company!r}"
+		)
+
+	current_cost_center = frappe.db.get_value("Company", company, "round_off_cost_center")
+	if not current_cost_center and frappe.db.exists("Cost Center", cost_center):
+		frappe.db.set_value("Company", company, "round_off_cost_center", cost_center)
+		frappe.logger().info(
+			f"hamilton_erp: linked round_off_cost_center = {cost_center!r} "
+			f"on Company {company!r}"
+		)
+
+
+def _ensure_cad_nickel_rounding():
+	"""Set CAD smallest_currency_fraction_value = 0.05 (Canadian nickel).
+
+	Frappe's ``round_based_on_smallest_currency_fraction`` rounds amounts
+	to the nearest multiple of this value. Default for CAD per Frappe's
+	``country_info.json`` is 0.01 (cent precision); overriding to 0.05
+	enables nickel-rounding on every CAD invoice unless the per-invoice
+	``disable_rounded_total=1`` flag is set (which the cart's API does
+	for Card payments).
+
+	Idempotent. Only overwrites the default 0.01 (or 0); never overwrites
+	an operator-customized value (e.g. 0.10 or 0.25 if the operator chose
+	a different rounding convention).
+	"""
+	if not frappe.db.exists("Currency", "CAD"):
+		frappe.logger().warning(
+			"hamilton_erp: Currency CAD missing — Canadian nickel rounding skipped"
+		)
+		return
+
+	current = flt(frappe.db.get_value("Currency", "CAD", "smallest_currency_fraction_value"))
+	target = 0.05
+
+	if abs(current - target) < 0.001:
+		return  # already nickel
+	if current == 0 or abs(current - 0.01) < 0.001:
+		# Default value or unset; safe to override.
+		frappe.db.set_value("Currency", "CAD", "smallest_currency_fraction_value", target)
+		frappe.logger().info(
+			f"hamilton_erp: set CAD smallest_currency_fraction_value = {target} "
+			f"(Canadian penny-elimination rule, 2013)"
+		)
+	else:
+		frappe.logger().warning(
+			f"hamilton_erp: CAD smallest_currency_fraction_value = {current!r}; "
+			f"not overwriting an operator-customized value"
+		)

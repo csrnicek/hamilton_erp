@@ -363,6 +363,29 @@ HAMILTON_RETAIL_SALE_ROLES = (
 	"System Manager",
 )
 
+# Payment methods accepted by submit_retail_sale. V9.1 ships Cash; Card lands
+# in Phase 2 next iteration (alongside the merchant-abstraction work — see
+# docs/inbox.md 2026-04-30 hardware backlog). The tuple is the source of
+# truth for both the entry-point validation and the rounding gate.
+HAMILTON_PAYMENT_METHODS = ("Cash", "Card")
+
+
+def _should_round_to_nickel(payment_method: str) -> bool:
+	"""Return True if this payment method should round to the nearest 5¢.
+
+	Per the Canadian penny-elimination rule (2013), cash transactions
+	round to the nearest 5¢ and electronic transactions (debit, credit,
+	cheque, e-transfer, gift card) settle to the cent. Tap-to-pay = card
+	method per V9.1-D14, so it stays exact-cent too.
+
+	Reference: Government of Canada Budget 2012 backgrounder; the precise
+	rule is "totals ending in 1, 2 round down to 0; 3, 4 round up to 5;
+	6, 7 round down to 5; 8, 9 round up to 10". Frappe's
+	``round_based_on_smallest_currency_fraction`` produces the same
+	results when ``smallest_currency_fraction_value = 0.05``.
+	"""
+	return payment_method == "Cash"
+
 
 def _check_retail_sale_permission():
 	"""Gate the retail-sale endpoint to Hamilton roles + System Manager.
@@ -383,7 +406,7 @@ def _check_retail_sale_permission():
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_retail_sale(items, cash_received) -> dict:
+def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> dict:
 	"""Create + submit a POS Sales Invoice from the cart drawer.
 
 	Called by ``_open_cash_payment_modal`` in asset_board.js when the
@@ -417,23 +440,62 @@ def submit_retail_sale(items, cash_received) -> dict:
 	    time, so this gap is acceptable. A locked Bin row would be
 	    over-engineering for the current operating model.
 
+	Canadian penny-elimination rounding (2013):
+	  - Cash sales round the post-tax grand_total to the nearest 5¢.
+	    HST is computed first on the unrounded subtotal; the
+	    rounding_adjustment posts as a separate GL entry to
+	    ``Company.round_off_account`` (DEC-038 + Canadian nickel rule).
+	  - Card / electronic sales settle to the exact cent
+	    (``disable_rounded_total=1``). Tap-to-pay = Card per V9.1-D14.
+	  - The gate is the ``payment_method`` argument; ``_should_round_to_nickel``
+	    encapsulates the decision so the contract is testable in isolation.
+
 	Arguments:
 	  items: list of {item_code, qty, unit_price}. JSON-encoded by
 	         frappe.xcall when sent from the client; accepts list or str.
 	         ``unit_price`` must match ``Item.standard_rate``.
-	  cash_received: numeric (Currency). Must be >= grand_total. Change
-	         is computed and returned.
+	  cash_received: numeric (Currency). Must be >= the rounded total
+	         (which equals grand_total for Card, rounded-to-nickel for
+	         Cash). Change is computed and returned.
+	  payment_method: "Cash" (default) or "Card". V9.1 supports Cash;
+	         Card lands in Phase 2 next iteration (merchant abstraction).
+	         The parameter exists now so the rounding contract is stable.
 
 	Returns:
-	  {sales_invoice: str, change: float, grand_total: float}
+	  {
+	    sales_invoice: str,
+	    grand_total: float,           # pre-rounding total (HST included)
+	    rounded_total: float,         # what the customer pays
+	    rounding_adjustment: float,   # rounded_total - grand_total
+	    change: float,                # cash_received - rounded_total
+	  }
 
 	Raises:
 	  - PermissionError if caller lacks any Hamilton role.
-	  - ValidationError if cart empty, cash_received < grand_total,
-	    unknown item, rate mismatch, insufficient stock, or
-	    POS Profile / Walk-in customer missing.
+	  - ValidationError if cart empty, cash_received < amount due,
+	    unknown item, rate mismatch, insufficient stock, unsupported
+	    payment_method, or POS Profile / Walk-in customer missing.
+	  - ValidationError ("Card payments are Phase 2 next iteration")
+	    when payment_method="Card" — the gate is in place so the
+	    rounding contract is stable, but the actual Card flow (merchant
+	    integration) ships separately.
 	"""
 	_check_retail_sale_permission()
+
+	if payment_method not in HAMILTON_PAYMENT_METHODS:
+		frappe.throw(_(
+			"Unsupported payment method: {0}. Supported: {1}"
+		).format(payment_method, ", ".join(HAMILTON_PAYMENT_METHODS)))
+	if payment_method == "Card":
+		# Gate is in place (rounding will correctly disable for Card via
+		# _should_round_to_nickel) but the end-to-end Card flow — merchant
+		# adapter, terminal integration, merchant_transaction_id capture —
+		# is Phase 2 next iteration. Throw clearly rather than create a
+		# half-recorded Card invoice without the merchant linkage.
+		frappe.throw(_(
+			"Card payments are Phase 2 next iteration; not yet implemented. "
+			"See docs/inbox.md 2026-04-30 hardware backlog."
+		))
 
 	# frappe.xcall serializes lists to JSON over the wire. Accept both.
 	if isinstance(items, str):
@@ -509,6 +571,7 @@ def submit_retail_sale(items, cash_received) -> dict:
 	original_ignore_perms = frappe.flags.get("ignore_permissions", False)
 	frappe.set_user("Administrator")
 	frappe.flags.ignore_permissions = True
+	apply_rounding = _should_round_to_nickel(payment_method)
 	try:
 		si = frappe.new_doc("Sales Invoice")
 		si.update({
@@ -519,11 +582,13 @@ def submit_retail_sale(items, cash_received) -> dict:
 			"pos_profile": HAMILTON_POS_PROFILE,
 			"currency": pos_profile.currency,
 			"selling_price_list": pos_profile.selling_price_list or "Standard Selling",
-			# Disable POS round-to-whole-dollar so cash math uses the exact
-			# grand_total. Hamilton operators count change to the cent;
-			# rounded_total would create a 1-99¢ outstanding gap on every
-			# sale (e.g. grand=$7.91 → rounded=$8.00 → outstanding=$0.09).
-			"disable_rounded_total": 1,
+			# Canadian penny-elimination rule: Cash sales round the
+			# post-tax total to the nearest 5¢; Card / electronic sales
+			# settle to the exact cent. The Currency-level setting
+			# (CAD.smallest_currency_fraction_value=0.05) is the global
+			# default; this per-invoice flag is the payment-method gate
+			# that overrides for non-cash payments.
+			"disable_rounded_total": 0 if apply_rounding else 1,
 		})
 		if pos_profile.taxes_and_charges:
 			si.taxes_and_charges = pos_profile.taxes_and_charges
@@ -548,21 +613,29 @@ def submit_retail_sale(items, cash_received) -> dict:
 		si.set_missing_values()
 		si.calculate_taxes_and_totals()
 		grand_total = flt(si.grand_total)
+		# When rounding is enabled, ERPNext populates rounded_total with
+		# the nickel-rounded value; when disabled, rounded_total is 0 and
+		# the grand_total is the amount due. ``amount_due`` is what the
+		# customer actually pays — this is what cash math + payment line
+		# must use, otherwise outstanding_amount drifts by the rounding
+		# delta.
+		amount_due = flt(si.rounded_total) if (apply_rounding and si.rounded_total) else grand_total
+		rounding_adjustment = flt(si.rounding_adjustment) if apply_rounding else 0.0
 
-		if cash_received < grand_total:
+		if cash_received < amount_due:
 			frappe.throw(_(
-				"Cash received {0} is less than grand total {1}"
-			).format(cash_received, grand_total))
+				"Cash received {0} is less than amount due {1}"
+			).format(cash_received, amount_due))
 
-		change = flt(cash_received - grand_total)
+		change = flt(cash_received - amount_due)
 		si.append("payments", {
-			"mode_of_payment": "Cash",
-			"amount": grand_total,  # collected in cash; change handled separately
+			"mode_of_payment": payment_method,
+			"amount": amount_due,  # rounded total for Cash, exact grand_total for Card
 		})
 		si.change_amount = change
 		si.base_change_amount = change
-		si.paid_amount = grand_total
-		si.base_paid_amount = grand_total
+		si.paid_amount = amount_due
+		si.base_paid_amount = amount_due
 
 		# Audit-trail note: the operator who actually made the sale is
 		# captured in ``remarks`` (visible in the SI form / list) so a
@@ -584,8 +657,10 @@ def submit_retail_sale(items, cash_received) -> dict:
 
 		return {
 			"sales_invoice": si.name,
-			"change": change,
 			"grand_total": grand_total,
+			"rounded_total": amount_due,
+			"rounding_adjustment": rounding_adjustment,
+			"change": change,
 		}
 	finally:
 		frappe.flags.ignore_permissions = original_ignore_perms
