@@ -1127,6 +1127,171 @@ class TestV91RetailFoundation(IntegrationTestCase):
 			)
 
 
+# ───────────────────────────────────────────────────────────────────────
+# V9.1 Phase 2 — Retail cart UX (stub PR — Sales Invoice deferred)
+# Spec amendments V9.1-D8..D12 in docs/design/V9.1_RETAIL_AMENDMENT.md
+# ───────────────────────────────────────────────────────────────────────
+
+class TestV91RetailCartUXStub(IntegrationTestCase):
+	"""Source-substring contracts for the cart state machine, drawer
+	rendering, and cash payment modal stub.
+
+	The cart logic is pure JS; we can't unit-test it from Python without
+	a JS test runner (none exists in the project). These tests pin the
+	function names, constants, and HTML class hooks the cart relies on
+	so regressions surface at /run-tests time even though the actual
+	math is exercised in the browser.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	def test_js_defines_hst_rate_constant_at_13_percent(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"HST_RATE = 0.13", src,
+			"V9.1-D11 requires HST_RATE = 0.13 as a top-level constant.",
+		)
+
+	def test_js_defines_cart_state_helpers(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		for helper in (
+			"_cart_qty_for", "_cart_add", "_cart_set_qty", "_cart_remove",
+			"_cart_clear", "_cart_subtotal", "_cart_hst", "_cart_total",
+			"_cart_line_count",
+		):
+			self.assertIn(
+				helper, src,
+				f"asset_board.js missing cart state helper {helper!r}.",
+			)
+
+	def test_js_initializes_cart_state_in_constructor(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn("this.cart = []", src)
+		self.assertIn("this.cart_expanded = false", src)
+
+	def test_js_hst_math_uses_subtotal_times_rate(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertRegex(
+			src, r"_cart_hst\(\)\s*\{[^}]*_cart_subtotal\(\)\s*\*\s*HST_RATE",
+			"_cart_hst doesn't compute subtotal * HST_RATE — V9.1-D11 broken.",
+		)
+
+	def test_js_total_includes_subtotal_plus_hst(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertRegex(
+			src, r"_cart_total\(\)\s*\{[^}]*_cart_subtotal\(\)\s*\+\s*this\._cart_hst\(\)",
+			"_cart_total doesn't add subtotal + HST.",
+		)
+
+	def test_js_subtotal_sums_qty_times_unit_price(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertRegex(
+			src, r"_cart_subtotal\(\)\s*\{[^}]*c\.qty\s*\*\s*c\.unit_price",
+			"_cart_subtotal doesn't sum qty * unit_price.",
+		)
+
+	def test_js_retail_tile_click_adds_to_cart(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			'hasClass("hamilton-retail-tile")', src,
+			"_bind_tile_events doesn't branch on .hamilton-retail-tile.",
+		)
+		self.assertIn(
+			"this._cart_add(item_code)", src,
+			"_bind_tile_events doesn't call _cart_add on retail click.",
+		)
+
+	def test_js_retail_tile_renders_in_cart_pill(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn("hamilton-retail-incart", src)
+		self.assertIn("_cart_qty_for", src)
+
+	def test_js_out_of_stock_tile_click_shows_alert_not_add(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			'__("Out of stock")', src,
+			"_bind_tile_events doesn't show Out-of-stock alert for stock<=0.",
+		)
+
+	def test_js_defines_render_and_bind_for_drawer(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		for fn in ("_render_cart_drawer", "_bind_cart_events"):
+			self.assertIn(fn, src,
+				f"asset_board.js missing {fn} — drawer pipeline broken.")
+
+	def test_js_drawer_hides_when_cart_empty(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			'removeClass("hamilton-cart-shown hamilton-cart-expanded").html("")',
+			src,
+			"_render_cart_drawer doesn't hide drawer when cart empty.",
+		)
+
+	def test_css_defines_drawer_classes(self):
+		with open(self._css_path()) as f:
+			src = f.read()
+		for cls in (
+			".hamilton-cart-drawer", ".hamilton-cart-summary",
+			".hamilton-cart-line", ".hamilton-cart-qty-btn",
+			".hamilton-cart-qty", ".hamilton-cart-totals-grand",
+			".hamilton-cart-pay", ".hamilton-cart-clear",
+			".hamilton-retail-incart", ".hamilton-cash-modal",
+		):
+			self.assertIn(cls, src,
+				f"asset_board.css missing {cls!r}.")
+
+	def test_js_payment_modal_is_stub_with_pending_message(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn("_open_cash_payment_modal", src)
+		self.assertIn(
+			"Sales Invoice creation pending accounting setup", src,
+			"Cash payment confirm doesn't surface 'pending accounting setup' — "
+			"V9.1-D12 stub contract broken.",
+		)
+
+	def test_js_payment_modal_does_not_call_frappe_db_or_xcall(self):
+		import re
+		with open(self._js_path()) as f:
+			src = f.read()
+		match = re.search(
+			r"_open_cash_payment_modal\(\)\s*\{(.+?)\n\t\}\s*\n",
+			src, re.DOTALL,
+		)
+		self.assertIsNotNone(match,
+			"Could not locate _open_cash_payment_modal body for inspection.")
+		body = match.group(1)
+		self.assertNotIn(
+			"frappe.xcall", body,
+			"_open_cash_payment_modal contains frappe.xcall — stub contract broken.",
+		)
+		self.assertNotIn(
+			"frappe.db.insert", body,
+			"_open_cash_payment_modal contains frappe.db.insert — stub contract broken.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

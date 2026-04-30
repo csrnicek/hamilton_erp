@@ -12,6 +12,11 @@ const COUNTDOWN_THRESHOLD_MIN = 60;
 // imperceptible. Per V9_CANONICAL_MOCKUP.html line 1498.
 const LIVE_TICK_MS = 15000;
 
+// V9.1-D11: Ontario HST applied flat to all retail line totals. Single rate,
+// no per-item taxability flag (Phase 2). When a venue outside Ontario
+// onboards, this becomes a per-venue config in site_config.json.
+const HST_RATE = 0.13;
+
 // V9 Decision 5.2: 7 fixed OOS reasons in a global list. "Other" must
 // always remain the last option — it's the required escape hatch and
 // triggers the conditional note field. Per V9_CANONICAL_MOCKUP.html
@@ -51,6 +56,14 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		this.vacate_subs_open = false;
 		this.overtime_interval = null;
 		this.clock_interval = null;
+		// V9.1 cart state (Phase 2 retail UX, supersedes V9.1-D7).
+		// Each line: {item_code, item_name, qty, unit_price}. Unit price
+		// is captured at add-to-cart time so drawer math doesn't re-fetch.
+		// Per-session JS state only — cart is lost on page reload by design
+		// (operators ring up sales atomically; abandonment != continuation).
+		this.cart = [];
+		// V9.1-D8: drawer collapses to a one-row summary; expands on tap.
+		this.cart_expanded = false;
 		this.init();
 	}
 
@@ -188,9 +201,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				</div>
 				<div class="hamilton-tab-bar">${tab_html}</div>
 				<div class="hamilton-content"></div>
+				<div class="hamilton-cart-drawer"></div>
 				<div class="hamilton-footer"></div>
 			</div>
 		`);
+		this._render_cart_drawer();
+		this._bind_cart_events();
 
 		// Tab click handler
 		this.wrapper.on("click", ".hamilton-tab", (e) => {
@@ -442,6 +458,13 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		else if (stock <= 3) state_cls = "hamilton-status-dirty";
 
 		const price = (Number(item.standard_rate) || 0).toFixed(2);
+		// V9.1-D9: tap retail tile = add to cart. Show "in cart: N" pill on
+		// tiles that already have a line so operators can see what's been
+		// added without opening the drawer.
+		const in_cart = this._cart_qty_for(item.item_code);
+		const cart_pill = in_cart > 0
+			? `<span class="hamilton-retail-incart">${__("In cart")} ${in_cart}</span>`
+			: "";
 		return `
 			<div class="hamilton-tile hamilton-retail-tile ${state_cls}"
 			     data-item-code="${frappe.utils.escape_html(item.item_code)}"
@@ -452,8 +475,233 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				</div>
 				<div class="hamilton-retail-name">${frappe.utils.escape_html(item.item_name || "")}</div>
 				<div class="hamilton-retail-price">$${price}</div>
+				${cart_pill}
 			</div>
 		`;
+	}
+
+	// ── V9.1 Phase 2 — Cart state machine ──────────────────
+	// All cart operations are pure JS state; no realtime, no DB. Drawer
+	// rerenders happen via _render_cart_drawer() called by callers.
+
+	_cart_qty_for(item_code) {
+		const line = this.cart.find((c) => c.item_code === item_code);
+		return line ? line.qty : 0;
+	}
+
+	_cart_add(item_code) {
+		const item = (this.items || []).find((it) => it.item_code === item_code);
+		if (!item) return;
+		const existing = this.cart.find((c) => c.item_code === item_code);
+		if (existing) {
+			existing.qty += 1;
+		} else {
+			this.cart.push({
+				item_code,
+				item_name: item.item_name || item_code,
+				qty: 1,
+				unit_price: Number(item.standard_rate) || 0,
+			});
+		}
+	}
+
+	_cart_set_qty(item_code, qty) {
+		qty = Math.max(0, Math.floor(Number(qty) || 0));
+		if (qty === 0) {
+			this.cart = this.cart.filter((c) => c.item_code !== item_code);
+			return;
+		}
+		const line = this.cart.find((c) => c.item_code === item_code);
+		if (line) line.qty = qty;
+	}
+
+	_cart_remove(item_code) {
+		this.cart = this.cart.filter((c) => c.item_code !== item_code);
+	}
+
+	_cart_clear() {
+		this.cart = [];
+		this.cart_expanded = false;
+	}
+
+	_cart_subtotal() {
+		return this.cart.reduce((s, c) => s + c.qty * c.unit_price, 0);
+	}
+
+	_cart_hst() {
+		// V9.1-D11: 13% HST applied to the subtotal. Rounded half-up to
+		// 2 decimals at this layer; the Sales Invoice line will recompute
+		// when the backend wiring lands.
+		return Math.round(this._cart_subtotal() * HST_RATE * 100) / 100;
+	}
+
+	_cart_total() {
+		return Math.round((this._cart_subtotal() + this._cart_hst()) * 100) / 100;
+	}
+
+	_cart_line_count() {
+		return this.cart.reduce((s, c) => s + c.qty, 0);
+	}
+
+	// ── V9.1 Phase 2 — Cart drawer ──────────────────────────
+
+	_render_cart_drawer() {
+		const $drawer = this.wrapper.find(".hamilton-cart-drawer");
+		if (!$drawer.length) return;
+		const lines = this.cart;
+		if (lines.length === 0) {
+			// V9.1-D8: drawer hidden entirely when cart is empty.
+			$drawer.removeClass("hamilton-cart-shown hamilton-cart-expanded").html("");
+			return;
+		}
+		$drawer.addClass("hamilton-cart-shown");
+		if (this.cart_expanded) {
+			$drawer.addClass("hamilton-cart-expanded");
+		} else {
+			$drawer.removeClass("hamilton-cart-expanded");
+		}
+		const subtotal = this._cart_subtotal().toFixed(2);
+		const hst = this._cart_hst().toFixed(2);
+		const total = this._cart_total().toFixed(2);
+		const summary = `
+			<div class="hamilton-cart-summary">
+				<span class="hamilton-cart-count">${this._cart_line_count()} ${__("items")}</span>
+				<span class="hamilton-cart-summary-total">$${total}</span>
+				<span class="hamilton-cart-toggle">${this.cart_expanded ? "▼" : "▲"}</span>
+			</div>
+		`;
+		const expanded = this.cart_expanded ? `
+			<div class="hamilton-cart-body">
+				<div class="hamilton-cart-lines">
+					${lines.map((c) => `
+						<div class="hamilton-cart-line" data-item-code="${frappe.utils.escape_html(c.item_code)}">
+							<span class="hamilton-cart-line-name">${frappe.utils.escape_html(c.item_name)}</span>
+							<button class="hamilton-cart-qty-btn" data-act="dec">−</button>
+							<span class="hamilton-cart-qty">${c.qty}</span>
+							<button class="hamilton-cart-qty-btn" data-act="inc">+</button>
+							<span class="hamilton-cart-line-total">$${(c.qty * c.unit_price).toFixed(2)}</span>
+						</div>
+					`).join("")}
+				</div>
+				<div class="hamilton-cart-totals">
+					<div class="hamilton-cart-totals-row"><span>${__("Subtotal")}</span><span>$${subtotal}</span></div>
+					<div class="hamilton-cart-totals-row"><span>${__("HST 13%")}</span><span>$${hst}</span></div>
+					<div class="hamilton-cart-totals-row hamilton-cart-totals-grand"><span>${__("Total")}</span><span>$${total}</span></div>
+				</div>
+				<div class="hamilton-cart-actions">
+					<button class="hamilton-cart-clear">${__("Clear")}</button>
+					<button class="hamilton-cart-pay">${__("Cash payment")}</button>
+				</div>
+			</div>
+		` : "";
+		$drawer.html(summary + expanded);
+	}
+
+	_bind_cart_events() {
+		this.wrapper.off("click.cart")
+			.on("click.cart", ".hamilton-cart-summary", () => {
+				this.cart_expanded = !this.cart_expanded;
+				this._render_cart_drawer();
+			})
+			.on("click.cart", ".hamilton-cart-qty-btn", (e) => {
+				e.stopPropagation();
+				const $line = $(e.currentTarget).closest(".hamilton-cart-line");
+				const code = $line.data("item-code");
+				const act = $(e.currentTarget).data("act");
+				const cur = this._cart_qty_for(code);
+				this._cart_set_qty(code, act === "inc" ? cur + 1 : cur - 1);
+				this._render_cart_drawer();
+				if (this.active_tab && this.active_tab.startsWith("retail-")) {
+					this.render_active_tab();
+				}
+			})
+			.on("click.cart", ".hamilton-cart-clear", (e) => {
+				e.stopPropagation();
+				this._cart_clear();
+				this._render_cart_drawer();
+				if (this.active_tab && this.active_tab.startsWith("retail-")) {
+					this.render_active_tab();
+				}
+			})
+			.on("click.cart", ".hamilton-cart-pay", (e) => {
+				e.stopPropagation();
+				this._open_cash_payment_modal();
+			});
+	}
+
+	// ── V9.1 Phase 2 — Cash payment modal (stub) ───────────
+	// V9.1-D12: cash-only single tender. The Confirm button is a STUB —
+	// Sales Invoice creation lands once accounting prereqs are configured
+	// (HST tax account, item defaults, warehouse, cost center). Operator
+	// gets a clear "pending accounting setup" toast so browser testing
+	// surfaces design issues without touching ERPNext accounting yet.
+	_open_cash_payment_modal() {
+		this._close_modals();
+		const total = this._cart_total().toFixed(2);
+		const $modal = $(`
+			<div class="hamilton-modal-backdrop hamilton-shown" data-modal="cash">
+				<div class="hamilton-oos-modal hamilton-cash-modal" onclick="event.stopPropagation()">
+					<div class="hamilton-oos-modal-title">${__("Cash payment")}</div>
+					<div class="hamilton-modal-context">
+						<div class="hamilton-modal-row">
+							<span class="hamilton-modal-key">${__("Total")}:</span>
+							<span class="hamilton-modal-val">$${total}</span>
+						</div>
+						<div class="hamilton-modal-row">
+							<span class="hamilton-modal-key">${__("Cash received")}:</span>
+							<input type="number" step="0.01" min="0"
+							       class="hamilton-cash-received" placeholder="${total}">
+						</div>
+						<div class="hamilton-modal-row hamilton-cash-change-row" style="display:none">
+							<span class="hamilton-modal-key">${__("Change")}:</span>
+							<span class="hamilton-modal-val hamilton-cash-change">$0.00</span>
+						</div>
+					</div>
+					<div class="hamilton-modal-audit">
+						${__("Sales Invoice creation pending accounting setup")} —
+						${__("see PR description for prerequisites.")}
+					</div>
+					<div class="hamilton-modal-actions">
+						<button class="hamilton-modal-btn hamilton-modal-btn-cancel">${__("Cancel")}</button>
+						<button class="hamilton-modal-btn hamilton-modal-btn-confirm" disabled>${__("Confirm")}</button>
+					</div>
+				</div>
+			</div>
+		`);
+		this.wrapper.find(".hamilton-board").append($modal);
+
+		const $received = $modal.find(".hamilton-cash-received");
+		const $changeRow = $modal.find(".hamilton-cash-change-row");
+		const $change = $modal.find(".hamilton-cash-change");
+		const $confirm = $modal.find(".hamilton-modal-btn-confirm");
+		$received.on("input", () => {
+			const got = Number($received.val()) || 0;
+			const due = this._cart_total();
+			if (got >= due) {
+				$change.text(`$${(got - due).toFixed(2)}`);
+				$changeRow.show();
+				$confirm.prop("disabled", false);
+			} else {
+				$changeRow.hide();
+				$confirm.prop("disabled", true);
+			}
+		});
+		$modal.on("click", (e) => { if (e.target === $modal[0]) this._close_modals(); });
+		$modal.find(".hamilton-modal-btn-cancel").on("click", () => this._close_modals());
+		$modal.find(".hamilton-modal-btn-confirm").on("click", () => {
+			// V9.1-D12 STUB: payment confirmation is intentionally a no-op
+			// pending accounting setup. Browser testing can validate the
+			// cart UX flow up to this point; the Sales Invoice creation
+			// arrives in a follow-up PR once HST account, warehouse, etc.
+			// are seeded.
+			this._close_modals();
+			frappe.show_alert({
+				message: __("Sales Invoice creation pending accounting setup."),
+				indicator: "orange",
+			}, 7);
+			// Cart intentionally NOT cleared — operator can retry once
+			// accounting prereqs ship; clearing would lose work.
+		});
 	}
 
 	_format_minutes(minutes) {
@@ -470,8 +718,27 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			e.stopPropagation();
 			const $tile = $(e.currentTarget);
 			if ($(e.target).closest(".hamilton-action-btn").length) return;
-			const name = $tile.data("asset-name");
 
+			// V9.1-D9 (supersedes D7): retail tile click adds 1 to cart.
+			// The drawer + tile pill rerender to reflect the new line.
+			if ($tile.hasClass("hamilton-retail-tile")) {
+				const item_code = $tile.data("item-code");
+				if (!item_code) return;
+				const stock = Number($tile.data("stock") || 0);
+				if (stock <= 0) {
+					frappe.show_alert({
+						message: __("Out of stock"),
+						indicator: "red",
+					});
+					return;
+				}
+				this._cart_add(item_code);
+				this._render_cart_drawer();
+				this.render_active_tab();  // refreshes tile in-cart pill
+				return;
+			}
+
+			const name = $tile.data("asset-name");
 			if (this.expanded_asset && this.expanded_asset.name === name) {
 				this.collapse_expanded();
 				return;
