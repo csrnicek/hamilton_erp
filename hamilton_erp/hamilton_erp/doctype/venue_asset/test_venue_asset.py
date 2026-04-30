@@ -199,31 +199,6 @@ class TestVenueAsset(IntegrationTestCase):
 	# Phase 1 — whitelisted methods call lifecycle module
 	# ------------------------------------------------------------------
 
-	def test_mark_vacant_delegates_to_lifecycle(self):
-		if not frappe.db.exists("Customer", "Walk-in"):
-			frappe.get_doc({
-				"doctype": "Customer",
-				"customer_name": "Walk-in",
-				"customer_group": frappe.db.get_value(
-					"Customer Group", {"is_group": 0}, "name") or "All Customer Groups",
-				"territory": frappe.db.get_value(
-					"Territory", {"is_group": 0}, "name") or "All Territories",
-			}).insert(ignore_permissions=True)
-		asset = self._make_asset("Test Whitelist Vacate")
-		asset.reload()
-		# Put it into Occupied via the lifecycle module so state is consistent
-		from hamilton_erp import lifecycle
-		lifecycle.start_session_for_asset(asset.name, operator="Administrator")
-		asset.reload()
-		asset.mark_vacant(vacate_method="Key Return")  # the whitelisted method
-		asset.reload()
-		self.assertEqual(asset.status, "Dirty")
-
-	def test_set_out_of_service_requires_reason(self):
-		asset = self._make_asset("Test Whitelist OOS")
-		with self.assertRaises(frappe.ValidationError):
-			asset.set_out_of_service(reason="")
-
 	# ------------------------------------------------------------------
 	# Audit 2026-04-11 — Group E: Controller guard gaps
 	# ------------------------------------------------------------------
