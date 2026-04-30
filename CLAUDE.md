@@ -64,6 +64,16 @@ When writing any Frappe code, consult these sources before writing:
 
 If a convention is unclear, prefer matching what frappe/frappe itself does over inventing something new.
 
+### Production branch pinning — version-16, NEVER develop
+
+Hamilton ERP production deploys on Frappe Cloud must pin both `frappe` and `erpnext` to the **`version-16`** branch (GA'd 2026-01-12), NOT `develop`.
+
+`develop` tracks v17 work — pre-release breaking changes land there continuously. A production site pulling `develop` would inherit untested breakage on every auto-deploy. The `version-16` branch only receives backports of fixes after they're validated.
+
+**Local dev / CI exception:** CI's vendored `frappe-setup` action installs `frappe/payments@develop` (per `.github/workflows/tests.yml` and CLAUDE.md's "Common Issues" section) because frappe/payments has no `version-16` branch yet — that's CI-only and acceptable. The Hamilton ERP custom app itself tracks `main`. Production deploys still pin frappe + erpnext to `version-16`.
+
+**Watch:** if frappe/payments cuts a `version-16` branch, switch the workflow checkout AND any production install of payments to it. See `docs/inbox.md` 2026-04-28 entry on the frappe/payments production-deploy decision.
+
 ### Hard rules that override defaults
 
 - Tests must be self-contained — each test creates and tears down its own data, no reliance on global seed

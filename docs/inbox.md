@@ -34,6 +34,58 @@ Already set: `gh pr merge --squash --auto --delete-branch` — fires when CI gre
 2. **Initial stock on day one.** Want a small follow-up PR that seeds 24 units of each retail SKU as a Material Receipt (gated by `frappe.conf.seed_initial_retail_stock=true`), or do the first Material Receipt manually via Desk?
 3. **Phase 2 hardware queue priority.** Receipt printer first (operational impact) or merchant adapter first (longest lead time on processor approval)?
 
+## 2026-04-30 — Frappe Cloud production prep (Tier 0 launch tasks)
+
+Surfaced by the Frappe Cloud production-hosting research session (2026-04-30). These augment the existing Tier 0 foundations in the post-PR-9 cleanup section below. All four are pre-go-live blockers — none can wait until after opening day.
+
+### T0-FC-1 — Enable backup encryption BEFORE any PII or card payments ship
+
+**Action:** `bench --site hamilton-erp.v.frappe.cloud set-config encryption_key '<random-key>'` and store the key in 1Password.
+
+**Why:** Frappe Cloud's backup encryption is opt-in. Default = unencrypted. Without an encryption key, restored backups CAN be opened by anyone with S3 read access to the Mumbai bucket — fine for Phase 1 (no PII, cash-only) but a regulatory landmine the moment Phase 2 next iteration ships card payments (last-4, merchant_transaction_id, customer email/SMS for digital receipts).
+
+**Critical inverse risk:** if the encryption key is set AFTER existing backups are taken, those existing backups are still un-encrypted. Set the key BEFORE any sensitive data lands. Once set, store the key forever — losing it makes encrypted backups unrecoverable.
+
+**Effort:** 5 minutes + 1Password entry.
+
+### T0-FC-2 — Move backup region from Mumbai to Canada or US East
+
+**Action:** Open a support ticket with Frappe Cloud requesting backup region change from default `ap-south-1` (Mumbai, India) to `ca-central-1` (Montreal) or `us-east-1` (Virginia).
+
+**Why:** Default backup destination is an AWS S3 bucket in Mumbai. PIPEDA (Canada's privacy law) doesn't strictly prohibit cross-border data transfer, but customer PII stored in India creates a disclosure obligation in privacy notices and increases the risk surface in the event of a Frappe Cloud account compromise. `ca-central-1` is the gold standard (data residency in Canada); `us-east-1` is a defensible second choice with US Cloud Act implications.
+
+**Time pressure:** Same as T0-FC-1 — must land before Phase 2 next iteration adds PII / card data.
+
+**Effort:** Support ticket + Frappe response time. Frappe-side complexity unknown; may require a plan tier upgrade.
+
+### T0-FC-3 — Verify $40/month plan storage allocation is ≥20 GB
+
+**Action:** Confirm with Frappe Cloud support (or check the bench config UI) that the current $40/month plan includes at least 20 GB of database + file storage.
+
+**Why:** Hamilton's database growth projection: ~1-1.5 GB after Year 1, ~5-8 GB after Year 5 (GL Entry / Sales Invoice / Stock Ledger Entry growth, no partitioning). Plus receipt-bytes retention for chargeback evidence (Phase 2 next): ~2KB/receipt × 600 receipts/day × 365 days = **~430 MB/year just for receipts**. Total 5-year storage need: **~5-10 GB database + ~2-4 GB file storage = ~7-14 GB**. 20 GB gives headroom; below that, Hamilton will need to bump plan tiers mid-year, which is operationally expensive (planned migration window required).
+
+**Effort:** Read the plan dashboard + ticket if unclear. <30 minutes.
+
+### T0-FC-4 — Restore-to-staging exercise to measure actual RTO
+
+**Action:** Trigger a real restore from Frappe Cloud's offsite backup to a staging site (NOT production). Time the operation. Document the actual RTO (recovery time objective in minutes) in the launch runbook.
+
+**Why:** Frappe Cloud advertises 24-hour RPO (daily backups, retention 7d/4w/12m/10y) but **does not publish an RTO**. The actual restore time depends on backup size, S3-to-Mumbai-to-bench bandwidth, and Frappe support response time. Hamilton's measurement IS the operational baseline — without it, the disaster-recovery plan is "do whatever Frappe says" with unknown duration.
+
+**Pass criteria:** Documented RTO < 4 hours for Hamilton's database size (currently small, will grow). If the actual RTO is >24 hours, that's a "consider Dedicated server tier ($200/month) for the < 2-hour critical-issue SLA" decision point.
+
+**Caveat:** Frappe Cloud's docs don't describe whether restore is self-serve via the portal or requires a support ticket. Find out as part of this exercise — the RTO measurement is dominated by whichever path applies.
+
+**Effort:** ~1 hour for the restore + 30 minutes for runbook documentation.
+
+### Sequencing for the four
+
+All four should land in the 1-2 weeks BEFORE Hamilton opens:
+1. **T0-FC-3 storage check** first (lowest cost, may surface a need to bump plan tier which has lead time).
+2. **T0-FC-1 encryption** next (5 minutes, but blocking T0-FC-4's restore drill — restore drill should test the encrypted-backup path).
+3. **T0-FC-2 region change** in parallel (depends on Frappe support response time).
+4. **T0-FC-4 restore drill** last (validates the encrypted backup path + measures RTO).
+
 2026-04-24: V9 of asset board shipped to main as squash commit 1cc9125. PR #8 merged. decisions_log.md Part 3.1 amended (countdown text amber→red). V9 plan archived at docs/design/archive/. NEXT SESSION: update docs/claude_memory.md to reflect V9 shipping; cancel unused Frappe Cloud site (~$40/mo, won't need until deploy 6-8 weeks out).
 
 ## 2026-04-27 — Late evening
