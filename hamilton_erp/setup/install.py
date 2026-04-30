@@ -36,23 +36,21 @@ def _ensure_audit_trail_enabled():
 	System Settings has an `enable_audit_trail` field in v15+ that gates
 	Frappe's tamper-evident audit log of every doc change. Enabling it on
 	install means every Hamilton DocType change after handoff is traceable
-	without retro-fitting. Idempotent — only writes if currently 0/None.
+	without retro-fitting. Idempotent — only writes if currently 0.
 
-	If the field doesn't exist on this Frappe version, this is a no-op
-	(captured by the existence check), so the install path stays robust
-	across minor v16 versions.
+	If the field doesn't exist on this Frappe build (older minor, rename,
+	or stripped-down distribution), this is a no-op — checked via the
+	DocType meta before any read/write so we never raise on missing fields.
 	"""
-	# Field name in Frappe v15+: `enable_audit_trail` on System Settings.
-	# Use frappe.db.get_single_value to avoid loading the doc unnecessarily.
-	current = frappe.db.get_single_value("System Settings", "enable_audit_trail")
-	if current is None:
-		# Field absent on this Frappe build — older minor or rename.
+	meta = frappe.get_meta("System Settings")
+	if not meta.has_field("enable_audit_trail"):
 		frappe.logger().info(
 			"hamilton_erp: System Settings.enable_audit_trail not present; "
 			"skipping audit-trail enable (Frappe version variance)."
 		)
 		return
-	if int(current) == 1:
+	current = frappe.db.get_single_value("System Settings", "enable_audit_trail")
+	if int(current or 0) == 1:
 		return  # already on
 	frappe.db.set_single_value("System Settings", "enable_audit_trail", 1)
 	frappe.logger().info("hamilton_erp: enabled Audit Trail in System Settings")
