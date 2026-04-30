@@ -341,7 +341,7 @@
         "description": "Write end-to-end test test_e2e_phase1.py covering scenario H10: vacate + turnover flow across API + lifecycle + realtime.",
         "details": "Plan section: Task 22 (lines 3321-3451). Creates hamilton_erp/hamilton_erp/test_e2e_phase1.py.",
         "testStrategy": "E2E — start → vacate → mark clean → available, with assertion on Asset Status Log and realtime events.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "21"
         ],
@@ -354,7 +354,7 @@
         "description": "E2E test for scenario H11: taking an asset out of service (from each valid source state) and returning it.",
         "details": "Plan section: Task 23 (lines 3452-3543). Modifies test_e2e_phase1.py.",
         "testStrategy": "E2E — any state → OOS → Available, asserting audit trail and that active sessions are force-closed.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "22"
         ],
@@ -367,7 +367,7 @@
         "description": "E2E test for scenario H12: attempting to start a session on an already-Occupied asset must be rejected with the three-layer lock intact.",
         "details": "Plan section: Task 24 (lines 3544-3631). Modifies test_e2e_phase1.py.",
         "testStrategy": "E2E — concurrent start attempts on same asset, only one succeeds, other fails cleanly with LockContentionError.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "23"
         ],
