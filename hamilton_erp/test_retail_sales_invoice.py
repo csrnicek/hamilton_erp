@@ -69,6 +69,26 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			f"Warehouse {warehouse!r} not seeded.",
 		)
 
+	def test_warehouse_type_transit_seeded(self):
+		"""ERPNext's ``Company.create_default_warehouse`` references
+		Warehouse Type "Transit" when creating the "Goods In Transit"
+		warehouse on Company insert. ERPNext does NOT seed this Warehouse
+		Type in its own after_install (the setup wizard creates it).
+		Hamilton must seed it explicitly in ``_ensure_erpnext_prereqs`` or
+		fresh-install Company creation fails with
+		``LinkValidationError: Could not find Warehouse Type: Transit``.
+
+		Pinning this contract here so any future cleanup that "removes
+		seemingly unused records from _ensure_erpnext_prereqs" surfaces as
+		a test failure, not a CI fresh-install crash.
+		"""
+		self.assertTrue(
+			frappe.db.exists("Warehouse Type", "Transit"),
+			"Warehouse Type 'Transit' must be seeded by "
+			"_ensure_erpnext_prereqs — required by ERPNext's Company "
+			"creation hook for the 'Goods In Transit' warehouse.",
+		)
+
 	def test_hamilton_cost_center_exists(self):
 		company = _hamilton_company()
 		self.assertIsNotNone(company)

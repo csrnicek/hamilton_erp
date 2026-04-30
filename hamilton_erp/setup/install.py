@@ -170,6 +170,30 @@ def _ensure_erpnext_prereqs():
 			"must_be_whole_number": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created UOM 'Nos'")
+	# CI fresh-install fix: ERPNext's
+	# ``Company.create_default_warehouse`` (in
+	# ``erpnext/setup/doctype/company/company.py``) creates a "Goods In
+	# Transit" Warehouse with ``warehouse_type="Transit"`` when a Company
+	# is inserted. The Warehouse doctype's ``warehouse_type`` field is a
+	# Link, so the linked Warehouse Type record must exist or the insert
+	# fails with ``LinkValidationError: Could not find Warehouse Type:
+	# Transit``.
+	#
+	# ERPNext does NOT seed Warehouse Type "Transit" in its own
+	# ``after_install`` — it's created by the setup wizard, which Hamilton
+	# skips (see ``_ensure_no_setup_wizard_loop``). Local dev sites that
+	# have been around long enough have the record from a prior migration
+	# or interactive setup; CI fresh installs never have it, which is why
+	# CI Server Tests have been failing on fresh-install since the v9.1
+	# accounting seed shipped (PR #51 commit 95cccc3, 2026-04-30).
+	#
+	# Idempotent — uses ``frappe.db.exists`` guard. Safe to re-run.
+	if not frappe.db.exists("Warehouse Type", "Transit"):
+		frappe.get_doc({
+			"doctype": "Warehouse Type",
+			"name": "Transit",
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Warehouse Type 'Transit'")
 
 
 def _seed_hamilton_data():
