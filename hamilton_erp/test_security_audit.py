@@ -422,6 +422,135 @@ class TestNoFrontDeskSelfEscalation(IntegrationTestCase):
 					)
 
 
+class TestSystemManagerGrantGuardrail(IntegrationTestCase):
+	"""Task 25 item 2 — only System Manager can grant System Manager.
+
+	Two invariants:
+
+	  1. **Frappe default holds.** The Frappe core enforces "only a
+	     System Manager can assign the System Manager role" *structurally*:
+	     only the ``System Manager`` role has ``write`` on the ``User``
+	     DocType, so a non-SM user can't save a User document at all,
+	     which means they can't add the System Manager role (or any
+	     role) to anyone. This test asserts that structural default
+	     still holds — if a Frappe upgrade, a third-party app, or a
+	     stray Custom DocPerm fixture grants ``write/create/delete`` on
+	     ``User`` to anyone other than ``System Manager``, this test
+	     catches it before deploy.
+
+	  2. **No non-System-Manager role ever gets cancel/amend/role-edit
+	     perms** on any escalation-risk DocType — User, Role, DocPerm,
+	     Custom DocPerm, Has Role, Role Profile. This is the broader
+	     regression guard: ``TestNoFrontDeskSelfEscalation`` only checks
+	     Hamilton Operator. This class extends the check to *every* role
+	     except System Manager, so a future fixture that accidentally
+	     grants Hamilton Manager ``cancel`` on User (or any other
+	     escalation DocType) fails the build.
+
+	Static, not runtime: the static DocPerm scan catches the class of
+	misconfig regardless of whether anyone has discovered an exploit
+	for it. Runtime tests would require a full user/role seed and would
+	only catch regressions in the specific path the test exercises.
+
+	Why the role-edit DocType list is hard-coded here: these are the
+	DocTypes that, if mutate-able by a non-SM role, allow that role to
+	escalate itself or another user to System Manager. They are a
+	stable Frappe core set — adding to this list is a deliberate
+	security decision, not a maintenance burden.
+	"""
+
+	# Same set as TestNoFrontDeskSelfEscalation — kept in sync intentionally.
+	# If a new escalation-risk DocType appears (e.g. a future Frappe core
+	# DocType that controls role/permission assignment), add it to BOTH
+	# lists.
+	ESCALATION_RISK_DOCTYPES = [
+		"User",
+		"Role",
+		"DocPerm",
+		"Custom DocPerm",
+		"Has Role",
+		"Role Profile",
+	]
+	FORBIDDEN_FLAGS = ("write", "create", "delete", "submit", "cancel", "amend")
+
+	# The only role that may hold these permissions. Hard-coding "System
+	# Manager" is correct — it is a Frappe-shipped role name (not a
+	# user, not a Hamilton fixture) and its identity is stable across
+	# every Frappe install.
+	ALLOWED_ROLE = "System Manager"
+
+	def test_only_system_manager_can_mutate_user_doctype(self):
+		"""Frappe default — only System Manager has write on User.
+
+		If this fails, the structural "only SM can grant System Manager"
+		guarantee is broken: whoever else has write on User can save a
+		User document with the System Manager role added. The fix is
+		not in this app — it's to remove whatever DocPerm or Custom
+		DocPerm row granted that access.
+		"""
+		offenders: list[str] = []
+		for table in ("DocPerm", "Custom DocPerm"):
+			rows = frappe.get_all(
+				table,
+				filters={"parent": "User"},
+				fields=["name", "role"] + list(self.FORBIDDEN_FLAGS),
+			)
+			for r in rows:
+				if r.get("role") == self.ALLOWED_ROLE:
+					continue
+				granted = [f for f in self.FORBIDDEN_FLAGS if r.get(f)]
+				if granted:
+					offenders.append(
+						f"{table} ({r['name']}): role={r.get('role')!r} "
+						f"flags={granted}"
+					)
+		self.assertEqual(
+			offenders, [],
+			"A non-System-Manager role has mutate permission on the "
+			"User DocType. The Frappe default — that only System "
+			"Manager can save User docs (and therefore only SM can "
+			"grant the System Manager role) — has been broken. "
+			"Offenders:\n  " + "\n  ".join(offenders),
+		)
+
+	def test_no_non_sm_role_has_escalation_perms(self):
+		"""Regression — any non-SM role with mutate perms on an
+		escalation-risk DocType fails this test.
+
+		This is the broader guard for Task 25 item 2: not just Hamilton
+		Operator (covered separately by
+		TestNoFrontDeskSelfEscalation), but ANY role other than System
+		Manager. If a future fixture grants Hamilton Manager
+		``cancel`` on Role, or a third-party app grants Sales Manager
+		``write`` on Has Role, this test catches it.
+		"""
+		offenders: list[str] = []
+		for dt in self.ESCALATION_RISK_DOCTYPES:
+			for table in ("DocPerm", "Custom DocPerm"):
+				rows = frappe.get_all(
+					table,
+					filters={"parent": dt},
+					fields=["name", "role"] + list(self.FORBIDDEN_FLAGS),
+				)
+				for r in rows:
+					if r.get("role") == self.ALLOWED_ROLE:
+						continue
+					granted = [f for f in self.FORBIDDEN_FLAGS if r.get(f)]
+					if granted:
+						offenders.append(
+							f"{dt} via {table} ({r['name']}): "
+							f"role={r.get('role')!r} flags={granted}"
+						)
+		self.assertEqual(
+			offenders, [],
+			"A non-System-Manager role has cancel/amend/role-edit "
+			"permission on an escalation-risk DocType. The "
+			"deployment checklist in docs/permissions_matrix.md "
+			"explains who should hold System Manager. Offenders:\n  "
+			+ "\n  ".join(offenders),
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

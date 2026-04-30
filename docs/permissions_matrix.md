@@ -11,8 +11,8 @@ This file is the human-readable view of every Hamilton DocType's role-based acce
 |---|---|
 | `Hamilton Operator` | Front Desk staff (the most numerous role) |
 | `Hamilton Manager` | Floor Manager (escalation tier above Operator) |
-| `Hamilton Admin` | Hamilton-specific super-user (Chris) |
-| `System Manager` | Frappe-level super-user (restricted to Chris only — Task 25 item 2) |
+| `Hamilton Admin` | Hamilton-specific super-user (the venue owner / domain operator) |
+| `System Manager` | Frappe-level super-user (see "System Manager deployment checklist" — Task 25 item 2) |
 
 ## Phase 1 permission grid
 
@@ -47,8 +47,60 @@ This file is the human-readable view of every Hamilton DocType's role-based acce
 - **Asset Status Log** is read-only for non-admin roles. The audit trail must not be editable by the operators it audits.
 - **Cash Reconciliation** has `submit` permission for Manager + Admin, the only Phase 1 DocType with `submit`. End-of-shift reconciliations are the one workflow that follows the Frappe submit/cancel/amend lifecycle in Phase 1.
 - **No role has `cancel` or `amend` flags in Phase 1.** Task 25 item 1 ("Cancel/amend locked to Floor Manager+ only") is currently moot because no Phase 1 DocType is cancellable. When Phase 2 makes Venue Session or Cash Drop submittable, the cancel/amend flags must be granted to Hamilton Manager+ only — see the regression test in `test_security_audit.py::TestNoFrontDeskSelfEscalation`.
-- **Hamilton Board Correction** has no role permission rows. By Frappe convention, a DocType without explicit role perms is accessible only to System Manager — i.e., admin-only by absence. This is the correct default for a manual-correction audit DocType: nobody routinely creates these; only Chris does, by hand.
+- **Hamilton Board Correction** has no role permission rows. By Frappe convention, a DocType without explicit role perms is accessible only to System Manager — i.e., admin-only by absence. This is the correct default for a manual-correction audit DocType: nobody routinely creates these; only the System Manager role holder does, by hand.
 - **Cash Reconciliation** does NOT grant Hamilton Operator any access. Front Desk staff cannot read end-of-shift reconciliations (which contain expected-vs-actual cash math). This is intentional — the operator who collected the cash is the same person whose math is being checked.
+
+## System Manager deployment checklist (Task 25 item 2)
+
+`System Manager` is the Frappe-level super-user. It can edit every DocType in the system, including `User`, `Role`, `DocPerm`, `Custom DocPerm`, `Has Role`, and `Role Profile`. Anyone with this role can grant or revoke any other role — including `System Manager` itself — on any user account. Treat it as the production root credential.
+
+This file does **not** name the individuals who hold `System Manager`. Identities change (staff turnover, ownership change, vendor handoff); the deployment rule is what stays stable. Map the rule to people in `Hamilton Settings.system_manager_grant_log` (or in your tenant's equivalent runbook), not in this matrix.
+
+### Who SHOULD hold `System Manager`
+
+- **Exactly one human-owned account per venue tenant** — the role holder of record. This is the person accountable for role grants, password resets, and Frappe-Cloud-level operations on that site. Typical mapping: the venue owner or the venue's designated platform administrator.
+- **Optionally: one break-glass account per tenant** — disabled by default, password rotated quarterly, enabled only during an incident with a paired audit log entry. Used when the primary account is locked out or compromised.
+
+### Who must NOT hold `System Manager`
+
+- Front Desk staff (`Hamilton Operator`).
+- Floor Managers (`Hamilton Manager`).
+- Vendor / contractor accounts beyond the duration of the engagement.
+- Any service account or API integration. Service accounts use scoped API keys against narrower roles, never `System Manager`.
+
+### Pre-deploy checklist
+
+Run this before flipping the production URL on a new venue tenant, and re-verify quarterly:
+
+1. **Inventory every account that holds `System Manager`.**
+   ```bash
+   bench --site <site> console
+   >>> import frappe; frappe.get_all('Has Role',
+   ...     filters={'role': 'System Manager', 'parenttype': 'User'},
+   ...     fields=['parent'])
+   ```
+   Confirm the result list matches the documented role holders for that tenant. Anything unexpected is a finding.
+
+2. **Confirm the structural Frappe default still holds.** No role other than `System Manager` may have `write/create/delete/submit/cancel/amend` on `User`, `Role`, `DocPerm`, `Custom DocPerm`, `Has Role`, or `Role Profile`. The regression test `TestSystemManagerGrantGuardrail` in `hamilton_erp/test_security_audit.py` enforces this on every CI run; running the test suite before deploy is the verification.
+
+3. **Disable any break-glass account** that was enabled for prior incident work. Audit log entry must reference the closing ticket.
+
+4. **Rotate the primary `System Manager` password and 2FA recovery codes** if the role holder has changed since the last deploy.
+
+5. **Verify no service / API account holds `System Manager`.** API integrations use scoped roles (`Hamilton Operator`, `Hamilton Manager`, or a purpose-built role), not the platform super-user.
+
+6. **Check `Custom DocPerm` for drift.** Per-tenant overlays can grant escalation perms that don't appear in the committed JSON. Run:
+   ```bash
+   bench --site <site> console
+   >>> import frappe; frappe.get_all('Custom DocPerm',
+   ...     filters={'parent': ['in', ['User','Role','DocPerm','Has Role','Role Profile','Custom DocPerm']]},
+   ...     fields=['parent','role','write','create','delete','cancel','amend'])
+   ```
+   Any row whose role is not `System Manager` is a finding — fix it before deploy.
+
+### Why this is documented as a checklist, not enforced in code
+
+Steps 2 and 6 are enforced by `TestSystemManagerGrantGuardrail`. Steps 1, 3, 4, and 5 are *operational* invariants — they involve people, accounts, and out-of-band processes (password rotation, vendor offboarding) that the code can't see. The checklist exists so the operator running a deploy has a single canonical list, and so audits can attach to a stable artifact.
 
 ## Sensitive fields (Task 25 item 7)
 
