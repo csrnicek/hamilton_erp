@@ -405,6 +405,54 @@ class TestFrappeV16Behaviour(IntegrationTestCase):
 		self.assertTrue(meta.track_changes,
 		                "Shift Record should have track_changes enabled")
 
+	def test_track_changes_enabled_on_venue_asset(self):
+		"""Venue Asset has track_changes enabled (status transitions, OOS reasons)."""
+		meta = frappe.get_meta("Venue Asset")
+		self.assertTrue(meta.track_changes,
+		                "Venue Asset should have track_changes enabled")
+
+	def test_track_changes_enabled_on_cash_drop(self):
+		"""Cash Drop has track_changes enabled (financial audit trail)."""
+		meta = frappe.get_meta("Cash Drop")
+		self.assertTrue(meta.track_changes,
+		                "Cash Drop should have track_changes enabled")
+
+	def test_track_changes_enabled_on_cash_reconciliation(self):
+		"""Cash Reconciliation has track_changes enabled (variance / blind cash audit)."""
+		meta = frappe.get_meta("Cash Reconciliation")
+		self.assertTrue(meta.track_changes,
+		                "Cash Reconciliation should have track_changes enabled")
+
+	def test_track_changes_enabled_on_comp_admission_log(self):
+		"""Comp Admission Log has track_changes enabled (manager-approval audit)."""
+		meta = frappe.get_meta("Comp Admission Log")
+		self.assertTrue(meta.track_changes,
+		                "Comp Admission Log should have track_changes enabled")
+
+	def test_track_changes_enabled_on_hamilton_board_correction(self):
+		"""Hamilton Board Correction has track_changes enabled (manual-correction audit)."""
+		meta = frappe.get_meta("Hamilton Board Correction")
+		self.assertTrue(meta.track_changes,
+		                "Hamilton Board Correction should have track_changes enabled")
+
+	def test_track_changes_enabled_on_hamilton_settings(self):
+		"""Hamilton Settings has track_changes enabled (singleton config audit)."""
+		meta = frappe.get_meta("Hamilton Settings")
+		self.assertTrue(meta.track_changes,
+		                "Hamilton Settings should have track_changes enabled")
+
+	def test_track_changes_explicitly_disabled_on_asset_status_log(self):
+		"""Asset Status Log is the audit log itself — tracking changes to changes is recursive.
+
+		This test pins the deliberate choice that ASL stays untracked. If a
+		future session flips track_changes:1 on Asset Status Log, this test
+		fails and forces a re-think.
+		"""
+		meta = frappe.get_meta("Asset Status Log")
+		self.assertFalse(meta.track_changes,
+		                 "Asset Status Log should NOT have track_changes enabled "
+		                 "(it IS the audit log; tracking changes to it is recursive)")
+
 	def test_venue_session_autoname_is_hash(self):
 		"""Venue Session uses hash autoname (DEC-033 relies on session_number, not name)."""
 		meta = frappe.get_meta("Venue Session")
