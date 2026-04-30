@@ -551,3 +551,65 @@ Ranked by ROI:
 
 ## Already queued (no action needed)
 - L029 audit log query.
+
+---
+
+## 2026-04-29 — L029 audit verification (today's browser-test data)
+
+**Asked:** verify L029 OOS+RTS rows in audit log; check whether asset record persists `oos_reason` and `oos_set_at`.
+
+**Result:** persistence works correctly. The "Reason unknown" symptom is the API-field-list bug, **already fixed by PR #35** (merged today). No data integrity issue; recommended browser-cache + bench-start restart and re-test.
+
+### Audit log (Asset Status Log)
+
+Both rows exist and populate `reason` correctly:
+
+| name | previous_status | new_status | reason | operator | timestamp (UTC) |
+|---|---|---|---|---|---|
+| 365 | Available | Out of Service | **Lock or Hardware** ✓ | Administrator | 2026-04-30 02:38:41 |
+| 366 | Out of Service | Available | Resolved | Administrator | 2026-04-30 02:41:24 |
+
+Two notes:
+- Timestamps are 22:38 and 22:41 EDT April 29 (my local), not the 04:05/04:11 PM Chris reported. These are likely from a later test run that overwrote earlier state. The audit log is append-only so earlier rows would still exist; only 2 rows total today, so either earlier tests had been pruned or the 04:05/04:11 PM session was on a different asset code.
+- Audit log table exists and is fully wired. Audit logging is **not** Phase 2 — it's Phase 1 (lifecycle.py:70 `_make_asset_status_log`).
+
+### Asset record (Venue Asset L029 / VA-2901) right now
+
+| field | value |
+|---|---|
+| status | Available |
+| reason | NULL |
+| hamilton_last_status_change | 2026-04-30 02:41:24.195939 |
+| current_session | NULL |
+
+The schema does **not** have separate `oos_reason` or `oos_set_at` fields. It uses:
+- `reason` (text) — populated when entering OOS, **cleared when leaving OOS** (lifecycle.py:447, "the reason field is OOS-specific. ANY transition that does not enter OOS clears it").
+- `hamilton_last_status_change` (datetime) — bumped on every transition.
+
+Currently NULL is **correct** because L029 has been returned to service. During the OOS window (02:38–02:41 UTC), `asset.reason` was "Lock or Hardware".
+
+### Verified via code review
+
+- `set_asset_out_of_service` → calls `_set_asset_status` with `log_reason=reason`.
+- `_set_asset_status` (lifecycle.py:289) writes `asset.reason = log_reason` when `new_status == "Out of Service"`. So persistence works.
+- `_set_asset_status` (lifecycle.py:301) clears `asset.reason = None` on any transition out of OOS. So clearing on RTS works.
+- Audit log gets the `log_reason` separately via `_make_asset_status_log`. So both rows have their respective reasons (the OOS reason and the RTS reason).
+
+### Root cause of "Reason unknown" in today's browser test
+
+The Asset Board JS reads `asset.reason` from the API payload. Before PR #35, `api.get_asset_board_data` did **not** include `reason` in its `frappe.get_all` field list. So `asset.reason` was always `undefined` in the JS, falling back to the literal "Reason unknown" string.
+
+**PR #35 (merged ~12:22 PM EST today)** added `"reason"` to the field list. The asset record persistence was always working — the bug was purely the API not returning the field.
+
+If Chris's browser test happened with a stale `bench start` process or stale browser cache, the old behavior would still show. **Recommended:** restart bench start (or `bench restart` if running it as a service) to ensure the new api.py is loaded, hard-refresh the browser (Cmd+Shift+R), and re-run the L029 OOS → click L029 reproduction.
+
+### Bug status update for the V9 browser-test session entry (above)
+
+Bug #1 ("RTS modal Reason unknown") is **already fixed in main** as of PR #35. It's not a separate persistence bug. The Task 5 "Fix V9 browser test bugs" PR can drop bug #1 from its scope, narrowing to:
+
+- ~~RTS modal "Reason unknown"~~ (fixed by PR #35; if it still shows after bench restart + browser refresh, file as a fresh bug)
+- RTS modal SET line missing timestamp
+- Remove "Mark All Clean" feature entirely (per DEC-054)
+- Dirty-for-Xm timer
+
+If the "Reason unknown" symptom persists after the user's restart + refresh, the next investigation step is to capture the actual API response payload (browser DevTools → Network tab → `get_asset_board_data` response) and confirm whether `reason` is in the payload for the OOS asset.
