@@ -127,5 +127,5 @@
  ],
  "sort_field": "timestamp",
  "sort_order": "DESC",
- "track_changes": 0
+ "track_changes": 1
 }
