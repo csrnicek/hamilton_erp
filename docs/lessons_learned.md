@@ -573,3 +573,53 @@ These are the rules that have already cost us hours (or would cost us days) when
 ---
 
 *Last restructure: 2026-04-29 — split narrative content into `docs/retrospectives/`, governance findings into `docs/risk_register.md`, and added LL-XXX IDs, severity tags, category sections, an index table, a Top 10 Rules section, three new S0 lessons (Upgrade Safety, Production Recovery, Agent Safety), and a maintenance policy. Based on two external reviews of the previous file.*
+
+---
+
+## 2026-04-29 (PM) — Second autonomous run lessons
+
+A second overnight session — V9.1 retail badge fix → Task 25 permissions batch → 3-audit code-quality refactors. Six discrete lessons surfaced; appended below in lighter format than the LL-XXX entries because most are operational gotchas rather than architectural rules.
+
+### `frappe.db.get_single_value` raises on missing fields, not None
+
+- **Surfaced by:** Task 25 permissions PR (#45) initial CI failure on the new `_ensure_audit_trail_enabled` helper.
+- **What I assumed:** `frappe.db.get_single_value("System Settings", "enable_audit_trail")` would return `None` if the field didn't exist on this Frappe build, so a defensive `if current is None: return` would handle version variance.
+- **Reality:** It raises `frappe.exceptions.ValidationError` ("Field <strong>enable_audit_trail</strong> does not exist on <strong>System Settings</strong>") before returning anything. The defensive None check is unreachable.
+- **Fix:** Gate via `frappe.get_meta("System Settings").has_field("enable_audit_trail")` first, then read/write only when present.
+- **Generalizes:** Any `db.get_single_value` (or `db.get_value` with a fieldname that may not exist on this build) needs a `meta.has_field` gate first if you're trying to be defensive about Frappe version variance.
+
+### `bench set-config <key> '[...]'` stores values as JSON-encoded strings, not lists
+
+- **Surfaced by:** V9.1 browser test prep — `bench set-config retail_tabs '["Drink/Food"]'` wrote `"retail_tabs": "[\"Drink/Food\"]"` to `site_config.json`, not `"retail_tabs": ["Drink/Food"]`.
+- **Effect:** `frappe.conf.get("retail_tabs")` returned the string `"[\"Drink/Food\"]"`. My API's `if not isinstance(tabs, list)` check rejected it; retail tab silently empty.
+- **Fix:** Use `bench set-config --parse retail_tabs '...'` (parses the value as JSON before storing), or hand-edit `sites/<site>/site_config.json` directly.
+- **Generalizes:** Any non-string config value (list, dict, bool, int) needs `--parse`. Default behavior is "store as string" which is correct for strings only.
+
+### Manually-started Redis collides with `bench start`'s Procfile-managed Redis
+
+- **Surfaced by:** Recovering bench from a stopped state. I started Redis manually on ports 13000+11000 to unblock `bench migrate`, then ran `bench start`. `bench start`'s `redis_queue.1` process tried to bind port 11000, hit my Redis still listening, exited 1, and tore down all sibling processes (web, socketio, schedule, watch, worker).
+- **Fix:** Pick one regime. Either (a) let bench own Redis via `bench start`, or (b) manage Redis manually and don't run `bench start`. Mixing them leaves the supervisor and the orphan in a fight.
+- **Generalizes:** When debugging a partial bench state, kill the manual Redis instances (`redis-cli -p 13000 shutdown nosave; redis-cli -p 11000 shutdown nosave`) before running `bench start`. Bench's Procfile expects to own those ports.
+
+### Once a seed patch is marked completed, new helpers added to its `execute()` don't auto-run on existing sites
+
+- **Surfaced by:** V9.1 retail seed (Drink/Food + 4 Items) didn't appear on `hamilton-test.localhost` after `bench migrate` — the `seed_hamilton_env` patch was already in `tabPatch Log` from earlier installs, so its (newly extended) `execute()` was skipped.
+- **Why:** Frappe's patch runner reads `tabPatch Log` and skips already-completed patches. Adding new logic to a completed patch's body is a no-op on existing sites.
+- **Workaround used tonight:** `bench --site SITE execute hamilton_erp.patches.v0_1.seed_hamilton_env._ensure_retail_items` to manually run just the new helper.
+- **Better long-term:** When a seed adds a new artifact, also wire the new helper into `after_install` (which runs on EVERY install regardless of patch log) so fresh sites pick it up automatically. Or add a NEW patch file (`patches/v0_2/seed_v9_1_retail.py`) so `bench migrate` runs it as a new patch.
+- **Generalizes:** Patches are append-only, semantically. Don't mutate completed patches; add new ones. Or wire into `after_install`/`after_migrate` hooks which run unconditionally.
+
+### Three code-quality audits surfaced one fix and zero antipatterns
+
+- **`frappe.in_test` audit:** zero `frappe.flags.in_test` slips in production code. The defensive "toggle both" pattern from LL-004 is followed in canonical helpers (`real_logs()` in `test_e2e_phase1.py` + `test_stress_simulation.py`). Older test files use single-attribute ad-hoc toggles — works because production reads only `frappe.in_test`, not defensive but not broken either. **No refactor.**
+- **`extend_doctype_class` audit:** production code (`hooks.py:69`) uses the v16-canonical `extend_doctype_class` correctly. Only stale references were `test_override_doctype_class_loads_correctly` (test method name) and one upgrade-checkpoint comment in `overrides/sales_invoice.py`. **Fixed in PR #46** (rename + comment update).
+- **`== 1` / `== 0` audit:** one production-code use, in `_ensure_audit_trail_enabled` (`int(current or 0) == 1`) — explicit int comparison is intentional because Frappe's `get_single_value` returns may be string or int depending on field type. 25 occurrences in tests are all `assertEqual(count, N)` — correct test idiom, not antipattern. **No refactor.**
+
+**Audit lesson:** drift accumulates in test names and comments more than in production code. The actual code patterns followed canonical Frappe v16 in every audit.
+
+### V9.1 retail tab badge: spec consistency caught at code-review time
+
+- **Surfaced by:** Reading the V9.1 implementation against Amendment 2026-04-29 A29-2 ("tab badge = Available count only"). The retail tab badge counted total Items in the Item Group, not in-stock Items.
+- **Fix:** Filter retail badge by `Number(it.stock) > 0` in both render paths (initial render in `render_shell()` + live update in `_update_tab_badges()`). Extracted `get_retail_in_stock_count(tab)` helper so both paths use the same logic. PR #44.
+- **Generalizes:** When extending a tab framework with a new tab kind (retail tabs alongside asset tabs), the live-update path is the most common place to forget. Asset tabs had `_update_tab_badges` updated when they shipped; retail tabs needed the same. Pattern: any badge logic must exist in BOTH `render_shell` (first render) and `_update_tab_badges` (per-tick update); they should compute the same value.
+
