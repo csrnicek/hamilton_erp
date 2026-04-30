@@ -623,3 +623,28 @@ A second overnight session — V9.1 retail badge fix → Task 25 permissions bat
 - **Fix:** Filter retail badge by `Number(it.stock) > 0` in both render paths (initial render in `render_shell()` + live update in `_update_tab_badges()`). Extracted `get_retail_in_stock_count(tab)` helper so both paths use the same logic. PR #44.
 - **Generalizes:** When extending a tab framework with a new tab kind (retail tabs alongside asset tabs), the live-update path is the most common place to forget. Asset tabs had `_update_tab_badges` updated when they shipped; retail tabs needed the same. Pattern: any badge logic must exist in BOTH `render_shell` (first render) and `_update_tab_badges` (per-tick update); they should compute the same value.
 
+
+---
+
+## 2026-04-30 — V9.1 Phase 2 cart UX stub
+
+Built the retail cart UX (drawer, qty controls, HST math, cash payment modal) as a stub PR — the Sales Invoice creation step is deliberately a no-op pending accounting prerequisites. Three lessons surfaced; appended below.
+
+### Investigate accounting state BEFORE designing a Sales Invoice flow
+
+When the user asked for "payment flow that creates an ERPNext Sales Invoice," the natural instinct was to dive into the cart UX and figure out the Sales Invoice creation as I went. Spending 5 minutes querying the dev-site's accounting state first surfaced that the prereqs were essentially absent: no warehouses under Hamilton's company, no cost center, no HST tax account, no Sales Taxes and Charges Template, no Item Defaults on the seeded retail items, default warehouse on Stock Settings = NULL.
+
+**Generalizes:** for any feature that creates ERPNext financial documents (Sales Invoice, Purchase Invoice, Stock Entry, Payment Entry), the prereq chain is large and venue-specific. The single highest-leverage 5-minute task is to query the existing accounting state on the target site before deciding scope.
+
+### Stub the irreversible step; ship the UX for browser iteration
+
+Cart UX is iterative — drawer placement, qty button shape, HST display, payment modal flow — and the operator's first browser-test reaction is going to drive multiple rounds of revision. Sales Invoice creation is irreversible bookkeeping: once the chart of accounts is committed, changing it is painful (existing transactions reference the old accounts).
+
+**Pattern:** stub the irreversible step with a clear toast ("Sales Invoice creation pending accounting setup"), build the rest of the UX end-to-end, and let the user validate the iteration-friendly part before the locked-in part is wired. The cart state, math, drawer rendering, and modal flow all work without touching ERPNext accounting.
+
+### Pin the stub contract in tests so future PRs don't quietly cross the line
+
+When a PR ships a stub, the next PR's author may not read the design doc and may think the stub is "incomplete code that needs filling in." Without an explicit guard, they'll wire `frappe.xcall("hamilton_erp.api.submit_retail_sale", ...)` into the confirm button and break the deferred-accounting contract.
+
+**Pattern:** add a regression test that asserts the stub method body does NOT contain `frappe.xcall`, `frappe.db.insert`, or other side-effect call patterns. The test fails CI when the stub is "completed" without first wiring the accounting prereqs. See `test_v91_payment_modal_does_not_call_frappe_db_or_xcall` in `test_asset_board_rendering.py` for the implementation.
+
