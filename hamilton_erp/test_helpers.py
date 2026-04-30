@@ -101,3 +101,51 @@ def restore_dev_state():
 		frappe.clear_cache()
 	except Exception:
 		pass
+
+
+# ---------------------------------------------------------------------------
+# real_logs() — canonical helper for tests that need audit logs to write
+# ---------------------------------------------------------------------------
+#
+# Per LL-004: Frappe v16 has TWO independent in_test attributes —
+# `frappe.in_test` (module-level boolean) and `frappe.local.flags.in_test`
+# (request-scoped flag). Frappe's own test runner sets both via
+# `frappe.tests.utils.toggle_test_mode()`. Code that toggles only one
+# silently no-ops when other code reads the other.
+#
+# `_make_asset_status_log` in lifecycle.py reads `frappe.in_test` (the
+# module attribute). Tests that need audit logs to actually write must
+# clear it. The defensive pattern is to clear BOTH attributes — robust
+# to any future production code that may read either one.
+#
+# This is the canonical helper; import from here, don't re-roll. Two
+# older test modules (test_e2e_phase1.py, test_stress_simulation.py)
+# define their own copies for historical reasons; they're being kept
+# as-is to avoid churn but new test code should import from here.
+
+from contextlib import contextmanager
+
+
+@contextmanager
+def real_logs():
+	"""Clear both `frappe.in_test` attributes so audit logs actually write.
+
+	`_make_asset_status_log` (lifecycle.py) reads the module-level
+	`frappe.in_test`, which Frappe's test runner sets via
+	`frappe.tests.utils.toggle_test_mode`. It is independent from
+	`frappe.local.flags.in_test` — both must be cleared for code that
+	reads either to see the test as "not in test mode".
+
+	Use this when you need the audit-log creation path (or any other
+	`if frappe.in_test:` short-circuit in production code) to actually
+	run during a test.
+	"""
+	prior_attr = frappe.in_test
+	prior_flag = frappe.local.flags.in_test
+	frappe.in_test = False
+	frappe.local.flags.in_test = False
+	try:
+		yield
+	finally:
+		frappe.in_test = prior_attr
+		frappe.local.flags.in_test = prior_flag

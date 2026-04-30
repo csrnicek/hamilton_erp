@@ -33,6 +33,7 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
+from hamilton_erp.test_helpers import real_logs
 from hamilton_erp.lifecycle import (
     VALID_TRANSITIONS,
     mark_asset_clean,
@@ -409,60 +410,42 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 
 	def test_asset_status_log_created_on_transition(self):
 		"""Item 48 — log entry created on every transition."""
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
+		with real_logs():
 			before = frappe.db.count("Asset Status Log",
 			                         {"venue_asset": self.asset.name})
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			after = frappe.db.count("Asset Status Log",
 			                        {"venue_asset": self.asset.name})
 			self.assertEqual(after - before, 1)
-		finally:
-			frappe.in_test = prev
 
 	def test_asset_status_log_previous_status_correct(self):
 		"""Item 49 — log previous_status matches actual previous status."""
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
+		with real_logs():
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.previous_status, "Available")
-		finally:
-			frappe.in_test = prev
 
 	def test_asset_status_log_new_status_correct(self):
 		"""Item 50 — log new_status matches actual new status."""
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
+		with real_logs():
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.new_status, "Occupied")
-		finally:
-			frappe.in_test = prev
 
 	def test_asset_status_log_operator_populated(self):
 		"""Item 51 — log operator is populated."""
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
+		with real_logs():
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
 			                          filters={"venue_asset": self.asset.name})
 			self.assertEqual(log.operator, OPERATOR)
-		finally:
-			frappe.in_test = prev
 
 	def test_asset_status_log_timestamp_recent(self):
 		"""Item 52 — log timestamp is within 5 seconds of operation."""
 		from datetime import timedelta
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
+		with real_logs():
 			before = now_datetime()
 			start_session_for_asset(self.asset.name, operator=OPERATOR)
 			log = frappe.get_last_doc("Asset Status Log",
@@ -470,8 +453,6 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 			after = now_datetime()
 			self.assertGreaterEqual(log.timestamp, before)
 			self.assertLessEqual(log.timestamp, after + timedelta(seconds=5))
-		finally:
-			frappe.in_test = prev
 
 
 # ===========================================================================
