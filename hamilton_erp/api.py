@@ -585,7 +585,12 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 			"update_stock": 1,
 			"pos_profile": HAMILTON_POS_PROFILE,
 			"currency": pos_profile.currency,
-			"selling_price_list": pos_profile.selling_price_list or "Standard Selling",
+			# Read the Price List from the POS Profile — seed sets this to
+			# "Hamilton Standard Selling" via ``_ensure_pos_profile``. No
+			# string-literal fallback to "Standard Selling" because that
+			# name collides with ERPNext's own test-fixture Price List
+			# (which uses INR currency and conflicts with our CAD).
+			"selling_price_list": pos_profile.selling_price_list,
 			# Canadian penny-elimination rule: Cash sales round the
 			# post-tax total to the nearest 5¢; Card / electronic sales
 			# settle to the exact cent. The Currency-level setting

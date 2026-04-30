@@ -11,3 +11,4 @@ hamilton_erp.patches.v0_1.rename_glory_hole_to_gh_room
 hamilton_erp.patches.v0_1.seed_hamilton_accounting
 hamilton_erp.patches.v0_1.seed_canadian_nickel_rounding
 hamilton_erp.patches.v0_1.seed_pr51_audit_fixes
+hamilton_erp.patches.v0_1.seed_hamilton_price_list

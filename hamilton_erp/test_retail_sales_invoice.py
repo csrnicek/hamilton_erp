@@ -110,20 +110,45 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			"records of type Material Receipt.",
 		)
 
-	def test_price_list_standard_selling_seeded(self):
-		"""Price List "Standard Selling" must exist or
-		``submit_retail_sale``'s fallback (``selling_price_list =
-		pos_profile.selling_price_list or "Standard Selling"``) errors
-		with ``ValidationError: Price List Standard Selling is disabled
-		or does not exist``. Fifth in the fresh-install gap family.
+	def test_hamilton_price_list_seeded(self):
+		"""Price List "Hamilton Standard Selling" must exist (CAD,
+		selling). Fifth in the fresh-install gap family — but with a
+		Hamilton-specific name to avoid collision with ERPNext's own
+		test fixtures, which insert a "Standard Selling" Price List with
+		INR currency. The Hamilton-specific name lets both coexist.
+		``_ensure_pos_profile`` sets ``selling_price_list = "Hamilton
+		Standard Selling"`` on the POS Profile so ``submit_retail_sale``
+		reads it from there directly (no string-literal fallback).
 		"""
+		from hamilton_erp.setup.install import HAMILTON_PRICE_LIST_NAME
 		self.assertTrue(
-			frappe.db.exists("Price List", "Standard Selling"),
-			"Price List 'Standard Selling' must be seeded by "
-			"_ensure_erpnext_prereqs — required by submit_retail_sale's "
-			"fallback selling_price_list and any standard ERPNext flow "
-			"that expects the seed Price Lists to exist.",
+			frappe.db.exists("Price List", HAMILTON_PRICE_LIST_NAME),
+			f"Price List {HAMILTON_PRICE_LIST_NAME!r} must be seeded by "
+			"_ensure_erpnext_prereqs.",
 		)
+		# Verify it's selling-enabled and CAD
+		pl = frappe.get_doc("Price List", HAMILTON_PRICE_LIST_NAME)
+		self.assertEqual(pl.currency, "CAD")
+		self.assertEqual(int(pl.selling), 1)
+		self.assertEqual(int(pl.enabled), 1)
+
+	def test_pos_profile_uses_hamilton_price_list(self):
+		"""POS Profile "Hamilton Front Desk" must have
+		``selling_price_list = "Hamilton Standard Selling"`` so
+		``submit_retail_sale`` reads from the profile and doesn't need
+		the (now-removed) string-literal fallback to "Standard Selling".
+		"""
+		from hamilton_erp.setup.install import (
+			HAMILTON_POS_PROFILE_NAME,
+			HAMILTON_PRICE_LIST_NAME,
+		)
+		self.assertTrue(frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE_NAME))
+		current = frappe.db.get_value(
+			"POS Profile", HAMILTON_POS_PROFILE_NAME, "selling_price_list"
+		)
+		self.assertEqual(current, HAMILTON_PRICE_LIST_NAME,
+			f"POS Profile selling_price_list should be "
+			f"{HAMILTON_PRICE_LIST_NAME!r}, got {current!r}.")
 
 	def test_mode_of_payment_cash_seeded(self):
 		"""Mode of Payment "Cash" must exist or every downstream

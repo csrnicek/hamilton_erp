@@ -282,26 +282,27 @@ def _ensure_erpnext_prereqs():
 			"enabled": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Mode of Payment 'Cash'")
-	# Price List "Standard Selling" — fifth fresh-install gap of the same
-	# class. ERPNext seeds the standard Price Lists ("Standard Selling",
-	# "Standard Buying") via the setup wizard's ``install_fixtures.py``;
-	# Hamilton's unattended install skips the wizard. Without it,
-	# ``submit_retail_sale``'s fallback ``selling_price_list = "Standard
-	# Selling"`` errors with ``ValidationError: Price List Standard
-	# Selling is disabled or does not exist``.
+	# Price List "Hamilton Standard Selling" — Hamilton-specific Price List
+	# for the cart's POS flow. Originally tried seeding "Standard Selling"
+	# but that caused DuplicateEntryError when ERPNext's test fixtures
+	# tried to insert "Standard Selling" with INR currency (Frappe's
+	# default for the standard Price List). Using a Hamilton-specific name
+	# avoids the collision while keeping Hamilton's POS flow self-contained.
 	#
-	# Seeded with currency=CAD because Hamilton operates in CAD; ERPNext's
-	# Price List validation enforces a currency. If a future Hamilton
-	# venue uses a different currency, that venue's seed should override.
-	if not frappe.db.exists("Price List", "Standard Selling"):
+	# Seeded with currency=CAD because Hamilton operates in CAD. The POS
+	# Profile (``_ensure_pos_profile`` below) sets
+	# ``selling_price_list = "Hamilton Standard Selling"`` so
+	# ``submit_retail_sale`` reads it from the profile and never needs a
+	# string-literal fallback.
+	if not frappe.db.exists("Price List", HAMILTON_PRICE_LIST_NAME):
 		frappe.get_doc({
 			"doctype": "Price List",
-			"price_list_name": "Standard Selling",
+			"price_list_name": HAMILTON_PRICE_LIST_NAME,
 			"currency": "CAD",
 			"selling": 1,
 			"enabled": 1,
 		}).insert(ignore_permissions=True)
-		frappe.logger().info("hamilton_erp: created Price List 'Standard Selling' (CAD, selling)")
+		frappe.logger().info(f"hamilton_erp: created Price List {HAMILTON_PRICE_LIST_NAME!r} (CAD, selling)")
 
 
 def _seed_hamilton_data():
@@ -435,6 +436,7 @@ HAMILTON_WAREHOUSE_BASE        = "Hamilton"
 HAMILTON_COST_CENTER_BASE      = "Hamilton"
 HAMILTON_TAX_TEMPLATE_BASE     = "Ontario HST 13%"
 HAMILTON_POS_PROFILE_NAME      = "Hamilton Front Desk"
+HAMILTON_PRICE_LIST_NAME       = "Hamilton Standard Selling"
 HAMILTON_HST_RATE              = 13.0
 
 
@@ -823,6 +825,13 @@ def _ensure_pos_profile():
 			"default": 1,
 		}],
 	}
+	# Set the Hamilton-specific Price List on the POS Profile so
+	# ``submit_retail_sale`` doesn't need to fall back to a literal
+	# Price List name. Only set if the Price List actually exists (it
+	# would normally be seeded by ``_ensure_erpnext_prereqs`` earlier in
+	# the install path, but on partial-state migrate runs we guard).
+	if frappe.db.exists("Price List", HAMILTON_PRICE_LIST_NAME):
+		profile["selling_price_list"] = HAMILTON_PRICE_LIST_NAME
 	if write_off_account:
 		profile["write_off_account"] = write_off_account
 	if frappe.db.exists("Sales Taxes and Charges Template", tax_template):
