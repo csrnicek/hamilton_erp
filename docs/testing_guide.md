@@ -295,6 +295,35 @@ Tests that the system handles repeated operations without leaking connections or
 
 ---
 
+### Fresh-Install Conformance (28 tests)
+
+**File:** `hamilton_erp/test_fresh_install_conformance.py`
+**Added:** 2026-04-30
+
+Pins the post-install DB state that `setup/install.py:after_install` plus the `patches/v0_1` data patches produce on every fresh `bench install-app`. The motivation is the recurring "fresh-install gap" failure mode that bit feat/v91-cart-sales-invoice (PR #51) five times in CI: Warehouse Type "Transit", Stock Entry Type "Material Receipt", Fiscal Year, Mode of Payment "Cash", Price List "Standard Selling". Each one was a record ERPNext's setup-wizard normally seeds but Hamilton's unattended install path skipped, blowing up downstream test setup.
+
+These tests assert the *current* main install contract. When follow-up PRs add new seeds, this module must extend in the same PR — the contract grows with the codebase rather than erodes silently.
+
+Run with:
+```
+cd ~/frappe-bench-hamilton && source env/bin/activate && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests \
+    --app hamilton_erp --module hamilton_erp.test_fresh_install_conformance
+```
+
+| Class | What it pins |
+|---|---|
+| `TestERPNextPrerequisites` | 6 ERPNext root records `_ensure_erpnext_prereqs` creates: Customer Group (All / Individual), Territory (All / Default), Item Group (All), UOM (Nos) |
+| `TestHamiltonSeedData` | Walk-in Customer + customer_group integrity, Hamilton Settings singleton + 4 default values (float_amount=300, default_stay_duration=360, grace=15, assignment_timeout=15), R001-R026 + L001-L033 specific asset codes |
+| `TestHamiltonRetailCatalogue` | Item Group "Drink/Food" + parent linkage, 4 retail Items (WAT-500, GAT-500, BAR-PROT, BAR-ENRG), per-item item_group/stock_uom/rate match seed table |
+| `TestHamiltonRoles` | 3 Hamilton roles exist (Operator with desk_access=1, Manager, Admin) + Administrator-has-Operator assignment |
+| `TestPermissionScrubs` | Hamilton Operator has NO Custom DocPerm on POS Closing Entry (DEC-005 blind cash invariant) |
+| `TestSystemSettingsHardening` | enable_audit_trail=1 (skipped if field absent in this Frappe build); Installed Application is_setup_complete=1 for frappe + erpnext |
+
+**Tests deliberately use existence-only assertions** (e.g. `frappe.db.exists("Venue Asset", {"asset_code": "R001"})`) instead of count assertions, so they survive seed contamination from other tests on the unit-test site. Count assertions live in `test_environment_health.test_59_assets_exist` which intentionally trips on contamination as a canary.
+
+---
+
 ### R8 — Data Integrity Under Edge Conditions (7 tests)
 
 Verifies timestamp ordering, field nullability, and cleanup after state transitions. These catch regressions where a field gets set to empty string instead of NULL, or a timestamp is missing after a transition.
