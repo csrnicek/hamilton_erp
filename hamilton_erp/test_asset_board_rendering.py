@@ -829,6 +829,124 @@ class TestV9PanelEnrichmentJSContract(IntegrationTestCase):
 		)
 
 
+# ───────────────────────────────────────────────────────────────────────
+# 2026-04-29 V9 browser-test session amendments
+# Regression guards for Amendment 2026-04-29 in docs/decisions_log.md.
+# ───────────────────────────────────────────────────────────────────────
+
+class TestV9BrowserTestAmendments(IntegrationTestCase):
+	"""Regression guards for the four fixes from Chris's 2026-04-29 browser test."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	@classmethod
+	def _api_path(cls):
+		return frappe.get_app_path("hamilton_erp", "api.py")
+
+	@classmethod
+	def _realtime_path(cls):
+		return frappe.get_app_path("hamilton_erp", "realtime.py")
+
+	# A29-1 — Bulk Mark All Clean removed
+	def test_api_does_not_define_mark_all_clean_endpoints(self):
+		with open(self._api_path()) as f:
+			source = f.read()
+		for forbidden in (
+			"def mark_all_clean_rooms",
+			"def mark_all_clean_lockers",
+			"def _mark_all_clean",
+		):
+			self.assertNotIn(
+				forbidden, source,
+				f"api.py still defines {forbidden!r} — A29-1 reverses DEC-054.",
+			)
+
+	def test_realtime_does_not_define_publish_board_refresh(self):
+		with open(self._realtime_path()) as f:
+			source = f.read()
+		self.assertNotIn(
+			"def publish_board_refresh", source,
+			"realtime.py still defines publish_board_refresh — A29-1 removed it.",
+		)
+
+	def test_js_does_not_render_bulk_mark_all_clean_button(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		for forbidden in (
+			"hamilton-footer-bulk",
+			"hamilton-bulk-list",
+			"confirm_bulk_clean",
+			"mark_all_clean_rooms",
+			"mark_all_clean_lockers",
+		):
+			self.assertNotIn(
+				forbidden, source,
+				f"asset_board.js still references {forbidden!r} — A29-1 removed bulk Mark All Clean.",
+			)
+
+	def test_css_does_not_define_bulk_button(self):
+		with open(self._css_path()) as f:
+			source = f.read()
+		for forbidden in (".hamilton-footer-bulk", ".hamilton-bulk-list"):
+			self.assertNotIn(
+				forbidden, source,
+				f"asset_board.css still defines {forbidden!r} — A29-1 removed bulk Mark All Clean.",
+			)
+
+	# A29-6 — RTS modal SET line includes timestamp
+	def test_js_defines_format_oos_set_time_helper(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_format_oos_set_time", source,
+			"asset_board.js missing _format_oos_set_time helper — A29-6 requires the RTS SET line to include time-of-day.",
+		)
+
+	def test_js_rts_set_line_uses_at_time_pattern(self):
+		"""The RTS modal SET line builds 'at HH:MM AM/PM' from oos_set_time."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"set_at_time = this._format_oos_set_time", source,
+			"_open_return_modal doesn't compute set_at_time via the helper.",
+		)
+		self.assertIn(
+			'__("at")', source,
+			"asset_board.js doesn't translate the 'at' connector — RTS SET line format may not match OOS audit.",
+		)
+
+	# A29-5 — Dirty tile shows "Dirty for Xm" timer
+	def test_dirty_tiles_render_elapsed_timer(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton-dirty-elapsed", source,
+			"asset_board.js doesn't emit the .hamilton-dirty-elapsed class — A29-5 requires Dirty-for-Xm timer.",
+		)
+		self.assertIn(
+			'__("Dirty for")', source,
+			"asset_board.js doesn't render the 'Dirty for' label — A29-5 wording missing.",
+		)
+
+	def test_css_styles_dirty_elapsed_timer(self):
+		with open(self._css_path()) as f:
+			source = f.read()
+		self.assertIn(
+			".hamilton-dirty-elapsed", source,
+			"asset_board.css missing .hamilton-dirty-elapsed selector — A29-5 styling absent.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

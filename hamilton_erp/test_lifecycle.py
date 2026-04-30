@@ -291,30 +291,6 @@ class TestMarkClean(IntegrationTestCase):
 		with asset_status_lock(self.asset.name, "verify-release") as row:
 			self.assertEqual(row["status"], "Available")
 
-	def test_mark_clean_accepts_bulk_reason(self):
-		"""Bulk reason must be propagated as log_reason to _set_asset_status.
-
-		DEC-054 §5: bulk reason is written to the Asset Status Log row's reason
-		field. We mock _set_asset_status to verify the kwarg wiring at the unit
-		layer without depending on Task 11's log-creation integration.
-		"""
-		from unittest.mock import patch
-		target = "hamilton_erp.lifecycle._set_asset_status"
-		with patch(target, wraps=lifecycle._set_asset_status) as spy:
-			lifecycle.mark_asset_clean(
-				self.asset.name, operator="Administrator",
-				bulk_reason="Bulk Mark Clean — Room reset",
-			)
-		spy.assert_called_once()
-		self.assertEqual(
-			spy.call_args.kwargs["log_reason"],
-			"Bulk Mark Clean — Room reset",
-		)
-		# Happy-path still sanity-checked so a broken _set_asset_status doesn't
-		# hide behind the spy.
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertEqual(asset.status, "Available")
-
 
 class TestSetOutOfService(IntegrationTestCase):
 	def setUp(self):
@@ -1010,25 +986,6 @@ class TestRealtimePublishers(IntegrationTestCase):
 		self.assertIn("status", captured["payload"])
 		self.assertTrue(captured["kwargs"].get("after_commit"))
 
-	def test_publish_board_refresh_emits_expected_payload(self):
-		from unittest.mock import patch
-
-		captured = {}
-
-		def fake_publish(event, payload, **kwargs):
-			captured["event"] = event
-			captured["payload"] = payload
-			captured["kwargs"] = kwargs
-
-		from hamilton_erp import realtime
-		with patch.object(frappe, "publish_realtime", side_effect=fake_publish):
-			realtime.publish_board_refresh("bulk_clean", 5)
-
-		self.assertEqual(captured["event"], "hamilton_asset_board_refresh")
-		self.assertEqual(captured["payload"]["triggered_by"], "bulk_clean")
-		self.assertEqual(captured["payload"]["count"], 5)
-		self.assertTrue(captured["kwargs"].get("after_commit"))
-
 	def test_publish_status_change_noop_when_asset_missing(self):
 		"""If the asset row does not exist (e.g. deleted between the
 		lifecycle call and the after-commit publish), the publisher
@@ -1529,18 +1486,6 @@ class TestRealtimeContracts(IntegrationTestCase):
 				self.asset.name, previous_status="Available")
 		self.assertTrue(captured["kwargs"].get("after_commit"),
 			"publish_status_change MUST use after_commit=True")
-
-	def test_J6_board_refresh_uses_after_commit_true(self):
-		"""publish_board_refresh is the bulk analog — same contract."""
-		from unittest.mock import patch
-		from hamilton_erp import realtime
-		captured = {}
-		def fake(event, payload, **kwargs):
-			captured["kwargs"] = kwargs
-		with patch.object(frappe, "publish_realtime", side_effect=fake):
-			realtime.publish_board_refresh("bulk_clean", 10)
-		self.assertTrue(captured["kwargs"].get("after_commit"),
-			"publish_board_refresh MUST use after_commit=True")
 
 
 class TestAuditTrailExactlyOneLog(IntegrationTestCase):

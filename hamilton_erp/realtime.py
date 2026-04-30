@@ -74,19 +74,6 @@ def publish_status_change(
 	)
 
 
-def publish_board_refresh(triggered_by: str, count: int) -> None:
-	"""Emit `hamilton_asset_board_refresh` for bulk operations.
-
-	Fired by bulk paths (e.g. `mark_all_clean`) that mutate many assets
-	in one call. The Asset Board responds by pulling the full list
-	instead of re-rendering N individual tiles. `triggered_by` is the
-	machine-readable cause string (e.g. `"bulk_clean"`) and `count` is
-	the number of assets affected, so a reviewer inspecting the
-	realtime stream can distinguish bulk events from individual ones
-	without guessing.
-	"""
-	frappe.publish_realtime(
-		"hamilton_asset_board_refresh",
-		{"triggered_by": triggered_by, "count": count},
-		after_commit=True,
-	)
+# publish_board_refresh was REMOVED 2026-04-29 (DEC-054 reversed). Bulk
+# operations no longer exist; per-asset publish_status_change is the only
+# realtime event used by Phase 1.
