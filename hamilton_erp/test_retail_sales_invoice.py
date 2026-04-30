@@ -140,6 +140,11 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 		cash_payments = [p for p in profile.payments if p.mode_of_payment == "Cash"]
 		self.assertEqual(len(cash_payments), 1)
 		self.assertEqual(cash_payments[0].default, 1)
+		# Audit Issue F: write_off_limit is reqd in v16; pin the contract
+		# that it's set (even if 0) so a future ERPNext minor with a >0
+		# constraint catches as a test failure, not a silent install crash.
+		self.assertIsNotNone(profile.write_off_limit,
+			"POS Profile.write_off_limit must be set explicitly (Audit Issue F).")
 
 	def test_cash_mode_of_payment_account_for_hamilton_company(self):
 		"""Mode of Payment 'Cash' has an account row for the Hamilton company."""
@@ -632,13 +637,18 @@ class TestCanadianCashRounding(IntegrationTestCase):
 			f"round_off_account {round_off!r} does not exist as an Account.")
 
 	def test_company_round_off_cost_center_linked(self):
-		"""Company.round_off_cost_center must also be set."""
+		"""Company.round_off_cost_center must tie to the Hamilton cost
+		center (not the Standard CoA auto-default "Main - {abbr}") so
+		rounding GL entries are scoped for venue-level reporting.
+		Audit Issue H (PR #51 review)."""
 		cc = frappe.db.get_value(
 			"Company", self.company, "round_off_cost_center"
 		)
-		self.assertIsNotNone(cc,
-			"Company.round_off_cost_center is unset; round-off GL entry "
-			"will fail without one.")
+		expected = f"{HAMILTON_COST_CENTER_BASE} - {self.abbr}"
+		self.assertEqual(cc, expected,
+			f"round_off_cost_center should be {expected!r} (Hamilton-scoped); "
+			f"got {cc!r}. Standard CoA default 'Main - {{abbr}}' should be "
+			f"overwritten by _ensure_round_off_account_linked.")
 
 	# ---------------------------------------------------------------
 	# Payment-method gate (the rounding decision)

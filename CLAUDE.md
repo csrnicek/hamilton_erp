@@ -78,6 +78,38 @@ If a convention is unclear, prefer matching what frappe/frappe itself does over 
 
 These rules are enforced by Layer 1 conformance tests (Task 25) and CI lint checks. Violations should fail CI, not just earn a comment in code review.
 
+## Hamilton accounting / multi-venue conventions (PR #51 audit)
+
+These rules came out of the pre-merge audit on PR #51 (V9.1 Phase 2 cart → POS Sales Invoice). They apply to any future flow that creates Sales Invoices, taxes, currency-rounded amounts, or card payments.
+
+### CAD nickel rounding is site-global (Audit Issue B)
+
+The Hamilton seed sets `Currency CAD.smallest_currency_fraction_value = 0.05` so cash POS sales round to the nearest nickel per Canada's 2013 penny-elimination rule. This setting affects **every CAD invoice on the site**, not just the cart's POS invoices.
+
+If a future Hamilton flow creates a CAD invoice for a non-cash workflow (B2B vendor invoice, membership invoice, intercompany invoice, etc.), it must explicitly set `disable_rounded_total=1` on that invoice — otherwise it will silently round to nickels. The cart's `submit_retail_sale` is the reference pattern: nickel rounding is gated by `payment_method` and disabled for Card payments.
+
+### One Sales Taxes Template per place-of-supply jurisdiction (Audit Issue G)
+
+CRA's place-of-supply rule for in-store retail: HST/GST is determined by where the goods are delivered (= the venue's location). Hamilton's "Ontario HST 13%" template covers Ontario only.
+
+When the next venue rolls out:
+- **Philadelphia (PA, 6% sales tax + 8% on prepared food):** create a separate Sales Taxes Template per Philadelphia's place of supply. Don't try to make a "global" template that handles multiple provinces — each venue's template must reflect its own jurisdiction.
+- **DC (6% standard, 10% on alcohol/restaurant):** separate template.
+- **Item-level overrides** (zero-rated basic groceries, mixed food/grocery treatment) need ERPNext's Item Tax Template, not Sales Taxes Template. Hamilton's 4 SKUs are all 13%-taxable so this isn't an issue today, but Phase 2+ menu expansion may surface it.
+
+The seed must accept a per-venue tax template name via `frappe.conf` (analogous to `hamilton_company` and `hamilton_walkin_customer`) before the second venue ships.
+
+### Card payments require SAQ-A validation before going live (Audit Issue I)
+
+When the Phase 2 next iteration adds Card payments (merchant abstraction, terminal integration), the merchant adapter must keep card data outside Hamilton's network — terminal handles all card data, the SI stores only references (last 4, brand, auth code, merchant_transaction_id). This is the SAQ-A integration model.
+
+Before going live with Card:
+1. Confirm the chosen processor (Fiserv per Hamilton's existing setup, or backup) supports a SAQ-A integration model.
+2. Confirm the receipt printer integration (Epson TM-T20III) doesn't print full PANs — last 4 only.
+3. Re-attest SAQ-A annually, naming the processor explicitly.
+
+If a future integration ever transits card data through Hamilton's network in plaintext, scope expands to SAQ-D and a QSA assessment ($5-50k/year). Avoid this by keeping the merchant terminal as the only place card data exists.
+
 ## About Chris (the human you are working with)
 
 - **Experience level:** Beginner with coding, terminal, and developer tools

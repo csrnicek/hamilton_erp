@@ -1466,14 +1466,59 @@ This avoids the trap of having "Tap", "Chip", "Swipe", "Apple Pay" as four separ
 - Capture the merchant name too (`merchant_name`), since with multiple active merchants the txn ID alone doesn't identify which merchant settled it.
 - Both fields searchable on Sales Invoice — refunds, disputes, and reconciliation all need to look up by merchant_transaction_id.
 
-**Field schema (proposal):**
+**Field schema (proposal — expanded per PR #51 deeper audit, Topic 3):**
+
+The chargeback-evidence research (Visa Compelling Evidence 3.0, EMV liability shift reason codes 10.1 / 10.2 / 4870) showed that a generic `merchant_transaction_id` is **necessary but not sufficient** to win a card-present dispute. The fields below convert a generic transaction record into compelling evidence:
+
 ```
-Sales Invoice custom fields:
-  hamilton_merchant_name        Data       (e.g. "Helcim", "Stripe-Hamilton-Backup")
-  hamilton_merchant_txn_id      Data       (returned by terminal/processor)
-  hamilton_card_last_4          Data       (last 4 of pan, for receipt)
-  hamilton_card_brand           Data       (Visa / MC / Amex / Interac)
+Sales Invoice custom fields (10 fields total):
+  hamilton_merchant_name         Data        (e.g. "Fiserv", "Helcim")
+  hamilton_merchant_txn_id       Data        (returned by terminal/processor)
+  hamilton_descriptor_used       Data        (the descriptor that appears on
+                                              the cardholder's statement —
+                                              e.g. "CLUB HAMILTON" not
+                                              "HAMILTON BATHHOUSE"; NEW per
+                                              deeper audit, reduces friendly-
+                                              fraud chargebacks where the
+                                              cardholder claims "I don't
+                                              recognize this charge")
+  hamilton_card_last_4           Data        (last 4 of pan, for receipt
+                                              + dispute lookup)
+  hamilton_card_brand            Data        (Visa / MC / Amex / Interac /
+                                              Discover)
+  hamilton_card_entry_method     Select      ("Chip" / "Swipe" / "Manual" /
+                                              "Tap" / "Apple Pay" / "Google
+                                              Pay" — swiped on EMV card =
+                                              merchant liability per VRC
+                                              10.1; chip-read shifts liability
+                                              to issuer)
+  hamilton_card_cvm              Select      ("PIN" / "Signature" / "NoCVM" /
+                                              "Failed" — proper CVM is the
+                                              compelling-evidence backbone)
+  hamilton_auth_code             Data        (issuer's authorization
+                                              response code; required for
+                                              every dispute response)
+  hamilton_card_aid              Data        (AID resolved by terminal —
+                                              which scheme actually settled,
+                                              critical for cards with
+                                              multiple AIDs e.g. Visa Debit +
+                                              Interac)
+  hamilton_terminal_id           Data        (which terminal — multi-terminal
+                                              venues need this for batch
+                                              reconciliation and dispute
+                                              filtering)
+  hamilton_receipt_bytes         Long Text   (or attached as File: the
+                                              ESC/POS bytes sent to the
+                                              printer, retained server-side
+                                              for >=18 months so a receipt
+                                              can be re-printed for dispute
+                                              response 6 months after the
+                                              fact)
 ```
+
+**Receipt-as-evidence retention rule:** print to printer + `frappe.get_doc("File", ...).insert()` the same ESC/POS bytes as a server-side attachment to the SI. Reproducible printing means a manager can re-print a receipt 6 months later without depending on the original paper copy still being in a filing cabinet. Retention period: 18 months (covers Visa's 120-day dispute window + re-presentment + arbitration).
+
+**Why these fields collectively:** EMV liability shift (chip + CVM) handles the bulk of fraud-reason-code chargebacks (10.1, 10.2, 4870). Merchant descriptor + receipt bytes + auth code handle friendly-fraud and "I don't recognize this charge" cases. `terminal_id` + `card_aid` are batch-reconciliation safety. The 10 fields together implement the Visa CE3.0 evidence model for card-present POS.
 
 **Per-venue config shape (proposal, in site_config.json):**
 ```json
@@ -1516,15 +1561,26 @@ Add a unit test in `test_asset_board_rendering.py` (source-substring contract) a
 
 **Why deferred from PR #51:** Functional correctness (the actual sale, the actual change handed back, the GL entry) is server-side and already correct as of commit `b3e5715`. The drawer preview is UX polish that doesn't affect any data, money flow, or audit trail — operators will adjust to "preview shows ${X}.{xx}, actual change is ${X}.{x0 or x5}" within their first shift if the polish doesn't ship by go-live. Worth fixing before opening day for clean operator UX, but not blocking PR #51 review.
 
+### Phase 2 prep checklist — confirm with Fiserv / merchant before card work starts
+
+These are the questions Chris needs answered before Phase 2 next iteration (card payments) begins. Pre-confirming avoids re-architecting the integration mid-build when answers come back differently than assumed.
+
+- [ ] **MCC code on Fiserv MID 1131224.** Confirm the Merchant Category Code Fiserv has registered Hamilton under. MCC 7298 (health/beauty/spa) and 7299 (services not elsewhere classified) are the two likely candidates for a bathhouse. The MCC determines the card-network fee tier, the chargeback-ratio threshold, and whether Hamilton's transactions trigger any "high-risk" flagging in card-network systems. Hamilton processes as standard, but the MCC confirms which standard tier.
+- [ ] **Descriptor on cardholder statements.** Confirm the exact merchant descriptor that appears on Visa / Mastercard statements when a customer pays at Hamilton. The descriptor field on the SI (`hamilton_descriptor_used`) must match this exactly — friendly-fraud chargebacks ("I don't recognize this charge") happen when the descriptor is generic or unfamiliar. Best practice for adult hospitality: short non-flagging name like "CLUB HAMILTON" rather than "HAMILTON BATHHOUSE / SAUNA" which can trigger embarrassment-driven disputes.
+- [ ] **Chargeback notification process.** How does Fiserv notify Hamilton of an incoming chargeback? Email, portal, fax (still happens), API callback? What's the SLA — 7 days from cardholder dispute filing? 15 days? Hamilton's response window for compelling evidence depends on this; a portal-only notification with an unmonitored email = missed chargebacks = MATCH-list risk (R-009).
+- [ ] **Dispute portal credentials.** Get login credentials for Fiserv's dispute portal (Vantiv DisputeManager or similar) BEFORE the first chargeback. Operations runbook needs the portal URL, primary login, secondary login, escalation contact. Pre-Phase-2 ops task.
+- [ ] **Reserve schedule and held-funds release.** What reserve does Fiserv hold (% of monthly volume, fixed amount, rolling 90-day)? When does held cash release back to Hamilton's bank account? This affects cash-flow planning, not chargeback handling, but matters operationally.
+- [ ] **Terminal data flow for SAQ-A confirmation.** Confirm that the chosen terminal model (Verifone? Ingenico? Pax? Fiserv-supplied?) sends card data DIRECTLY to Fiserv via an encrypted channel that doesn't transit Hamilton's network. SAQ-A eligibility depends on this. If the terminal pumps card data through a Hamilton local server first, scope expands to SAQ-D (~$5-50k/year QSA assessment).
+
 ### Sequencing
 
 This work happens AFTER the cart Confirm is wired to Sales Invoice creation (current PR). Order:
 
-1. Receipt printer integration — Epson TM-T20III + ESC/POS receipt rendering + Hamilton Settings config + retry queue. Probably 2-4 days.
-2. Card payment Mode of Payment + merchant adapter scaffolding — basic Helcim integration, capture merchant_transaction_id, add custom fields to Sales Invoice. Probably 3-5 days.
-3. Multi-merchant config + manual failover button. Probably 2-3 days.
+1. Receipt printer integration — Epson TM-T20III + ESC/POS receipt rendering + Hamilton Settings config + retry queue + server-side ESC/POS bytes retention (per the deeper audit's receipt-as-evidence rule). Probably 2-4 days.
+2. Card payment Mode of Payment + merchant adapter scaffolding — basic Fiserv integration, capture all 10 EMV fields per the expanded schema above (merchant_transaction_id + descriptor + entry_method + cvm + auth_code + AID + terminal_id + card_brand + last_4 + receipt_bytes), add custom fields to Sales Invoice. Probably 3-5 days.
+3. Multi-merchant config + manual failover button. **Lower priority now** — R-008 is downgraded because Hamilton runs as standard merchant via Fiserv. Phase 3+ unless chargeback ratio drives need. Original estimate 2-3 days remains accurate when scheduled.
 4. Digital receipt (email/SMS). Probably half-day on top of receipt printer work since the templating is mostly shared.
-5. Cart drawer nickel-rounding polish (this section). Half-day. Standalone — can land before or after items 1–4.
+5. Cart drawer nickel-rounding polish (Phase 2 polish section). Half-day. Standalone — can land before or after items 1-4.
 
 Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
 

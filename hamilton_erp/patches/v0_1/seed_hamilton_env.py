@@ -156,18 +156,39 @@ def _ensure_retail_item_defaults():
 
 
 def _ensure_walkin_customer():
-	"""Create the 'Walk-in' Customer used by every anonymous session."""
-	if frappe.db.exists("Customer", "Walk-in"):
+	"""Create the anonymous-session Customer (default name "Walk-in").
+
+	Audit Issue C: the customer name is read from
+	``frappe.conf.get("hamilton_walkin_customer")`` so a future venue
+	(Toronto, DC, Montreal) can pin its own preferred label via
+	``bench --site SITE set-config hamilton_walkin_customer "<name>"``.
+	Default remains "Walk-in" for Hamilton and any unconfigured site.
+
+	Audit Issue D: Customer Group and Territory are pinned to the named
+	defaults that ``_ensure_erpnext_prereqs`` creates ("Individual" /
+	"Default") so the customer ends up in the same group/territory across
+	every install — non-deterministic ``frappe.db.get_value({"is_group": 0})``
+	queries previously picked "any" non-group record, which varied by
+	install order on non-greenfield sites.
+	"""
+	customer_name = frappe.conf.get("hamilton_walkin_customer") or "Walk-in"
+	if frappe.db.exists("Customer", customer_name):
 		return
+	customer_group = (
+		"Individual"
+		if frappe.db.exists("Customer Group", "Individual")
+		else "All Customer Groups"
+	)
+	territory = (
+		"Default"
+		if frappe.db.exists("Territory", "Default")
+		else "All Territories"
+	)
 	frappe.get_doc({
 		"doctype": "Customer",
-		"customer_name": "Walk-in",
-		"customer_group": frappe.db.get_value(
-			"Customer Group", {"is_group": 0}, "name"
-		) or "All Customer Groups",
-		"territory": frappe.db.get_value(
-			"Territory", {"is_group": 0}, "name"
-		) or "All Territories",
+		"customer_name": customer_name,
+		"customer_group": customer_group,
+		"territory": territory,
 	}).insert(ignore_permissions=True)
 
 

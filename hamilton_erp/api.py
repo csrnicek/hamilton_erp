@@ -510,10 +510,14 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 		frappe.throw(_(
 			"POS Profile {0} is not configured. Run `bench migrate` to seed."
 		).format(HAMILTON_POS_PROFILE))
-	if not frappe.db.exists("Customer", "Walk-in"):
+	# Audit Issue C: walk-in customer name is venue-configurable. Default
+	# "Walk-in" matches Hamilton; Toronto / DC / Montreal can pin their own
+	# label via ``bench set-config hamilton_walkin_customer "<name>"``.
+	walkin_customer = frappe.conf.get("hamilton_walkin_customer") or "Walk-in"
+	if not frappe.db.exists("Customer", walkin_customer):
 		frappe.throw(_(
-			"Walk-in customer not seeded. Run `bench migrate` to populate."
-		))
+			"Walk-in customer {0} not seeded. Run `bench migrate` to populate."
+		).format(walkin_customer))
 
 	pos_profile = frappe.get_cached_doc("POS Profile", HAMILTON_POS_PROFILE)
 
@@ -576,7 +580,7 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 		si = frappe.new_doc("Sales Invoice")
 		si.update({
 			"company": pos_profile.company,
-			"customer": "Walk-in",
+			"customer": walkin_customer,
 			"is_pos": 1,
 			"update_stock": 1,
 			"pos_profile": HAMILTON_POS_PROFILE,
@@ -606,10 +610,13 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 				"cost_center": pos_profile.cost_center,
 			})
 
-		# Pull tax rows from the template before computing totals.
-		if si.taxes_and_charges:
-			si.set_taxes_and_charges()
-
+		# Audit Issue A: ``si.set_taxes_and_charges()`` is a no-op for
+		# is_pos=1 invoices in v16 (early-exits at the `is_pos` check
+		# in accounts_controller.py). The actual tax-row population
+		# happens inside ``set_missing_values`` → ``set_pos_fields``,
+		# which copies taxes_and_charges + the rows from the POS Profile
+		# onto the SI. The previous explicit call was misleading code,
+		# not broken — tests pass at 13% HST because of the POS path.
 		si.set_missing_values()
 		si.calculate_taxes_and_totals()
 		grand_total = flt(si.grand_total)

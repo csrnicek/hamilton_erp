@@ -59,6 +59,7 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-030 | Production Safety | S0 | Production recovery — rollback before live debugging |
 | LL-031 | Production Safety | S0 | Agents may diagnose broadly but execute narrowly |
 | LL-035 | Production Safety | S1 | Whitelisted endpoints touching money / stock / permissions need adversarial tests in the **first** PR — hardening passes are 5x the cost |
+| LL-036 | UI / Asset Board | S2 | Paper receipt as occupancy token is a defensible-but-fragile control — digital state must remain canonical, paper is operator UX |
 
 **Severity scale:** S0 — data corruption / financial integrity / production outage. S1 — release blocker. S2 — serious developer-time sink. S3 — annoyance / local workflow only.
 
@@ -558,6 +559,24 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Detection:** When reviewing any PR that adds an `@frappe.whitelist()` decorator, scan the test additions in the same diff. If the test class only contains happy-path tests (returns success / asserts on the created doc) and no rejection-path tests for tampered input or missing role, flag it.
 - **Generalizes:** This applies to ANY codebase with money / stock / perm-touching endpoints, not just Frappe. The 5x ratio holds because adversarial tests are easier to write WHILE the implementation is fresh (the developer remembers what they trusted and what they validated); they're much harder to retrofit because retrofitting requires re-reasoning about the function's contract from scratch.
 - **References:** PR #51 (`feat/v91-cart-sales-invoice`), commits `95cccc3` (initial happy-path) → `afd875e` (hardening pass with 10 new adversarial tests). Related: LL-016 (stale PRs need re-test against main), LL-029 (never modify Frappe core), DEC-005 + DEC-021 (blind cash invariants — exactly the kind of contract that adversarial tests are designed to enforce). Source-of-truth review notes in this session's transcript, 2026-04-30.
+
+### LL-036 — Paper receipt as occupancy token: defensible-but-fragile control; digital state stays canonical
+
+- **Category:** UI / Asset Board
+- **Severity:** S2
+- **Applies to:** Hamilton's Phase 2 hardware backlog (Epson TM-T20III receipt printing) and any future operator UX where a physical artifact is meant to mirror digital state. Especially relevant for the "paper receipt on key hook = occupied" control pattern.
+- **What happened (research, not incident):** PR #51 deeper audit (2026-04-30) compared three receipt-as-control patterns used in the industry: (a) **wristband + RFID** — single token holds locker access AND running charges (SoJo Spa, King Spa); (b) **locker-number-as-folio** — all charges accumulate to the locker number, single consolidated receipt at exit (BRC Day Spa); (c) **paper-receipt-as-control-token** — every transaction prints, customer copy + key-hook copy. Hamilton's Phase 2 backlog assumes pattern (c). The pattern works, but the audit surfaced a sharp edge: a single mis-discarded hook receipt creates a phantom-vacant room in the physical view while the digital state still shows occupied. Operators who treat the paper as canonical will flip the digital state to match the (incorrect) paper, propagating the discrepancy.
+- **Time cost:** Research only — no incident, but the pattern is a known trap in retail/hospitality audits. The hotel-industry "night audit" exists precisely because physical state and PMS state drift.
+- **Root cause:** The mental model that "the paper IS the truth" is intuitive for operators but operationally wrong. The Sales Invoice is the audit record; the GL entry posts on submit; the printed paper is a projection of that record at one moment. Treating the projection as authoritative inverts the data flow.
+- **The fix (when Phase 2 hardware ships):** Document the canonicality rule in operator training and in the receipt printer integration code:
+  1. The Sales Invoice (`name` field, e.g. `ACC-SINV-2026-00012`) is canonical. The printed receipt is a copy.
+  2. Discrepancy resolution always favors the digital state — operator who finds an empty room with a hook receipt looks up the SI by the printed `name`, not the other way around.
+  3. The receipt itself MUST print the SI `name` prominently (top of receipt, not just at the bottom in small print) so any audit / dispute / chargeback investigation can pull the canonical record by reference.
+  4. A "no-sale" event (drawer opened without a transaction) is a separate audit-trail concern that ERPNext doesn't natively track. If Hamilton's drawer-open events become an audit need, it's a custom DocType + integration with the cash drawer hardware — Phase 3+ scope.
+- **Detection:** During Phase 2 browser-test of the receipt printer integration: deliberately tear up a hook receipt mid-shift, confirm the operator UI flow recovers (look up SI by guest/locker, NOT by re-creating a receipt). If the recovery flow requires re-printing or a new SI, the canonicality is wrong.
+- **Prevention for next venue:** The next venue (DC, Toronto, Philly) should evaluate switching to wristband+RFID (pattern a) which removes this trap entirely — the wristband IS the digital state's projection, and lost wristbands are a recoverable event. Hamilton retrofitting to wristband would be capital expense; new venues with greenfield hardware spec should consider it.
+- **Generalizes:** Any physical artifact that mirrors digital state (printed labels, hook receipts, paper-tag inventory, even hand-written sticky notes on workstations) creates a drift surface. The artifact is operator UX, not data. Whenever a process design depends on "the paper says X," there's a hidden assumption that the paper hasn't been mishandled — and at scale, paper always gets mishandled. Architecture must make digital state recoverable from the artifact, not the other way around.
+- **References:** PR #51 deeper audit Topic 1 (2026-04-30), Hotel night-audit pattern (RoomMaster, Prostay), SAM4POS dual-station printer / electronic journal pattern. Related: docs/inbox.md 2026-04-30 Phase 2 hardware backlog (Epson TM-T20III spec).
 
 ---
 

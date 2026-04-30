@@ -363,9 +363,17 @@ def _ensure_hamilton_company() -> str:
 		if frappe.db.exists("Company", candidate):
 			return candidate
 
+	# Heuristic LIKE-match — but ONLY for Canadian-CAD companies, so a
+	# non-greenfield site with "Hamilton Insurance Co." (different country
+	# / currency) doesn't get accidentally augmented with Hamilton's
+	# accounting structure. Audit Issue E (PR #51 review).
 	matches = frappe.get_all(
 		"Company",
-		filters={"company_name": ["like", "%Hamilton%"]},
+		filters={
+			"company_name": ["like", "%Hamilton%"],
+			"country": "Canada",
+			"default_currency": "CAD",
+		},
 		fields=["name"],
 		limit=1,
 	)
@@ -672,6 +680,12 @@ def _ensure_pos_profile():
 		"currency": frappe.db.get_value("Company", company, "default_currency") or "CAD",
 		"update_stock": 1,
 		"ignore_pricing_rule": 1,
+		# Audit Issue F: write_off_limit is reqd in v16's POS Profile schema;
+		# 0 is the working default but the field needs to be set explicitly
+		# so a future ERPNext minor that adds a >0 constraint doesn't break
+		# the seed silently. Operators can raise this in Desk if they want
+		# small-difference auto-write-off (e.g. for cash short).
+		"write_off_limit": 0,
 		"payments": [{
 			"mode_of_payment": "Cash",
 			"default": 1,
@@ -739,11 +753,20 @@ def _ensure_round_off_account_linked(company: str, abbr: str):
 		)
 
 	current_cost_center = frappe.db.get_value("Company", company, "round_off_cost_center")
-	if not current_cost_center and frappe.db.exists("Cost Center", cost_center):
+	# Audit Issue H: Standard CoA auto-assigns "Main - {abbr}" as
+	# round_off_cost_center on Company creation. For Hamilton-scoped
+	# reporting, the Round Off entries should tie to the Hamilton cost
+	# center instead. Overwrite when the current value is the auto-default;
+	# preserve any operator-customized value.
+	standard_coa_default = f"Main - {abbr}"
+	if (
+		(not current_cost_center or current_cost_center == standard_coa_default)
+		and frappe.db.exists("Cost Center", cost_center)
+	):
 		frappe.db.set_value("Company", company, "round_off_cost_center", cost_center)
 		frappe.logger().info(
 			f"hamilton_erp: linked round_off_cost_center = {cost_center!r} "
-			f"on Company {company!r}"
+			f"on Company {company!r} (was {current_cost_center!r})"
 		)
 
 
