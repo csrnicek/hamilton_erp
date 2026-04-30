@@ -58,6 +58,12 @@ The following fields will receive v16 `mask: 1` field-masking treatment in a sep
 - `Cash Reconciliation.expected_cash`, `Cash Reconciliation.actual_cash`, `Cash Reconciliation.variance` — Hamilton Manager+ only.
 - `Comp Admission Log.value_at_door` — Hamilton Manager+ only (the comp's notional revenue cost).
 
+### Out of scope today — Venue Session PII
+
+Venue Session has eight forward-compat PII fields (`full_name`, `date_of_birth`, `member_id`, `identity_method`, `block_status`, `arrears_amount`, `scanner_data`, `eligibility_snapshot`) plus the `customer` Link gateway. They are null on Hamilton today (anonymous walk-in) but will populate at Philadelphia / DC / Dallas rollout, and on Hamilton if membership ever launches. When that happens, this section MUST extend to cover them BEFORE any PII actually lands — `mask: 1` for the masked fields and `permlevel: 1` (full blocking) for `scanner_data`, plus encryption-at-rest for `scanner_data`.
+
+PIPEDA legal analysis and per-field justified-purpose / retention rules: `docs/research/pipeda_venue_session_pii.md`. See DEC-021 for the underlying field-masking decision.
+
 ## Maintenance
 
 When a DocType's `permissions` array changes, regenerate this matrix:
