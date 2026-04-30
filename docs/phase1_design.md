@@ -52,7 +52,7 @@ By the end of Phase 1:
 - Admission items, pricing rules, comp prompt → Phase 2
 - Refund / POS Return handling (DEC-051) → Phase 4
 - Cash drop, shift start/close, manager reconciliation → Phase 3
-- Paid-but-unassigned cleanup job (DEC-020) — Phase 1 creates sessions with `assignment_status = Assigned` directly, so there is nothing for the cleanup job to clean. The `check_overtime_sessions` scheduler task stays as a no-op stub through Phase 1.
+- Paid-but-unassigned cleanup job (DEC-020) — Phase 1 creates sessions with `assignment_status = Assigned` directly, so there is nothing for the cleanup job to clean. The `check_overtime_sessions` scheduler stub (and its `*/15 * * * *` registration) was removed in pre-Task-25 cleanup; Phase 2 reintroduces a real overtime job when needed.
 - Label printing (Phase 3) and PDF print formats (wkhtmltopdf/WeasyPrint decision deferred to Phase 3)
 - Manual rename reconciliation (if a manager renames an asset via the Frappe form while the board is open, clients show the old name until they manually refresh — flagged but not fixed in Phase 1)
 
@@ -819,7 +819,7 @@ These are implementation-time details I'm deliberately not solving in this desig
 3. Whether `asset_code` immutability should be enforced in a `validate` check in addition to the form-level `read_only_depends_on` (recommendation: yes, belt-and-braces)
 4. MariaDB 12.2.2 vs 11.4 fallback decision — resolve empirically in M0 when `bench new-site` is first run
 5. Whether to install WeasyPrint now as a future-proof PDF engine or defer entirely to Phase 3 (current plan: defer)
-6. The `check_overtime_sessions` scheduled task — currently a no-op stub. Phase 1 keeps it that way; Phase 3 decides whether to delete or repurpose.
+6. The `check_overtime_sessions` scheduled task — removed during pre-Task-25 cleanup. Phase 2 reintroduces a real overtime detector when overtime UX work lands; Phase 3 decides whether to keep, repurpose, or split into multiple scheduled jobs.
 
 ---
 

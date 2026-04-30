@@ -2,7 +2,7 @@ app_name = "hamilton_erp"
 app_title = "Hamilton ERP"
 app_publisher = "Chris Srnicek"
 app_description = "Custom Frappe app extending ERPNext for Club Hamilton — asset board, session lifecycle, and blind cash control."
-app_email = "chris@hamilton.example.com"
+app_email = "csrnicek@yahoo.com"
 app_license = "MIT"
 app_version = "0.1.0"
 
@@ -82,14 +82,8 @@ doc_events = {
 
 # ---------------------------------------------------------------------------
 # Scheduler events
-# ---------------------------------------------------------------------------
-# Overtime detection runs every 15 minutes. The task is a no-op until
-# Phase 1 implementation lands.
-
-scheduler_events = {
-	"cron": {
-		"*/15 * * * *": [
-			"hamilton_erp.tasks.check_overtime_sessions",
-		],
-	},
-}
+# No scheduled jobs registered. The Phase 1 stub `check_overtime_sessions`
+# was a no-op `pass` body firing every 15 minutes (96×/day) and contributed
+# only "Success" rows to `tabScheduled Job Log`. Removed in pre-Task-25
+# cleanup. Phase 2 reintroduces a real overtime job (or whatever supersedes
+# it) with a wrapping try/except + Error Log per Tier-1 audit requirements.
