@@ -800,3 +800,45 @@ spec-committed from implementation-working, state uncertainty plainly. The
 Two more drift-prevention layers are pending:
 - Layer 2 (~90 min): GitHub Actions CI — Tier 1 item T1.1 in production_handoff_audit_merged_2026-04-25.md
 - Layer 1 (~4 hours, Task 25): V9 conformance tests — one test per locked decision in decisions_log.md
+
+---
+
+## Checkpoint — 2026-04-30 evening — Third autonomous run (pre-Task-25 stack)
+
+**Trigger:** Chris invoked an overnight autonomous stack run after the PIPEDA research doc PR (#52) merged. Goal was to clear pre-handoff items so the senior-Frappe-developer handoff can ship in a clean state.
+
+**Stack queued and executed:**
+
+| Item | Branch | PR | State |
+|---|---|---|---|
+| Stack #1: Stub purge + app_email fix | `chore/stub-purge-app-email` | #53 | **MERGED** |
+| Stack #2: track_changes regression-pin test | `chore/track-changes-regression-pin` | #54 | auto-merge queued |
+| Stack #2.5: PIPEDA wording fix (no "adult" classification) | `docs/pipeda-wording-fix-no-adult-classification` | #55 | **awaiting Chris review** (no auto-merge per instruction) |
+| Stack #3: Field masking on Cash Drop / Comp Admission Log | — | — | **DEFERRED** — bench migrate STOP condition |
+| Stack #4: Fresh-install conformance test (28 tests) | `test/fresh-install-conformance` | #56 | auto-merge queued |
+| Stack #5: docs/RUNBOOK.md (10-section operational runbook) | `docs/runbook` | #57 | auto-merge queued |
+| Overflow #1: CHANGELOG.md (46 merged PRs) | `docs/changelog` | #58 | auto-merge queued |
+| Overflow #2: scripts/init.sh (fresh-bench bootstrap) | `chore/init-script` | #59 | auto-merge queued |
+| Overflow #3: docs/api_reference.md (7 whitelisted endpoints) | `docs/api-reference` | #60 | auto-merge queued |
+
+**Stack #3 deferral — bench migrate STOP condition.** The original scope (add `mask: 1` to Cash Drop/Cash Reconciliation/Comp Admission Log fields per `permissions_matrix.md` Task 25 item 7) requires DocType JSON changes which trigger `bench migrate`. CLAUDE.md "Autonomous Command Rules" lists "bench migrate is required" as a STOP condition, so this work was deferred to a Chris-supervised PR. Field-name reconciliation prep already in place: actual fields are `declared_amount`, `system_expected`, `actual_count`, `operator_declared`, `variance_amount`, `comp_value` (vs the slightly-off labels in `permissions_matrix.md`).
+
+**Test-suite baseline — 2 failures + 6 errors all pre-existing.** Verified via `git stash` baseline run on unchanged main:
+- 2 failures: `test_environment_health.test_59_assets_exist` + `test_asset_board_api_accessible_as_administrator` — seed contamination from other tests' tearDowns. Documented canary behaviour.
+- 6 errors: 6 doctype `setUpClass` errors, all `DocType Payment Gateway not found` — frappe/payments not installed on the test bench. CLAUDE.md "Common Issues" documents this; `.github/workflows/tests.yml` installs payments@develop in CI.
+
+None of the 8 problems are caused by this run's changes. Subsequent runs may show 3 failures (a third flaky test surfaced in run 2 but not run 1 — `test_session_number_format_matches_dec033`). Not a regression from these changes; pre-existing flakiness.
+
+**Tasks 18-21 (Asset Board UI) still un-touched.** They were classified yellow ("verification-bounded" — code/tests autonomous but UI verification needs Chris's eyes). Run did not pick them up.
+
+**Stack #3 also deferred in inbox.md** (this commit) for the next session to pick up.
+
+**Files modified:** see the 8 PR diffs. No production-code mutating change beyond Stack #1 (scheduler_events removal + app_email fix). All other PRs are tests + docs.
+
+**Next session pickup priorities:**
+1. Review + merge PR #55 (PIPEDA wording fix) — was the only PR opened with no auto-merge.
+2. Implement Stack #3 (mask: 1 on the 6 fields documented in `permissions_matrix.md` Task 25 item 7) — requires `bench migrate` so Chris-supervised.
+3. Tasks 18-21 (Asset Board UI verification + remaining V10 work) — yellow-list items.
+4. Remaining green-list items not picked: SECURITY.md, README.md rewrite, CONTRIBUTING.md.
+
+**End-state:** Working tree clean. 8 of 9 PRs auto-merging once Server Tests passes. PR #55 awaiting Chris review.
