@@ -260,6 +260,28 @@ def _ensure_erpnext_prereqs():
 			"year_end_date": f"{current_year}-12-31",
 		}).insert(ignore_permissions=True)
 		frappe.logger().info(f"hamilton_erp: created Fiscal Year {fiscal_name!r}")
+	# Mode of Payment "Cash" — fourth fresh-install gap of the same class.
+	# ERPNext seeds the standard Modes of Payment via the setup wizard's
+	# ``install_fixtures.py``; Hamilton's unattended install skips the
+	# wizard. Without "Cash", ``_ensure_cash_mode_of_payment_account`` and
+	# ``_ensure_pos_profile`` both bail silently (their guarded code paths
+	# are correct — they shouldn't crash on missing prereqs — but the
+	# downstream effect is that POS Profile "Hamilton Front Desk" never
+	# gets created, and ``submit_retail_sale`` errors with "POS Profile
+	# is not configured" on every cart Confirm.
+	#
+	# The "type" field on Mode of Payment is one of "Cash" / "Bank" /
+	# "General" / "Phone" — for our Cash MoP, we set type="Cash" so
+	# ERPNext's standard Cash-handling logic (auto-fill Cash account on
+	# selection, etc.) works as expected.
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		frappe.get_doc({
+			"doctype": "Mode of Payment",
+			"mode_of_payment": "Cash",
+			"type": "Cash",
+			"enabled": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Mode of Payment 'Cash'")
 
 
 def _seed_hamilton_data():

@@ -110,6 +110,24 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			"records of type Material Receipt.",
 		)
 
+	def test_mode_of_payment_cash_seeded(self):
+		"""Mode of Payment "Cash" must exist or every downstream
+		seeding helper bails silently and the POS Profile never gets
+		created. ERPNext's setup wizard seeds it via
+		``install_fixtures.py``; Hamilton skips the wizard. Fourth in
+		the Warehouse Type "Transit" / Stock Entry Type "Material
+		Receipt" / Fiscal Year / Mode of Payment "Cash" fresh-install
+		gap family.
+		"""
+		self.assertTrue(
+			frappe.db.exists("Mode of Payment", "Cash"),
+			"Mode of Payment 'Cash' must be seeded by "
+			"_ensure_erpnext_prereqs — required by "
+			"_ensure_cash_mode_of_payment_account and _ensure_pos_profile, "
+			"both of which silently bail without it (cascading to a "
+			"missing POS Profile and submit_retail_sale errors).",
+		)
+
 	def test_fiscal_year_covers_today(self):
 		"""A Fiscal Year covering today's date must exist or every
 		transaction (Sales Invoice, Stock Entry, etc.) raises
