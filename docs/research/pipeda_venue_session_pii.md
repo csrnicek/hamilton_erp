@@ -46,11 +46,11 @@ The Ontario regulation on "public spas" under the Health Protection and Promotio
 
 PIPEDA is the only privacy law that applies. No provincial overlay. This simplifies compliance substantially compared to Hamilton's potential US venues (Philadelphia, DC, Dallas), each of which would have its own state-level privacy regime to layer on top of federal rules — not relevant for Hamilton itself but worth flagging for the multi-venue platform refactor.
 
-### Adult-classification has no privacy-law impact (but amplifies risk profile)
+### Customer-perceived attendance sensitivity has no formal privacy-law category (but amplifies risk profile)
 
-PIPEDA doesn't carve out adult-industry businesses; the same "real risk of significant harm" threshold and the same fair-information principles apply regardless of industry classification. The chargeback / merchant-classification work from earlier research is a separate concern from privacy.
+PIPEDA applies a uniform "real risk of significant harm" threshold and the same fair-information principles to every commercial business, regardless of category. There is no privacy-law carve-out tied to industry, and Hamilton operates under PIPEDA as a standard commercial business with no industry-specific obligations layered on top.
 
-However, adult classification **amplifies the risk profile** in four ways — see Section 8 for the full discussion.
+However, customer attendance at Hamilton is sensitive **from the customer's perspective** — disclosure may cause reputational, relational, or psychological harm to customers in a way that disclosure of, say, a coffee-shop visit would not. This perception **amplifies the real-risk-of-significant-harm calculation** in four ways — see Section 8 for the full discussion.
 
 ---
 
@@ -62,7 +62,7 @@ PIPEDA's ten fair-information principles (accountability, identifying purposes, 
 |---|---|---|---|---|
 | `customer` | **CRITICAL** (gateway field) | Link to ERPNext Customer DocType — gateway to the full Customer record (name, phone, email, address, transaction history) | Defaults to `Walk-in` (forward-compat per DEC-007 / `current_state.md`) | Day a real Customer is linked, ALL Customer-record PII becomes attached to the session via this Link field. Arguably more significant than `member_id` from a PIPEDA perspective: a populated `customer` exposes everything ERPNext stores on Customer, not just one identifier. Day-1 controls: (a) the same `mask: 1` discipline must extend to the linked Customer record's PII fields; (b) consent for the link must be documented at the Customer-creation step, not just at session creation; (c) retention rules attach to BOTH the Venue Session and the Customer record |
 | `full_name` | HIGH | Member identification, age verification, dispute response | Null | Documented purpose required; consent at time of collection; `mask: 1` (operator sees placeholder, Manager+ sees value) |
-| `date_of_birth` | CRITICAL | Age verification (regulated for adult venue) | Null | `mask: 1` mandatory; ideally store only the boolean "verified over 18/19" rather than exact DOB unless ongoing membership requires it |
+| `date_of_birth` | CRITICAL | Age verification (AGCO age-verification requirement if licensed; otherwise local-licensing-equivalent or contractual age gate) | Null | `mask: 1` mandatory; ideally store only the boolean "verified over 18/19" rather than exact DOB unless ongoing membership requires it |
 | `member_id` | HIGH | Membership-tier pricing; links to Customer history | Null | Justified for membership flow only; purge 90 days after membership lapse |
 | `identity_method` | MEDIUM | Audit ("operator used what method to verify") | Null | Inseparable from the PII it audits — same retention as the PII itself |
 | `block_status` | HIGH | Operational control (deny entry to blocklisted persons) | Null | Boolean flag is operationally necessary; reason text is over-collection unless documented and Manager-only |
@@ -141,7 +141,7 @@ Significant harm includes: "bodily harm, humiliation, damage to reputation or re
 
 ### Hamilton-specific calibration
 
-An adult-hospitality venue's customer attendance data plausibly meets "humiliation" and "damage to reputation/relationships" for many customers, even without financial impact. **Hamilton's real-risk threshold is lower than a generic retailer's** — meaning more breaches need reporting, even small ones.
+A venue where customer attendance is sensitive from the customer's perspective produces breach-impact data that plausibly meets "humiliation" and "damage to reputation/relationships" for many customers, even without financial impact. **Hamilton's real-risk threshold is lower than a generic retailer's** — meaning more breaches need reporting, even small ones. Note: this is a customer-privacy point, not a business classification — see Section 8 clarifying note.
 
 ### Three obligations on a reportable breach
 
@@ -291,17 +291,19 @@ If Hamilton ever shops for an ID scanner, asking "do you delete the scan after v
 
 ---
 
-## 8. Adult-Classification — Risk Amplification
+## 8. Customer-Perceived Sensitivity — Risk Amplification
 
-Classification doesn't change the privacy law that applies, but it amplifies the risk profile in four ways:
+> **Important — terminology clarification.** Hamilton is **not** classified as "adult" by any government body, payment network, or regulator. Hamilton operates as a standard commercial business — a standard merchant under Fiserv (R-008 explicitly downgraded the original assumption of high-risk classification), under PIPEDA without any industry-specific carve-out, and AGCO age-verification (if licensed) treats Hamilton like any other licensed establishment. The sensitivity discussion below is about **how customers may perceive attendance information being disclosed**, not about any formal classification of Hamilton itself.
 
-1. **Significant-harm threshold is easier to meet.** A breach exposing customer attendance at a bathhouse plausibly meets "humiliation, damage to reputation or relationships" for many customers, even without financial impact. This means more breaches must be reported even when they'd be sub-threshold for a generic retailer.
+The lack of formal classification does not change the privacy law that applies, but customer-perceived sensitivity of attendance amplifies Hamilton's real-risk-of-significant-harm calculation in four ways:
 
-2. **Hostile-attack risk is higher.** Adult-industry data breaches are a known target for blackmail / extortion (Ashley Madison 2015 is the canonical case). Hamilton's safeguards must be calibrated for this threat model — the `scanner_data` field's "delete after verify" rule is critical specifically because retained ID images would be a high-value extortion target.
+1. **Significant-harm threshold is easier to meet.** A breach exposing customer attendance at a venue where attendance is reputationally sensitive plausibly meets "humiliation, damage to reputation or relationships" for many customers, even without financial impact. This means more breaches must be reported even when they'd be sub-threshold for a generic retailer.
 
-3. **Customer expectations are higher.** Customers at adult venues expect more confidentiality than customers at a coffee shop. PIPEDA doesn't formally raise the standard, but Hamilton's privacy notice should reflect this: explicit commitment to anonymous walk-in by default, explicit description of what data is collected when (member sign-up, age verification, dispute response), explicit retention windows.
+2. **Hostile-attack risk is higher.** Data breaches at venues whose customer lists carry reputational risk are a known target for blackmail / extortion (Ashley Madison 2015 is the canonical case — same threat model, regardless of how that company was classified). Hamilton's safeguards must be calibrated for this threat model — the `scanner_data` field's "delete after verify" rule is critical specifically because retained ID images would be a high-value extortion target.
 
-4. **Regulator scrutiny is potentially higher.** The OPC may give heightened attention to breach reports from adult-industry businesses given the harm profile. Not formal policy, just operational reality.
+3. **Customer expectations are higher.** Customers at venues where attendance is reputationally sensitive expect more confidentiality than customers at a coffee shop. PIPEDA doesn't formally raise the standard, but Hamilton's privacy notice should reflect this expectation: explicit commitment to anonymous walk-in by default, explicit description of what data is collected when (member sign-up, age verification, dispute response), explicit retention windows.
+
+4. **Regulator scrutiny is potentially higher.** The OPC may give heightened attention to breach reports from businesses whose customer attendance is reputationally sensitive, given the harm profile. Not formal policy, just operational reality.
 
 ---
 
@@ -329,7 +331,7 @@ The day Hamilton (or Philadelphia, or any future PII-collecting venue) starts po
 | Area | Today (Hamilton, anonymous walk-in) | Day 1 of PII-populated venue |
 |---|---|---|
 | PIPEDA applicability | Yes (commercial, Canadian) | Yes — same |
-| Breach notification | Required for breaches with real risk of significant harm. Currently: minimal PII to breach. | Required — bar easier to meet given adult-venue harm profile. |
+| Breach notification | Required for breaches with real risk of significant harm. Currently: minimal PII to breach. | Required — bar easier to meet given the customer-perceived-sensitivity harm profile (Section 8). |
 | Breach record-keeping | Required for all breaches (24 months). | Same. |
 | Retention schedule | Light — mostly transactional records (6-year CRA window). | Required: written, per-field, with automated purge. Add to `docs/`. |
 | Minimum-necessary review | Trivial — none collected. | Active discipline: every PII field needs a documented justification; over-collection = breach risk. |
