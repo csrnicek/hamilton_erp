@@ -2,8 +2,8 @@
 
 Living tracker of what has been built, what is in progress, and what is blocked.
 
-**Last updated:** 2026-04-13
-**Current phase:** Phase 1 in progress — Tasks 1–17 complete, Task 18 next. Asset board UI design fully approved via interactive mockup V6 on 2026-04-13. Full design spec saved to `docs/design/asset_board_ui.md`. Tasks 17, 18, and 19 have approved visual designs — ready for implementation. New additions beyond original Phase 1 plan captured in spec: tabbed layout, Watch tab, feature flag tabs (Waitlist/Other), grouped status sections with time sorting, attendant name in header.
+**Last updated:** 2026-04-30 (third autonomous overnight run)
+**Current phase:** Phase 1 nearing handoff. Tasks 1–24 complete (per `.taskmaster/tasks/tasks.json` — Tasks 22-24 flipped to done in PR #40, 2026-04-30). Task 25 (Frappe Cloud deploy + manual QA) is the open milestone — gated by 3-AI review checkpoint plus a Chris-supervised `bench migrate` for the field-masking work (Stack #3, deferred during the third autonomous run because adding `mask: 1` to DocType JSONs requires bench migrate, a STOP condition for autonomous Opus). Asset Board UI shipped V6 → V8 → V9 → V9.1 (retail catalogue + cart UX stub). Full V10 spec at `docs/design/V10_CANONICAL_MOCKUP.html` (body byte-identical to V9; V10 bumps the version to bookkeep the V9.1 retail amendment in `docs/design/V9.1_RETAIL_AMENDMENT.md`). Pre-handoff hardening landed across PRs #53–#66 (12 PRs in the third overnight run): scheduler stub purge, track_changes regression pin (9 DocTypes), fresh-install conformance test (28 tests), RUNBOOK.md, CHANGELOG.md, scripts/init.sh, api_reference.md, SECURITY.md, CONTRIBUTING.md, README.md rewrite + LICENSE, plus the testing_guide "known gaps" refresh.
 
 ---
 
@@ -18,6 +18,49 @@ Living tracker of what has been built, what is in progress, and what is blocked.
 ---
 
 ## Session Notes
+
+### 2026-04-30 (third autonomous overnight run — pre-Task-25 hardening)
+
+13 PRs shipped in ~2 hours autonomous. All landed in the green category (no decisions needed, no migrations, no UI verification).
+
+**Task lifecycle progress:**
+- Tasks 22, 23, 24 (H10/H11/H12 E2E) flipped to done via PR #40 (2026-04-30 morning, before this overnight run).
+- Task 25 (Frappe Cloud deploy + manual QA) remains the open milestone — see "Blockers" section.
+
+**Stack execution order:**
+1. PR #53 — chore: stub-task purge + app_email fix (no-op `check_overtime_sessions` cron registration removed; `chris@hamilton.example.com` → `csrnicek@yahoo.com`)
+2. PR #54 — test: track_changes regression-pin (9 DocTypes — 8 enabled, asset_status_log explicit-zero pin)
+3. PR #55 — docs(research): PIPEDA "adult classification" wording fix (no auto-merge — Chris reviews; 2 open questions)
+4. PR #56 — test: fresh-install conformance test module (28 tests, existence-only assertions to survive seed contamination)
+5. PR #57 — docs: RUNBOOK.md (10-section operational incident-response guide assembled from canonical sources)
+6. PR #58 — docs: CHANGELOG.md (46 merged PRs documented chronologically, Keep-a-Changelog format)
+7. PR #59 — chore: scripts/init.sh (fresh-bench bootstrap mirroring `.github/workflows/tests.yml`)
+8. PR #60 — docs: api_reference.md (7 whitelisted endpoints + named exception types + realtime events)
+9. PR #61 — chore: end-of-session checkpoint (claude_memory.md + inbox.md updates)
+10. PR #62 — docs: SECURITY.md (vulnerability disclosure policy; csrnicek@yahoo.com)
+11. PR #63 — docs: CONTRIBUTING.md (workflow, conventions, AI-collab guidance)
+12. PR #64 — docs: overnight_summary_2026-05-01.md (morning batch-merge guide)
+13. PR #65 — docs: README rewrite + MIT LICENSE (project-root LICENSE was missing despite hooks.py declaring MIT)
+14. PR #66 — docs(testing_guide): refresh "Known Test Gaps" (§3 + §4 marked RESOLVED, §1 + §2 updated to PARTIAL)
+
+**Stack #3 (field masking on Cash Drop / Comp Admission Log) DEFERRED.** Adding `mask: 1` to DocType JSONs requires `bench migrate`, listed as a STOP condition in CLAUDE.md "Autonomous Command Rules." Deferred to a Chris-supervised PR. Field-name reconciliation prep captured in `docs/inbox.md` for the eventual implementer:
+- `Cash Drop.amount` → actual field is `declared_amount` (also `section_amount`)
+- `Cash Reconciliation.expected_cash` → actual is `system_expected`
+- `Cash Reconciliation.actual_cash` → actual is `actual_count`
+- `Cash Reconciliation.variance` → actual is `variance_amount`
+- `Comp Admission Log.value_at_door` → actual is `comp_value`
+
+**Test-suite baseline pinned:** 460 tests, 2 failures + 6 errors — all pre-existing on `main` (verified via `git stash` baseline run on unchanged main):
+- 6 errors = doctype `setUpClass` errors with `DocType Payment Gateway not found` (frappe/payments missing on local bench; CLAUDE.md "Common Issues" documents)
+- 2 failures = `test_environment_health.test_59_assets_exist` + `test_asset_board_api_accessible_as_administrator` (seed-contamination canary — intentional)
+- A 3rd failure (`test_session_number_format_matches_dec033`) appeared in run 2 but not run 1 — flaky, not consistently reproducible
+
+**Notable patterns proven this run:**
+- Multi-PR autonomous flow with `gh pr merge --auto --squash --delete-branch` queueing works cleanly. No CI bottleneck observed.
+- Pre-flight verification saves real time: Stack #2 was reduced from 1-hour JSON-edit work to 30-min test-only after a quick check showed 8 of 9 DocTypes already had `track_changes:1`. Stack #3 was caught as a STOP condition before any code was written.
+- The `git stash` baseline trick is the cleanest way to attribute test failures to "mine vs pre-existing".
+
+**Branch protection caught a direct-to-main attempt** for the morning summary — the no-PR shortcut Chris asked for was rejected ("Changes must be made through a pull request"), and the work routed through a normal PR (#64) with auto-merge. Worth noting: the protection is doing its job, and the always-PR ritual is the durable pattern unless Chris configures a bypass role for trusted commits.
 
 ### 2026-04-11 (Phase 1 Tasks 9–16 + full debugging arc)
 
