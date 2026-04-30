@@ -25,8 +25,37 @@ def after_install():
 	_seed_hamilton_data()
 	_create_roles()
 	_set_role_permissions()
+	_ensure_audit_trail_enabled()
 	_ensure_no_setup_wizard_loop()
 	frappe.db.commit()
+
+
+def _ensure_audit_trail_enabled():
+	"""Task 25 permissions checklist item 4: enable Audit Trail.
+
+	System Settings has an `enable_audit_trail` field in v15+ that gates
+	Frappe's tamper-evident audit log of every doc change. Enabling it on
+	install means every Hamilton DocType change after handoff is traceable
+	without retro-fitting. Idempotent — only writes if currently 0/None.
+
+	If the field doesn't exist on this Frappe version, this is a no-op
+	(captured by the existence check), so the install path stays robust
+	across minor v16 versions.
+	"""
+	# Field name in Frappe v15+: `enable_audit_trail` on System Settings.
+	# Use frappe.db.get_single_value to avoid loading the doc unnecessarily.
+	current = frappe.db.get_single_value("System Settings", "enable_audit_trail")
+	if current is None:
+		# Field absent on this Frappe build — older minor or rename.
+		frappe.logger().info(
+			"hamilton_erp: System Settings.enable_audit_trail not present; "
+			"skipping audit-trail enable (Frappe version variance)."
+		)
+		return
+	if int(current) == 1:
+		return  # already on
+	frappe.db.set_single_value("System Settings", "enable_audit_trail", 1)
+	frappe.logger().info("hamilton_erp: enabled Audit Trail in System Settings")
 
 
 def _ensure_no_setup_wizard_loop():
