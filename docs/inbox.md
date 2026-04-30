@@ -1490,6 +1490,32 @@ Sales Invoice custom fields:
 
 **Failover behavior:** If the default merchant's terminal times out or returns DECLINED-COMMS-ERROR (not DECLINED-INSUFFICIENT-FUNDS — those are real declines, don't retry), the operator gets a one-tap "Try backup processor" button on the cart drawer. This is operator-driven not automatic — automatic failover risks double-charging the customer if the first processor actually settled but the response was lost.
 
+### Polish — cart drawer change preview off by ≤4¢
+
+The cart drawer + cash payment modal preview the running total and change using the client-side `_cart_total()` (subtotal + HST 13%, no nickel rounding). The actual post-Confirm transaction is correct because the server applies Canadian nickel rounding (Amendment 2026-04-30 (c)) and returns the rounded change in the toast — but the *pre-Confirm preview* can be off by ≤4¢.
+
+Concrete example for a $7.91 cart with $20 cash tendered:
+- **Drawer/modal preview shows:** "Total $7.91" and "Change $12.09" (penny-precision)
+- **Server returns:** rounded_total $7.90, change $12.10 (nickel)
+- **Operator sees:** preview $12.09 → tap Confirm → toast "Sale ACC-... — change $12.10"
+- **Worse symptom:** Confirm button is gated on `cash_received >= due` where `due = grand_total = $7.91`. If operator types exactly $7.90 (the actual rounded amount due), the button stays disabled because the JS thinks $7.91 is owed; they have to type $7.91 or more to enable Confirm. Then the API rounds and returns $0.00 change for $7.90 tendered — which is the right answer the operator already knew, but the modal didn't help them get there.
+
+**Fix:** add a client-side `roundToNickel(value)` helper in `asset_board.js` and use it in:
+- `_cart_total()` — show the rounded total in the drawer summary so the operator's mental math matches the cash they'll collect.
+- The cash modal `due` variable — gate Confirm on `cash_received >= rounded_total`, compute change preview against rounded_total.
+
+**Implementation note:** the math is identical to the server-side rule:
+```js
+function roundToNickel(value) {
+    // Canadian penny-elimination rule (2013): round half-up to nearest 0.05.
+    // Mirrors frappe.utils.round_based_on_smallest_currency_fraction.
+    return Math.round(value * 20) / 20;
+}
+```
+Add a unit test in `test_asset_board_rendering.py` (source-substring contract) asserting the helper exists and is called in `_cart_total` + the cash modal Confirm-gate path. Should be a half-day task.
+
+**Why deferred from PR #51:** Functional correctness (the actual sale, the actual change handed back, the GL entry) is server-side and already correct as of commit `b3e5715`. The drawer preview is UX polish that doesn't affect any data, money flow, or audit trail — operators will adjust to "preview shows ${X}.{xx}, actual change is ${X}.{x0 or x5}" within their first shift if the polish doesn't ship by go-live. Worth fixing before opening day for clean operator UX, but not blocking PR #51 review.
+
 ### Sequencing
 
 This work happens AFTER the cart Confirm is wired to Sales Invoice creation (current PR). Order:
@@ -1498,6 +1524,7 @@ This work happens AFTER the cart Confirm is wired to Sales Invoice creation (cur
 2. Card payment Mode of Payment + merchant adapter scaffolding — basic Helcim integration, capture merchant_transaction_id, add custom fields to Sales Invoice. Probably 3-5 days.
 3. Multi-merchant config + manual failover button. Probably 2-3 days.
 4. Digital receipt (email/SMS). Probably half-day on top of receipt printer work since the templating is mostly shared.
+5. Cart drawer nickel-rounding polish (this section). Half-day. Standalone — can land before or after items 1–4.
 
 Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
 
