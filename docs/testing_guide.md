@@ -355,7 +355,7 @@ Verifies timestamp ordering, field nullability, and cleanup after state transiti
 
 These are concrete, known-missing tests that must be written before the Phase 1 handoff deploy.
 
-### 1. API POST Permission Tests
+### 1. API POST Permission Tests — partially covered
 
 Verify that a Guest user (unauthenticated) cannot call any of these whitelisted endpoints via the API layer:
 
@@ -367,30 +367,32 @@ Verify that a Guest user (unauthenticated) cannot call any of these whitelisted 
 
 Each test should hit the endpoint through `frappe.handler.execute_cmd()` (or equivalent) with no session/role, and assert a `PermissionError` or 403. Direct Python imports bypass the permission gate entirely (see Best Practice #3 in `claude_memory.md`), so these tests must exercise the HTTP/handler layer.
 
-### 2. Sales Invoice Override Tests
+**Current coverage (2026-04-30):** `test_api_phase1.test_http_verb_post_rejected_with_permission_error` covers the HTTP-verb mismatch case for `get_asset_board_data` (POST against a `methods=["GET"]` endpoint). The full guest-user-cannot-call-any-POST-endpoint sweep remains a gap. Five new tests still needed.
 
-`HamiltonSalesInvoice` (in `hamilton_erp/overrides/sales_invoice.py`) defines three methods loaded via `override_doctype_class` in hooks.py:
+### 2. Sales Invoice Override Tests — partially covered
+
+`HamiltonSalesInvoice` (in `hamilton_erp/overrides/sales_invoice.py`) defines three methods loaded via `extend_doctype_class` in hooks.py:
 
 - `has_admission_item()` — returns True if any line item matches admission criteria
 - `get_admission_category()` — returns the admission category string
 - `has_comp_admission()` — returns True if the admission is comped
 
-None of these have any test coverage. Tests should create a Sales Invoice with and without admission items and verify each method's return value. These methods are the foundation of Phase 2 financial integration.
+**Current coverage (2026-04-30):** `test_database_advanced.TestFrappeV16Behaviour.test_extend_doctype_class_loads_correctly` confirms all three methods are present on `HamiltonSalesInvoice` via `hasattr()`. Behavioural tests (create a Sales Invoice with / without admission items, verify each method's return value) remain a gap. These methods are the foundation of Phase 2 financial integration.
 
-### 3. Bulk Clean Catastrophic Exception Handling
+### 3. Bulk Clean Catastrophic Exception Handling — RESOLVED 2026-04-30
 
-`_mark_all_clean()` in `api.py` iterates over all Dirty assets and calls `mark_asset_clean()` on each. If a catastrophic exception occurs mid-loop (e.g., DB connection failure), verify that:
+The `_mark_all_clean()` / `mark_all_clean_rooms` / `mark_all_clean_lockers` endpoints were **removed** in the DEC-054 reversal (PR #41, 2026-04-30). The Asset Board UI no longer renders bulk-clean buttons. Per-tile clean is the only supported flow; `clean_asset` is its own contract test in `test_api_phase1`.
 
-- The error is raised or logged, not silently swallowed
-- Assets cleaned before the failure remain clean (committed)
-- The caller receives an error response, not a success with partial results
+The negative regression pin lives in `test_asset_board_rendering.test_api_does_not_define_mark_all_clean_endpoints` and `.test_js_does_not_render_bulk_mark_all_clean_button` — these will fail if the bulk endpoints are reintroduced without a deliberate decision-log update.
 
-### 4. `utils.py` — Completely Untested Functions
+### 4. `utils.py` — RESOLVED 2026-04-30
 
-`get_current_shift_record()` and `get_next_drop_number()` in `hamilton_erp/utils.py` have zero test coverage:
+`hamilton_erp/test_utils.py` ships with two test classes covering both functions in `utils.py`:
 
-- `get_current_shift_record()` — returns the active Shift Record for the current operator. Must be tested with: no active shift, one active shift, multiple shifts (should return most recent).
-- `get_next_drop_number()` — returns the next sequential drop number for a shift. Must be tested with: no prior drops (returns 1), existing drops (returns max + 1), and the empty-string guard (a known edge case where an empty string in the `drop_number` field causes `max()` to return `""` instead of an integer).
+- `TestGetCurrentShiftRecord` (4 tests): no open shift returns `None`, one open shift returns name, closed shift returns `None`, most-recent-when-multiple-open
+- `TestGetNextDropNumber` (5 tests): first drop returns 1, increments for subsequent, throws on empty string, throws on None, throws on falsy value (the empty-string guard explicitly tested)
+
+This gap is closed.
 
 ---
 
