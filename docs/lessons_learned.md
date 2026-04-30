@@ -60,6 +60,7 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-031 | Production Safety | S0 | Agents may diagnose broadly but execute narrowly |
 | LL-035 | Production Safety | S1 | Whitelisted endpoints touching money / stock / permissions need adversarial tests in the **first** PR — hardening passes are 5x the cost |
 | LL-036 | UI / Asset Board | S2 | Paper receipt as occupancy token is a defensible-but-fragile control — digital state must remain canonical, paper is operator UX |
+| LL-037 | Operational | S2 | Frappe v16 caches `site_config` for 60 seconds — `bench set-config` changes don't take immediate effect on running workers |
 
 **Severity scale:** S0 — data corruption / financial integrity / production outage. S1 — release blocker. S2 — serious developer-time sink. S3 — annoyance / local workflow only.
 
@@ -577,6 +578,22 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Prevention for next venue:** The next venue (DC, Toronto, Philly) should evaluate switching to wristband+RFID (pattern a) which removes this trap entirely — the wristband IS the digital state's projection, and lost wristbands are a recoverable event. Hamilton retrofitting to wristband would be capital expense; new venues with greenfield hardware spec should consider it.
 - **Generalizes:** Any physical artifact that mirrors digital state (printed labels, hook receipts, paper-tag inventory, even hand-written sticky notes on workstations) creates a drift surface. The artifact is operator UX, not data. Whenever a process design depends on "the paper says X," there's a hidden assumption that the paper hasn't been mishandled — and at scale, paper always gets mishandled. Architecture must make digital state recoverable from the artifact, not the other way around.
 - **References:** PR #51 deeper audit Topic 1 (2026-04-30), Hotel night-audit pattern (RoomMaster, Prostay), SAM4POS dual-station printer / electronic journal pattern. Related: docs/inbox.md 2026-04-30 Phase 2 hardware backlog (Epson TM-T20III spec).
+
+### LL-037 — Frappe v16 caches `site_config` for 60 seconds — `bench set-config` is not immediate
+
+- **Category:** Operational
+- **Severity:** S2
+- **Applies to:** Any operational change that uses `bench set-config <key> <value>` against a running production site, especially Hamilton's per-venue config keys: `hamilton_company`, `hamilton_walkin_customer`, `retail_tabs`, future `hamilton_descriptor_used`, future merchant config in `hamilton_merchants`. Also relevant when toggling Hamilton's existing flags during incident response.
+- **What happened (research, not incident):** v16 production-readiness survey (2026-04-30) surfaced this from the v15→v16 migration wiki: "Site config and common site configs are cached for up to one minute" — a deliberate v16 perf optimization that means `set-config` writes propagate to running workers on a 60-second clock, not instantly. In v15 the cache was effectively per-request; v16 made it minute-scale to reduce DB chatter on a hot path.
+- **Time cost:** Research only — no incident. But the trap is obvious: an operator runs `bench set-config hamilton_walkin_customer "Anonymous"` to fix a misconfiguration during a Saturday-night incident, retries the failing request immediately, gets the same failure, and concludes the config change didn't work — when actually it did, but won't be visible for up to 60 seconds.
+- **Root cause:** v16's deliberate caching trade-off. `frappe.conf.get(key)` reads from a process-local cache that refreshes on a TTL, not from the file system on every call. Workers hold their cache independently; restarting one worker doesn't clear another's.
+- **The fix:** Two patterns, depending on urgency:
+  1. **Wait 60 seconds.** For routine config changes (planned tier upgrades, post-deploy verification), simply waiting is fine. Set the runbook expectation: "after `bench set-config`, allow up to 60 seconds for changes to take effect."
+  2. **Restart workers explicitly.** For incident-response config changes where the 60-second wait is too long, run `bench restart` (or `supervisorctl restart all` on Frappe Cloud private benches) immediately after `set-config`. This forces every worker to drop its cache and re-read from disk on the next request.
+- **Detection:** Symptom is "I changed the config but the behavior didn't change." If the behavior is still wrong after a `bench restart`, then the config change actually didn't apply or there's a different bug. If the behavior changes after a `bench restart` but not before, this lesson explains why.
+- **Prevention for next venue:** Document the 60-second TTL in `docs/venue_rollout_playbook.md` so each new venue's runbook includes the wait-or-restart guidance. Also: any Hamilton tooling that reads `frappe.conf.get` in a hot path (the cart's `submit_retail_sale` reads `hamilton_walkin_customer` per-call) should be aware that the value is cache-fresh-as-of-last-60s, not real-time. For most use cases this is fine; for security-critical flags (where stale-by-60s could be a problem), restart-after-change is the discipline.
+- **Generalizes:** Every cache has a TTL. v15's "every request reads disk" model was wasteful but had instant feedback; v16's "minute-scale cache" model is performant but feedback-delayed. Whenever an operational tool changes behavior between major versions, the operator runbook needs the delta documented — otherwise muscle-memory from the old version bites in the new one.
+- **References:** v15→v16 migration wiki (`https://github.com/frappe/frappe/wiki/Migrating-to-version-16`), 2026-04-30 v16 production-readiness research session. Related: LL-026 (`property_setter.json` caching), LL-029 (never modify Frappe core — including its caching behavior).
 
 ---
 

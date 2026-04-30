@@ -64,13 +64,29 @@ When writing any Frappe code, consult these sources before writing:
 
 If a convention is unclear, prefer matching what frappe/frappe itself does over inventing something new.
 
-### Production branch pinning — version-16, NEVER develop
+### Production version pinning — tagged v16 minor release, NEVER branch HEAD or develop
 
-Hamilton ERP production deploys on Frappe Cloud must pin both `frappe` and `erpnext` to the **`version-16`** branch (GA'd 2026-01-12), NOT `develop`.
+Hamilton ERP production deploys on Frappe Cloud must pin both `frappe` and `erpnext` to a **specific tagged v16 minor release** (e.g., `v16.3.4`), NOT to the `version-16` branch HEAD and NOT to `develop`.
 
-`develop` tracks v17 work — pre-release breaking changes land there continuously. A production site pulling `develop` would inherit untested breakage on every auto-deploy. The `version-16` branch only receives backports of fixes after they're validated.
+**Three tiers, three behaviors:**
+- **Tagged minor (e.g. `v16.3.4`):** immutable point-in-time. The release that production runs.
+- **`version-16` branch HEAD:** the active polish wave. ~10 fixes/month land in POS / Sales Invoice / Stock / Permissions areas (verified by issue tracker survey, 2026-04-30). Changes weekly. Acceptable for staging; never production.
+- **`develop` branch:** v17 work. Pre-release breaking changes land continuously. Never use anywhere except experimental forks.
 
-**Local dev / CI exception:** CI's vendored `frappe-setup` action installs `frappe/payments@develop` (per `.github/workflows/tests.yml` and CLAUDE.md's "Common Issues" section) because frappe/payments has no `version-16` branch yet — that's CI-only and acceptable. The Hamilton ERP custom app itself tracks `main`. Production deploys still pin frappe + erpnext to `version-16`.
+The version-16 branch survey (2026-04-30) showed ~50 PRs merged across the four functional areas in 3.5 months post-GA; auto-deploying HEAD would have introduced production churn from those changes whether or not Hamilton's flow is affected.
+
+### Disable auto-upgrade on the production bench
+
+Frappe Cloud's private bench supports disabling auto-upgrades. Hamilton's production bench MUST have auto-upgrade disabled.
+
+**Manual upgrade cadence:**
+1. **Monthly review window** — first week of each month, check `version-16` tag list for new minor releases.
+2. **Smoke-test in staging** — apply the new minor to the staging site, run Hamilton's full test suite (`/run-tests`) plus a manual cart-Confirm flow.
+3. **Promote to production** — only after staging is green for at least 48 hours of soak time.
+
+The 30-day cadence is faster than ERPNext's typical implementation cycle but matches the polish-wave fix pace. If a critical CVE or data-corruption bug is announced, off-cycle upgrades are warranted; otherwise, monthly is the rhythm.
+
+**Local dev / CI exception:** CI's vendored `frappe-setup` action installs `frappe/payments@develop` (per `.github/workflows/tests.yml` and the "Common Issues" section below) because frappe/payments has no `version-16` branch yet — CI-only and acceptable. The Hamilton ERP custom app itself tracks `main` on production. The pinning rule above applies to frappe + erpnext; Hamilton's own app updates ship through git tags on `main`.
 
 **Watch:** if frappe/payments cuts a `version-16` branch, switch the workflow checkout AND any production install of payments to it. See `docs/inbox.md` 2026-04-28 entry on the frappe/payments production-deploy decision.
 

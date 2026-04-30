@@ -78,13 +78,73 @@ Surfaced by the Frappe Cloud production-hosting research session (2026-04-30). T
 
 **Effort:** ~1 hour for the restore + 30 minutes for runbook documentation.
 
-### Sequencing for the four
+### T0-FC-5 — Verify `/app/asset-board` route works on v16 production
 
-All four should land in the 1-2 weeks BEFORE Hamilton opens:
-1. **T0-FC-3 storage check** first (lowest cost, may surface a need to bump plan tier which has lead time).
+**Action:** After production deploy of Hamilton ERP onto Frappe Cloud, navigate to `https://hamilton-erp.v.frappe.cloud/app/asset-board` and confirm the page loads without redirect issues.
+
+**Why:** v16 renamed the desk frontend route prefix from `/app` to `/desk` (per the v15→v16 migration wiki). Frappe added a redirect for `/app` → `/desk` to preserve backward compatibility, but redirects are exactly the kind of thing that quietly break in production deploys when an nginx config or proxy intercepts the wrong path. Hamilton's POS UI lives at `/app/asset-board`; if the redirect silently fails, the operator gets a 404 on opening day.
+
+**Pass criteria:** GET on `/app/asset-board` either returns the page directly OR returns a 301/302 to `/desk/asset-board` which then returns the page. Either path works; total time-to-render <2s.
+
+**Effort:** 5 minutes (curl + browser verification).
+
+### T0-FC-6 — Verify `Accounts Settings.use_sales_invoice_in_pos` matches Hamilton's flow
+
+**Action:** Read `Accounts Settings.use_sales_invoice_in_pos` on production and document the value. Hamilton's `submit_retail_sale` doesn't depend on this toggle (it sets `is_pos=1` directly on a `Sales Invoice` doc, bypassing the standard POS UI which the toggle controls), but consistency between the toggle state and Hamilton's actual path eliminates surprise behavior.
+
+**Why:** The v16 architecture change (PR `frappe/erpnext#46485`, "feat: sales invoice integration with pos") added this toggle in Accounts Settings. When ON, the standard POS UI creates Sales Invoice records (Hamilton's path); when OFF, it creates POS Invoice records (the legacy path). Hamilton bypasses the standard POS UI entirely by going through the cart drawer + `submit_retail_sale`. But: any future "enable the standard POS UI as a backup" or any operator who opens `/app/point-of-sale` directly will hit the toggle's behavior. Setting it to ON aligns the standard surface with Hamilton's custom surface.
+
+**Recommended state:** ON (Hamilton's path is Sales Invoice). Document the choice in `docs/decisions_log.md` if not already.
+
+**Effort:** 5 minutes.
+
+### T0-FC-7 — Verify stock valuation method is FIFO at company level
+
+**Action:** On `Company "Club Hamilton"` (or whatever Hamilton's pinned company is), confirm `default_in_transit_warehouse` and the per-item / per-company stock valuation method is FIFO.
+
+**Why:** v16 made stock valuation method selectable per-company (was global in v15). The seed doesn't currently set this explicitly — Standard CoA's default is FIFO, which is what Hamilton wants for retail (small SKU count, fast turnover, each unit's cost matches the one before it within $0.01). Moving Average and LIFO are wrong for Hamilton's retail model.
+
+**Pass criteria:** Stock Settings → Valuation Method = FIFO (default) AND Company "Club Hamilton" has no override that flips it to Moving Average.
+
+**Effort:** 5 minutes.
+
+### T0-FC-8 — Restore-to-staging drill against current v16 minor (not launch version)
+
+**Action:** Trigger a restore from production backup to a staging site running the **current** `version-16` minor (e.g., `v16.3.4` if that's the latest tag at the time of drill), NOT the version production was launched with. Run Hamilton's full test suite against the restored data on the new minor.
+
+**Why this is different from T0-FC-4:** T0-FC-4 measures RTO. This drill validates the **migration path** — that Hamilton's actual production data (Sales Invoices, Stock Ledger Entries, Asset Status Logs, etc.) survives a v16 minor upgrade without data loss or schema mismatch. The polish-wave fix cadence (R-010) makes it likely that one of the ~10 monthly fixes touches a doctype Hamilton uses.
+
+**Pass criteria:** All 17 test modules pass on the restored data + new minor. Specifically: GL Entries balance, Stock Ledger Entries reconcile, Sales Invoice → Cash Drop → Cash Reconciliation chain validates.
+
+**Frequency:** Run on every monthly upgrade promotion (per the CLAUDE.md cadence). The first run is pre-launch on whatever minor is current; subsequent runs are part of the normal upgrade flow.
+
+**Effort:** 1-2 hours per drill.
+
+### T0-FC-9 — Resolve `frappe/payments` strategy before go-live
+
+**Action:** Decide whether Hamilton's production bench installs `frappe/payments` (and from which branch) or omits it entirely.
+
+**Why:** ERPNext issue [#51946](https://github.com/frappe/erpnext/issues/51946) — "Payment Gateway Doctype not present in version-16" — has been open since 2026-01-21 with no fix announced as of 2026-04-30. Hamilton's CI installs `frappe/payments@develop` as a workaround for the `IntegrationTestCase` setUpClass test issue. Production code itself doesn't reference Payment Gateway (per `docs/inbox.md` 2026-04-28 production-code reality check), so omitting frappe/payments from production should be safe — but if Phase 2 next iteration's card payment flow ever uses Frappe's Payment Entry / Payment Gateway tooling, the absence becomes a runtime error.
+
+**Three options to evaluate:**
+1. **Omit frappe/payments from production.** Lowest risk if Phase 2 next is built on a custom merchant adapter (per inbox merchant abstraction spec) that doesn't use Frappe's Payment Gateway doctype.
+2. **Install `frappe/payments@develop`.** Mirrors CI; brings Payment Gateway doctype into production. Risk: develop-branch instability.
+3. **Wait for `frappe/payments@version-16`.** Cleanest if it ships before Hamilton goes live; otherwise blocks options 1 or 2 from being decided.
+
+**Decide before:** Hamilton goes live on Frappe Cloud (production deploy). The decision affects bench config which is cleanest set BEFORE the first migration runs against production.
+
+**Effort:** 30-minute review of Phase 2 next iteration's adapter design (does it use Payment Gateway doctype?) + 5-min bench config change.
+
+### Sequencing for the nine
+
+T0-FC-1 through T0-FC-4 are the core Frappe Cloud hardening (pre-PII / pre-card-payments). T0-FC-5 through T0-FC-9 are v16-specific verification and decisions.
+
+All nine should land in the 2-3 weeks BEFORE Hamilton opens:
+1. **T0-FC-3 storage check** + **T0-FC-9 frappe/payments decision** first (may need plan upgrade lead time and/or upstream frappe/payments visibility).
 2. **T0-FC-1 encryption** next (5 minutes, but blocking T0-FC-4's restore drill — restore drill should test the encrypted-backup path).
 3. **T0-FC-2 region change** in parallel (depends on Frappe support response time).
-4. **T0-FC-4 restore drill** last (validates the encrypted backup path + measures RTO).
+4. **T0-FC-4 RTO drill** + **T0-FC-8 v16-minor migration drill** after deploy is finalized (these need a real production-state backup to test against).
+5. **T0-FC-5 / T0-FC-6 / T0-FC-7** verification once production is up (5 minutes each, before opening day).
 
 2026-04-24: V9 of asset board shipped to main as squash commit 1cc9125. PR #8 merged. decisions_log.md Part 3.1 amended (countdown text amber→red). V9 plan archived at docs/design/archive/. NEXT SESSION: update docs/claude_memory.md to reflect V9 shipping; cancel unused Frappe Cloud site (~$40/mo, won't need until deploy 6-8 weeks out).
 
@@ -1491,6 +1551,23 @@ V9.1 Phase 2 retail cart shipped with cash-only single-tender (PR #49). The foll
 - Receipt printer config lives in Hamilton Settings: `receipt_printer_ip` (string), `receipt_printer_enabled` (check). Mirror Brother label printer fields.
 - Print job is a side-effect, not part of the Sales Invoice transaction. If the printer is offline, the sale must still complete; queue the print job to retry, surface a "printer offline" indicator on the board.
 - Test path: a `print_receipt(sales_invoice_name)` whitelisted endpoint that takes a Sales Invoice and renders to ESC/POS. Backend does the formatting; client just triggers.
+
+**v16 PRINT-FORMAT GOTCHA — load by name, do not rely on UI selection.** ERPNext v16 issue [#53857](https://github.com/frappe/erpnext/issues/53857) ("Add Sales Invoice support to POS Profile print format filter") is open as of 2026-04-30: the POS Profile's print-format filter UI doesn't show Sales Invoice formats, only POS Invoice formats. Hamilton's path uses Sales Invoice (via the v16 `is_pos=1` architecture). This means **the receipt printer code path MUST specify the print format programmatically** — load the Print Format by name (`frappe.get_doc("Print Format", "<Hamilton Receipt>")`), render the SI through `frappe.get_print(doctype, name, print_format=...)`, and send the rendered output to the printer. Do NOT depend on `pos_profile.print_format` being set correctly via the Desk UI; that field's filter is broken in v16 and will silently stay empty for Sales-Invoice-flavored POS profiles.
+
+**Concrete pattern:**
+```python
+def print_receipt(sales_invoice_name: str):
+    si = frappe.get_doc("Sales Invoice", sales_invoice_name)
+    html = frappe.get_print(
+        doctype="Sales Invoice",
+        name=sales_invoice_name,
+        print_format="Hamilton Receipt",  # explicit, NOT pos_profile.print_format
+    )
+    escpos_bytes = render_html_to_escpos(html)
+    send_to_printer(hamilton_settings.receipt_printer_ip, escpos_bytes)
+    # Also: store escpos_bytes on the SI per the receipt-bytes retention rule above.
+```
+The "Hamilton Receipt" Print Format is created as a fixture in the Hamilton ERP app and referenced by name. When ERPNext fixes #53857 (likely a v16.x patch), the workaround stays correct — it doesn't break, just becomes redundant.
 
 ### Digital receipt option
 
