@@ -372,8 +372,14 @@ class TestRedisEdgeCases(IntegrationTestCase):
 class TestFrappeV16Behaviour(IntegrationTestCase):
 	"""R5 — Frappe v16 framework contracts: versioning, roles, hooks, scheduler."""
 
-	def test_override_doctype_class_loads_correctly(self):
-		"""HamiltonSalesInvoice mixin is loaded via override_doctype_class."""
+	def test_extend_doctype_class_loads_correctly(self):
+		"""HamiltonSalesInvoice mixin is loaded via extend_doctype_class.
+
+		Frappe v16 uses `extend_doctype_class` (multi-app safe — composable
+		mixin chain) instead of the older `override_doctype_class` (single
+		owner — last-loaded wins, fragile under multi-app deploys). See
+		hooks.py:69 for the registration.
+		"""
 		from hamilton_erp.overrides.sales_invoice import HamiltonSalesInvoice
 		self.assertTrue(hasattr(HamiltonSalesInvoice, "has_admission_item"))
 		self.assertTrue(hasattr(HamiltonSalesInvoice, "get_admission_category"))
