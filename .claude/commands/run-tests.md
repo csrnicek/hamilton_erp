@@ -13,7 +13,7 @@
 # (test_security_audit added 2026-04-11 — +5 SQL-injection / XSS audit tests.)
 # (test_database_advanced added 2026-04-14 — +51 DB perf, MariaDB, Redis, Frappe v16, fraud tests.)
 # (test_utils added 2026-04-14 — +9 utils.py gap tests: shift record lookup, drop numbering, empty-string guard.)
-# (test_bulk_clean added 2026-04-14 — +2 bulk clean exception handling tests.)
+# (test_bulk_clean removed 2026-04-30 — bulk-clean feature deleted 2026-04-29 per Amendment A29-1; tests went with it.)
 # (test_hypothesis added 2026-04-14 — +8 property-based tests: session number, state machine, cash math.)
 # (test_e2e_phase1 added 2026-04-28 (Tasks 22-24) — H10 Vacate/Turnover, H11 OOS, H12 Occupied-rejection E2E with real Asset Status Log audit trail.)
 # (test_retail_sales_invoice added 2026-04-30 — V9.1 Phase 2 cart → POS Sales Invoice flow + accounting seed verification.)
@@ -34,7 +34,6 @@ cd ~/frappe-bench-hamilton && source env/bin/activate && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_environment_health && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_database_advanced && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_utils && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_bulk_clean && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_hypothesis && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_e2e_phase1 && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_retail_sales_invoice
