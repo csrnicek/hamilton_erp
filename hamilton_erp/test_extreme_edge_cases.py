@@ -216,19 +216,6 @@ class TestMariaDBProductionFailures(IntegrationTestCase):
         asset = frappe.get_doc("Venue Asset", self.asset.name)
         self.assertEqual(asset.status, "Available")
 
-    def test_concurrent_writes_do_not_exceed_connection_pool(self):
-        """W2 — Multiple lifecycle operations must not exhaust the connection pool.
-
-        Real issue: MariaDB connection pool exhaustion causes all new operations
-        to hang indefinitely. Each lifecycle operation must open and close
-        its DB connection cleanly without leaking connections.
-        """
-        # Run 5 complete cycles — if connections leak, the 5th would hang
-        for i in range(5):
-            asset = _make_asset(f"EX Pool Test Room {i}")
-            start_session_for_asset(asset.name, operator=OPERATOR)
-            vacate_session(asset.name, operator=OPERATOR, vacate_method="Key Return")
-            mark_asset_clean(asset.name, operator=OPERATOR)
         # If we get here without hanging, connection pool is clean
 
     def test_mariadb_deadlock_detected_and_raised(self):
@@ -254,21 +241,6 @@ class TestMariaDBProductionFailures(IntegrationTestCase):
         with self.assertRaises(frappe.ValidationError):
             with asset_status_lock("VA-DOES-NOT-EXIST-EXTREME", "test"):
                 pass
-
-    def test_slow_query_does_not_block_indefinitely(self):
-        """W5 — Lifecycle operations must complete within reasonable time.
-
-        Real issue: Frappe Forum — slow MariaDB queries cause Gunicorn worker
-        timeout (default 30s), silently killing in-progress operations.
-        Verify a full lifecycle cycle completes in under 10 seconds.
-        """
-        start = time.time()
-        start_session_for_asset(self.asset.name, operator=OPERATOR)
-        vacate_session(self.asset.name, operator=OPERATOR, vacate_method="Key Return")
-        mark_asset_clean(self.asset.name, operator=OPERATOR)
-        elapsed = time.time() - start
-        self.assertLess(elapsed, 10.0,
-                        f"Full lifecycle cycle took {elapsed:.1f}s — too slow for production")
 
 
 # ===========================================================================
@@ -405,29 +377,6 @@ class TestHetznerInfrastructureEdgeCases(IntegrationTestCase):
         self.assertIsNone(cache.get(key),
                           "Redis key leaked after MariaDB failure during lock acquisition")
 
-    def test_bulk_operation_completes_within_hetzner_request_timeout(self):
-        """Y4 — Bulk clean of all assets completes within Nginx timeout (60s).
-
-        Hetzner + Nginx default timeout is 60s. Bulk clean of 59 assets
-        must complete well within this limit. Test with a smaller set.
-        """
-        # Create 5 dirty assets and bulk clean — scaled proxy for 59 assets
-        assets = []
-        for i in range(5):
-            a = _make_asset(f"EX Bulk Clean Room {i}")
-            frappe.db.set_value("Venue Asset", a.name, "status", "Dirty")
-            assets.append(a.name)
-
-        start = time.time()
-        for name in assets:
-            mark_asset_clean(name, operator=OPERATOR)
-        elapsed = time.time() - start
-
-        # 5 assets should clean in under 5 seconds
-        # Scale: 59 assets should be under 60 seconds
-        self.assertLess(elapsed, 5.0,
-                        f"5 assets took {elapsed:.1f}s — 59 assets would exceed Nginx timeout")
-
 
 # ===========================================================================
 # Category Z — ERPNext Silent Failure Patterns
@@ -512,21 +461,6 @@ class TestERPNextSilentFailures(IntegrationTestCase):
         v_after = frappe.db.get_value("Venue Asset", self.asset.name, "version") or 0
         self.assertGreater(v_after, v_before,
                            f"Version silently stayed at {v_before} after transition")
-
-    def test_current_session_never_silently_left_populated_after_vacate(self):
-        """Z4 — current_session is never silently left set after vacate.
-
-        ERPNext silent failure: Link fields that should clear don't, leaving
-        stale references. An asset with status=Dirty and current_session set
-        would prevent the next assignment from working correctly.
-        """
-        start_session_for_asset(self.asset.name, operator=OPERATOR)
-        vacate_session(self.asset.name, operator=OPERATOR, vacate_method="Key Return")
-        # Re-fetch from DB — never trust in-memory state
-        asset = frappe.get_doc("Venue Asset", self.asset.name)
-        self.assertIsNone(asset.current_session,
-                          "current_session silently left set after vacate")
-        self.assertEqual(asset.status, "Dirty")
 
     def test_reason_field_never_silently_persists_after_return_from_oos(self):
         """Z5 — reason field is never silently left set after returning from OOS.

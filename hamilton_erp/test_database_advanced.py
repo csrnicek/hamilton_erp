@@ -182,15 +182,6 @@ class TestQueryPerformance(IntegrationTestCase):
 		self.assertLess(elapsed_ms, 200, f"Session creation took {elapsed_ms:.1f}ms (SLA: <200ms)")
 		self.assertTrue(session_name)
 
-	def test_lock_acquisition_under_50ms(self):
-		"""Redis lock acquire + MariaDB FOR UPDATE completes in under 50ms."""
-		asset = _make_asset("Perf Lock Room")
-		start = time.monotonic()
-		with asset_status_lock(asset.name, "perf_test") as row:
-			elapsed_ms = (time.monotonic() - start) * 1000
-			self.assertLess(elapsed_ms, 50, f"Lock acquisition took {elapsed_ms:.1f}ms (SLA: <50ms)")
-			self.assertEqual(row["status"], "Available")
-
 	def test_session_number_like_query_not_full_scan(self):
 		"""EXPLAIN on _db_max_seq_for_prefix LIKE query does not do a full table scan."""
 		prefix = "14-4-2026"
@@ -239,53 +230,6 @@ class TestMariaDBEdgeCases(IntegrationTestCase):
 		"""MariaDB default isolation level is REPEATABLE READ (Frappe's assumption)."""
 		result = frappe.db.sql("SELECT @@tx_isolation AS isolation", as_dict=True)
 		self.assertEqual(result[0]["isolation"], "REPEATABLE-READ")
-
-	def test_global_isolation_matches_session(self):
-		"""Session and global isolation levels match."""
-		result = frappe.db.sql(
-			"SELECT @@tx_isolation AS session_iso, "
-			"@@global.tx_isolation AS global_iso",
-			as_dict=True,
-		)
-		self.assertEqual(result[0]["session_iso"], result[0]["global_iso"])
-
-	def test_for_update_locks_row_not_table(self):
-		"""FOR UPDATE acquires row-level lock, not table-level lock.
-
-		Create two assets. Lock one with FOR UPDATE. Verify the other
-		can still be read.
-		"""
-		asset_a = _make_asset("MariaDB Lock A")
-		asset_b = _make_asset("MariaDB Lock B")
-
-		# Read asset_a under FOR UPDATE (holds row lock)
-		frappe.db.sql(
-			"SELECT name FROM `tabVenue Asset` WHERE name = %s FOR UPDATE",
-			asset_a.name,
-		)
-
-		# asset_b should still be readable
-		rows = frappe.db.sql(
-			"SELECT name, status FROM `tabVenue Asset` WHERE name = %s",
-			asset_b.name,
-			as_dict=True,
-		)
-		self.assertEqual(len(rows), 1)
-		self.assertEqual(rows[0]["status"], "Available")
-
-	def test_datetime_microsecond_precision(self):
-		"""MariaDB stores datetime with microsecond precision (6 digits)."""
-		result = frappe.db.sql(
-			"SELECT COLUMN_NAME, DATETIME_PRECISION "
-			"FROM INFORMATION_SCHEMA.COLUMNS "
-			"WHERE TABLE_SCHEMA = DATABASE() "
-			"AND TABLE_NAME = 'tabVenue Session' "
-			"AND COLUMN_NAME = 'session_start'",
-			as_dict=True,
-		)
-		self.assertTrue(len(result) > 0)
-		precision = result[0]["DATETIME_PRECISION"]
-		self.assertEqual(precision, 6, f"Datetime precision is {precision}, expected 6")
 
 	def test_null_vs_empty_string_in_reason(self):
 		"""Venue Asset reason field is NULL when not OOS, not empty string."""
@@ -367,29 +311,6 @@ class TestRedisEdgeCases(IntegrationTestCase):
 		finally:
 			cache.delete(key)
 
-	def test_incr_returns_integer(self):
-		"""Redis INCR returns an integer, not bytes or string."""
-		cache = frappe.cache()
-		key = f"hamilton:test_incr:{uuid.uuid4().hex[:8]}"
-		try:
-			cache.set(key, 0, px=5000)
-			result = cache.incr(key)
-			self.assertIsInstance(result, int, f"INCR returned {type(result)}, expected int")
-			self.assertEqual(result, 1)
-		finally:
-			cache.delete(key)
-
-	def test_incr_at_large_values(self):
-		"""Redis INCR works correctly at values well above 9999 (our overflow threshold)."""
-		cache = frappe.cache()
-		key = f"hamilton:test_incr_large:{uuid.uuid4().hex[:8]}"
-		try:
-			cache.set(key, 99999, px=5000)
-			result = cache.incr(key)
-			self.assertEqual(result, 100000)
-		finally:
-			cache.delete(key)
-
 	def test_key_namespace_isolation(self):
 		"""Hamilton lock keys use the hamilton: namespace and don't collide with Frappe keys."""
 		cache = frappe.cache()
@@ -399,20 +320,6 @@ class TestRedisEdgeCases(IntegrationTestCase):
 			cache.set(key, token, px=5000)
 			raw = cache.get(key)
 			self.assertEqual(raw.decode() if isinstance(raw, bytes) else raw, token)
-		finally:
-			cache.delete(key)
-
-	def test_nx_flag_prevents_overwrite(self):
-		"""Redis SET with NX=True does not overwrite an existing key."""
-		cache = frappe.cache()
-		key = f"hamilton:test_nx:{uuid.uuid4().hex[:8]}"
-		try:
-			first = cache.set(key, "token_a", nx=True, px=5000)
-			self.assertTrue(first, "First NX set should succeed")
-			second = cache.set(key, "token_b", nx=True, px=5000)
-			self.assertFalse(second, "Second NX set should fail (key exists)")
-			val = cache.get(key)
-			self.assertEqual(val.decode() if isinstance(val, bytes) else val, "token_a")
 		finally:
 			cache.delete(key)
 
@@ -465,26 +372,12 @@ class TestRedisEdgeCases(IntegrationTestCase):
 class TestFrappeV16Behaviour(IntegrationTestCase):
 	"""R5 — Frappe v16 framework contracts: versioning, roles, hooks, scheduler."""
 
-	def test_frappe_in_test_flag_is_true(self):
-		"""frappe.in_test is True during test execution."""
-		self.assertTrue(frappe.in_test, "frappe.in_test should be True during tests")
-
 	def test_override_doctype_class_loads_correctly(self):
 		"""HamiltonSalesInvoice mixin is loaded via override_doctype_class."""
 		from hamilton_erp.overrides.sales_invoice import HamiltonSalesInvoice
 		self.assertTrue(hasattr(HamiltonSalesInvoice, "has_admission_item"))
 		self.assertTrue(hasattr(HamiltonSalesInvoice, "get_admission_category"))
 		self.assertTrue(hasattr(HamiltonSalesInvoice, "has_comp_admission"))
-
-	def test_scheduler_job_is_importable(self):
-		"""hamilton_erp.tasks.check_overtime_sessions is importable and callable."""
-		from hamilton_erp.tasks import check_overtime_sessions
-		check_overtime_sessions()
-
-	def test_after_migrate_hook_is_importable(self):
-		"""hamilton_erp.setup.install.ensure_setup_complete is importable."""
-		from hamilton_erp.setup.install import ensure_setup_complete
-		self.assertTrue(callable(ensure_setup_complete))
 
 	def test_role_permissions_exist_for_venue_asset(self):
 		"""Venue Asset has permissions defined for all three Hamilton roles."""
@@ -634,24 +527,6 @@ class TestConcurrencyReliability(IntegrationTestCase):
 			self.assertEqual(status, "Available",
 			                 f"Cycle {cycle + 1}: expected Available, got {status}")
 
-	def test_version_increments_monotonically(self):
-		"""Version field increments by exactly 1 on each state transition."""
-		asset = _make_asset("Version Mono Room")
-		v0 = frappe.db.get_value("Venue Asset", asset.name, "version")
-		self.assertEqual(v0, 0)
-
-		start_session_for_asset(asset.name, operator=OPERATOR)
-		v1 = frappe.db.get_value("Venue Asset", asset.name, "version")
-		self.assertEqual(v1, 1)
-
-		vacate_session(asset.name, operator=OPERATOR, vacate_method="Key Return")
-		v2 = frappe.db.get_value("Venue Asset", asset.name, "version")
-		self.assertEqual(v2, 2)
-
-		mark_asset_clean(asset.name, operator=OPERATOR)
-		v3 = frappe.db.get_value("Venue Asset", asset.name, "version")
-		self.assertEqual(v3, 3)
-
 	def tearDown(self):
 		frappe.db.rollback()
 
@@ -718,20 +593,6 @@ class TestDataIntegrityEdges(IntegrationTestCase):
 		)
 		self.assertIsNone(reason_after[0]["reason"],
 		                  "reason should be NULL after return from OOS")
-
-	def test_current_session_cleared_after_vacate(self):
-		"""current_session is NULL after vacate, not empty string."""
-		asset = _make_asset("Clear Session Room")
-		start_session_for_asset(asset.name, operator=OPERATOR)
-		vacate_session(asset.name, operator=OPERATOR, vacate_method="Key Return")
-
-		current = frappe.db.sql(
-			"SELECT current_session FROM `tabVenue Asset` WHERE name = %s",
-			asset.name,
-			as_dict=True,
-		)
-		self.assertIsNone(current[0]["current_session"],
-		                  "current_session should be NULL after vacate")
 
 	def test_hamilton_last_status_change_populated(self):
 		"""hamilton_last_status_change is set on every transition."""

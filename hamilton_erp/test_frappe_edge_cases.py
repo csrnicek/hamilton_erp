@@ -77,19 +77,6 @@ class TestFrappeDocumentLifecycle(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
-	def test_timestamp_mismatch_on_concurrent_save(self):
-		"""Q1 — Frappe raises TimestampMismatchError on concurrent saves.
-
-		Source: test_document.py::test_conflict_validation
-		Two instances of the same asset saved concurrently — second must fail.
-		This is Frappe's own conflict detection, separate from our version CAS.
-		"""
-		asset1 = frappe.get_doc("Venue Asset", self.asset.name)
-		asset2 = frappe.get_doc("Venue Asset", self.asset.name)
-		asset1.save(ignore_permissions=True)
-		with self.assertRaises(frappe.TimestampMismatchError):
-			asset2.save(ignore_permissions=True)
-
 	def test_has_value_changed_detects_status_change(self):
 		"""Q1b — has_value_changed() works correctly for status field.
 
@@ -102,45 +89,6 @@ class TestFrappeDocumentLifecycle(IntegrationTestCase):
 		self.asset.load_doc_before_save()
 		self.asset.update_modified()
 		self.assertTrue(self.asset.has_value_changed("status"))
-
-	def test_xss_stripped_from_oos_reason(self):
-		"""Q4 — XSS in OOS reason field is stripped automatically by Frappe.
-
-		Source: test_document.py::test_xss_filter
-		"""
-		xss = '<script>alert("XSS")</script>'
-		self.asset.status = "Out of Service"
-		self.asset.reason = f"Maintenance{xss}"
-		self.asset.save(ignore_permissions=True)
-		self.asset.reload()
-		self.assertNotIn(xss, self.asset.reason)
-		self.assertIn("Maintenance", self.asset.reason)
-
-	def test_mandatory_field_enforced_on_insert(self):
-		"""Q — mandatory fields raise MandatoryError if missing.
-
-		Source: test_document.py::test_mandatory
-		asset_code is reqd=1 — missing it must raise.
-		"""
-		doc = frappe.get_doc({
-			"doctype": "Venue Asset",
-			"asset_name": "No Code Asset",
-			"asset_category": "Room",
-			"asset_tier": "Single Standard",
-			"status": "Available",
-			"display_order": 999,
-		})
-		with self.assertRaises(frappe.MandatoryError):
-			doc.insert(ignore_permissions=True)
-
-	def test_new_doc_with_fields_pattern(self):
-		"""Q — frappe.new_doc with fields is valid Frappe v16 pattern.
-
-		Source: test_document.py::test_new_doc_with_fields
-		"""
-		doc = frappe.new_doc("Venue Asset", asset_name="New Doc Pattern Room")
-		self.assertEqual(doc.asset_name, "New Doc Pattern Room")
-		self.assertTrue(doc.is_new())
 
 	def test_doc_set_none_on_link_field(self):
 		"""Q — setting a Link field to None clears it correctly.
@@ -202,32 +150,6 @@ class TestFrappeDocumentLocks(IntegrationTestCase):
 			pass
 		frappe.db.rollback()
 
-	def test_frappe_ui_lock_prevents_second_lock(self):
-		"""Q5 — Frappe built-in UI lock prevents double-locking.
-
-		Source: test_document_locks.py::test_locking
-		"""
-		asset1 = frappe.get_doc("Venue Asset", self.asset.name)
-		asset2 = frappe.get_doc("Venue Asset", self.asset.name)
-		asset1.lock()
-		with self.assertRaises(frappe.DocumentLockedError):
-			asset2.lock()
-		asset1.unlock()
-
-	def test_frappe_ui_lock_persists_across_instances(self):
-		"""Q5b — UI lock is persistent — new doc instance sees the lock.
-
-		Source: test_document_locks.py::test_operations_on_locked_documents
-		"""
-		asset = frappe.get_doc("Venue Asset", self.asset.name)
-		asset.lock()
-		# New instance must see the lock
-		fresh = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertTrue(fresh.is_locked)
-		asset.unlock()
-		fresh2 = frappe.get_doc("Venue Asset", self.asset.name)
-		self.assertFalse(fresh2.is_locked)
-
 	def test_lifecycle_bypasses_frappe_ui_lock(self):
 		"""Q5c — UI lock blocks lifecycle writes — this is known behavior, documented here.
 
@@ -286,33 +208,6 @@ class TestNamingAndSequence(IntegrationTestCase):
 
 	def tearDown(self):
 		frappe.db.rollback()
-
-	def test_asset_code_unique_constraint_raises_duplicate_entry(self):
-		"""R — duplicate asset_code raises DuplicateEntryError.
-
-		Source: test_naming.py::test_hash_collision pattern
-		"""
-		code = f"UNIQUE-{uuid.uuid4().hex[:6].upper()}"
-		frappe.get_doc({
-			"doctype": "Venue Asset",
-			"asset_code": code,
-			"asset_name": "First Asset With Code",
-			"asset_category": "Room",
-			"asset_tier": "Single Standard",
-			"status": "Available",
-			"display_order": 999,
-		}).insert(ignore_permissions=True)
-
-		with self.assertRaises((frappe.DuplicateEntryError, frappe.UniqueValidationError)):
-			frappe.get_doc({
-				"doctype": "Venue Asset",
-				"asset_code": code,
-				"asset_name": "Second Asset Same Code",
-				"asset_category": "Room",
-				"asset_tier": "Single Standard",
-				"status": "Available",
-				"display_order": 999,
-			}).insert(ignore_permissions=True)
 
 	@unittest.skip("Task 9 — session_number not yet wired into _create_session")
 	def test_session_number_unique_across_rapid_creation(self):

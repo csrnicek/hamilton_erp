@@ -68,42 +68,11 @@ class VenueAsset(Document):
 		if self.status == "Out of Service" and not (self.reason or "").strip():
 			frappe.throw(_("Please provide a reason for marking this asset Out of Service."))
 
-	# ------------------------------------------------------------------
-	# Whitelisted methods — Phase 1 real bodies (delegate to lifecycle.py)
-	# ------------------------------------------------------------------
-
-	@frappe.whitelist(methods=["POST"])
-	def assign_to_session(self):
-		"""Assign a walk-in session to this asset. Available → Occupied."""
-		frappe.has_permission("Venue Asset", "write", throw=True)
-		from hamilton_erp.lifecycle import start_session_for_asset
-		return {"session": start_session_for_asset(self.name, operator=frappe.session.user)}
-
-	@frappe.whitelist(methods=["POST"])
-	def mark_vacant(self, vacate_method: str):
-		"""Close the current session and move to Dirty."""
-		frappe.has_permission("Venue Asset", "write", throw=True)
-		from hamilton_erp.lifecycle import vacate_session
-		vacate_session(self.name, operator=frappe.session.user,
-		               vacate_method=vacate_method)
-
-	@frappe.whitelist(methods=["POST"])
-	def mark_clean(self):
-		"""Dirty → Available."""
-		frappe.has_permission("Venue Asset", "write", throw=True)
-		from hamilton_erp.lifecycle import mark_asset_clean
-		mark_asset_clean(self.name, operator=frappe.session.user)
-
-	@frappe.whitelist(methods=["POST"])
-	def set_out_of_service(self, reason: str):
-		"""Any state (except OOS) → Out of Service."""
-		frappe.has_permission("Venue Asset", "write", throw=True)
-		from hamilton_erp.lifecycle import set_asset_out_of_service
-		set_asset_out_of_service(self.name, operator=frappe.session.user, reason=reason)
-
-	@frappe.whitelist(methods=["POST"])
-	def return_to_service(self, reason: str):
-		"""Out of Service → Available."""
-		frappe.has_permission("Venue Asset", "write", throw=True)
-		from hamilton_erp.lifecycle import return_asset_to_service
-		return_asset_to_service(self.name, operator=frappe.session.user, reason=reason)
+	# Whitelisted DocType methods removed 2026-04-29 (cleanup PR following
+	# AI bloat audit on PR #34). They were 1-line delegators to lifecycle.*
+	# never called from the JS (asset_board.js calls top-level
+	# `hamilton_erp.api.*` whitelisted methods directly). The two tests
+	# that exercised them were also removed in the same PR. If a future
+	# integration ever wants `frappe.client.run_doc_method`-style access,
+	# add it back as a thin wrapper alongside its caller, not here
+	# pre-emptively.

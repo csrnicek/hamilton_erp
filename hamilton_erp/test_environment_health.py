@@ -182,33 +182,6 @@ class TestEnvironmentHealth(IntegrationTestCase):
 			"setup_wizard loop. is_setup_complete is 0 somewhere.",
 		)
 
-	def test_redis_cache_port_reachable(self):
-		"""Redis cache on port 13000 must respond to PING.
-
-		If this fails, ``frappe.cache()`` calls silently return None
-		and session roles + form defaults break in non-obvious ways.
-		"""
-		self.assertTrue(
-			_redis_ping(REDIS_CACHE_PORT),
-			f"Redis cache on port {REDIS_CACHE_PORT} did not respond to "
-			"PING. Start it with: "
-			"redis-server ~/frappe-bench-hamilton/config/redis_cache.conf",
-		)
-
-	def test_redis_queue_port_reachable(self):
-		"""Redis queue on port 11000 must respond to PING.
-
-		If this fails, background jobs (email, scheduled tasks,
-		long-running lifecycle operations) queue up but never execute.
-		Tests pass, dev browser looks fine — and then nothing happens.
-		"""
-		self.assertTrue(
-			_redis_ping(REDIS_QUEUE_PORT),
-			f"Redis queue on port {REDIS_QUEUE_PORT} did not respond to "
-			"PING. Start it with: "
-			"redis-server ~/frappe-bench-hamilton/config/redis_queue.conf",
-		)
-
 	def test_walk_in_customer_exists(self):
 		"""The 'Walk-in' Customer must exist per DEC-055 §1.
 

@@ -37,3 +37,4 @@ dev-debug.log
 # tasks/ 
 dump.rdb
 .claude/*.backup
+.claude/*.lock
