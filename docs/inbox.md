@@ -1569,6 +1569,76 @@ def print_receipt(sales_invoice_name: str):
 ```
 The "Hamilton Receipt" Print Format is created as a fixture in the Hamilton ERP app and referenced by name. When ERPNext fixes #53857 (likely a v16.x patch), the workaround stays correct — it doesn't break, just becomes redundant.
 
+### CRA compliance — mandatory receipt content (Ontario / Canada)
+
+Sourced from the Ontario CRA receipt-requirements research (2026-04-30). Receipt printer code must produce output that satisfies CRA's tiered receipt rules so Hamilton stays compliant for the 6-year audit window AND so business customers (corporate cards, bachelor-party blocks) can claim Input Tax Credit on their purchases.
+
+**Pre-Phase-2 setup — Hamilton Settings field:**
+
+- Add `gst_hst_registration_number` (Data field) to Hamilton Settings BEFORE the receipt printer ships. The receipt printer integration reads this value and prints it on every receipt. Pre-populate via Desk on first install (operator types it in once); seed code can't auto-derive it because it's an external CRA-issued identifier specific to Hamilton's legal entity.
+
+**Mandatory fields on every printed receipt (and digital receipt):**
+
+| Field | Source / value |
+|---|---|
+| Business name | "Club Hamilton" — Company.company_name |
+| Business address | Hamilton Settings field (add if missing) — venue street address |
+| Business phone | Hamilton Settings field (add if missing) — venue phone |
+| Date | SI.posting_date + SI.posting_time, formatted for human reading |
+| Items list | SI.items[] — item_code, item_name, qty, rate, amount per line |
+| Tax indication per line | Implicit (all currently 13%); explicit when Phase 3 mixes rebate-eligible items |
+| HST line | "HST 13%" with rate AND dollar amount (NOT just "HST $0.91" — the rate must be visible) |
+| Total | SI.rounded_total (cash) or SI.grand_total (card) — see Canadian penny-elimination amendment |
+| GST/HST registration number | Hamilton Settings.gst_hst_registration_number — print on EVERY receipt |
+| "PAID" indication | Phrase like "PAID — CASH" or "PAID — CARD" derived from SI.payments[0].mode_of_payment |
+
+**Why GST/HST registration number on EVERY receipt regardless of amount tier:** CRA's tiered rule technically only requires the GST/HST number on transactions $30+. But: (a) the implementation cost of the conditional is higher than always printing it, (b) below-$30 receipts that omit the number can't be used by business customers for ITC even when they're inside the $30 tier informally (e.g., one-cent rounding or split-tender), (c) receipts are often given to expense-report owners separate from the original buyer. **Print it always.** No downside; eliminates a class of compliance gap.
+
+**HST display rule (CRA permits three options; Hamilton uses Option A):**
+
+- **Option A (Hamilton's choice — separate line):** "Subtotal $7.00 / HST 13% $0.91 / Total $7.91". Matches the cart drawer JS preview, matches what `submit_retail_sale` writes to the SI's tax line. Cleanest for operators and customers.
+- Option B (tax-included with rate disclosed): "Total (HST 13% included) $7.91" — valid CRA option but worse for operator math during cash transactions.
+- Option C (net + total + rate notation): "Net $7.00 / Total $7.91 / HST applied at 13%" — valid but verbose.
+
+**Rate must be visible.** A receipt showing "HST $0.91" without the "13%" rate is non-compliant for $30+ transactions. Always include "HST 13%" verbatim.
+
+**Retention:** CRA requires 6 years from the end of the tax year the records relate to. Frappe Cloud's offsite backup retention (7 daily / 4 weekly / 12 monthly / **10 yearly**) covers this naturally — the live database is the system of record (the SI itself, with `taxes_and_charges`, `taxes`, `payments`, etc.); the printed paper receipt is operator UX. The 10-year long-tail backup retention exceeds the 6-year CRA requirement comfortably. No additional retention infrastructure needed.
+
+**Receipt copy retention (chargeback evidence + CRA back-stop):** Per the Phase 2 hardware backlog above, retain ESC/POS bytes server-side for ≥18 months for chargeback dispute response. The 18-month chargeback window is shorter than the 6-year CRA window, so the SI-record-of-record outlasts the receipt-bytes copy by design. CRA cares about the SI; the receipt bytes are operator/dispute-investigation convenience.
+
+### Phase 3 forward-compat — Ontario prepared-food rebate (will apply if Hamilton adds menu items)
+
+CRA GI-064 documents the Ontario point-of-sale rebate on qualifying prepared food and beverages: when total price (excluding HST) is ≤ $4, the 8% provincial portion of HST is rebated at the point of sale. Effective HST on those items drops from 13% to 5% (federal-only).
+
+**What qualifies:** hot meals, sandwiches, heated beverages, prepared food ready for immediate consumption.
+
+**What does NOT qualify:** carbonated/sweetened beverages, snack items (chips, candy, granola bars, energy bars, protein bars), single-serving bottled water.
+
+**Hamilton's current 4 retail SKUs (WAT-500, GAT-500, BAR-PROT, BAR-ENRG) all fall into the "does not qualify" categories** — full 13% HST is correct, no rebate. The accounting seed is correct as-is.
+
+**When this becomes relevant:** Phase 3+ if Hamilton adds menu items — hot coffee/tea, made-to-order sandwiches, hot soups, etc. At that point:
+
+1. Add a per-Item flag (Custom Field on Item: `qualifies_for_on_food_rebate` Check) OR use ERPNext's Item Tax Template feature.
+2. The cleanest pattern is **Item Tax Template per-item override**: create a "Ontario HST 5% (rebate-eligible)" Sales Taxes Template and attach it to qualifying items via Item Tax Template. The cart's per-line tax computation will pick up the per-item override automatically.
+3. Cart logic must check the under-$4 threshold per qualifying item: rebate applies only when (item qualifies) AND (item price excluding HST ≤ $4) AND (item is sold in a "prepared for immediate consumption" context — coffee/sandwich orders qualify; bulk grocery purchases of the same item do not).
+4. Receipt format must show the rebate as a separate line per CRA's three permitted presentations of POS rebates (full HST minus rebate / federal-only / HST-included with net-tax notation). Choose one and apply consistently.
+
+**Scope estimate when ready:** ~3-5 days of work including the Item Tax Template seed, cart conditional-tax logic, receipt format update, regression tests covering the under-$4 threshold edge cases.
+
+### Phase 3 forward-compat — B2B invoice tier ($150+ corporate billing)
+
+CRA's tiered receipt rule: at $150+, additional fields become mandatory beyond the standard receipt — **buyer's name, description of purchase, terms of payment**.
+
+**Hamilton's current flow:** every cart sale is to "Walk-in" (anonymous) at retail prices. No corporate billing. Most carts are well under $150.
+
+**When this becomes relevant:** if Hamilton ever offers corporate billing for bachelor-party blocks, gift card purchases, multi-room reservations, etc. At that point the cart needs:
+
+1. A "named customer" path — operator types or selects a Customer record other than "Walk-in" (could be an existing membership Customer, could be an ad-hoc corporate Customer created at the cart).
+2. Per-line item descriptions written to the SI (Hamilton's seed already provides item_name → SI line description; verify it's not stripped by any custom code).
+3. Payment terms field on the SI (already a standard ERPNext SI field; just needs to be exposed in the cart UI when the customer is non-walkin).
+
+**Scope estimate when ready:** ~2-3 days for the cart UX (customer selector, payment-terms field, named-customer routing) + the receipt format already includes the customer name field for non-Walk-in receipts.
+
 ### Digital receipt option
 
 Offer "Email or SMS receipt" in addition to the paper print. Operator types the customer's email or phone, system sends a digital copy. Paper still prints by default (control-token role); digital is additive, not a replacement.
