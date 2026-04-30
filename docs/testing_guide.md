@@ -1,5 +1,5 @@
 # Hamilton ERP — Complete Testing Guide
-**Updated:** 2026-04-10 after Tasks 1-8 complete
+**Updated:** 2026-04-30 (Tasks 1-24 complete; pre-Task-25 hardening sweep)
 
 This document tells you WHAT to run, WHEN to run it, and WHY.
 The goal is code as close to perfect as possible.
@@ -13,8 +13,10 @@ The core test suite. Always run this. Always run the full suite including expert
 
 **Command:**
 ```
-cd ~/frappe-bench-hamilton && source env/bin/activate && ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_lifecycle hamilton_erp.test_locks hamilton_erp.hamilton_erp.doctype.venue_asset.test_venue_asset hamilton_erp.test_additional_expert
+cd ~/frappe-bench-hamilton && source env/bin/activate && bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp
 ```
+
+> ⚠️ **Always point at `hamilton-unit-test.localhost`, never `hamilton-test.localhost`.** The dev browser site (`hamilton-test.localhost`) is corrupted by tests (setup_wizard loops, role wipes, seed contamination) — see CLAUDE.md "Testing Rules". The pinned Python path (`~/.pyenv/versions/3.11.9/bin`) is also stale — Frappe v16 hard-requires Python 3.14, so the bench's `env/bin/activate` already provides the right interpreter.
 
 **What it runs:**
 - test_lifecycle.py — state machine + all 5 lifecycle methods (25 tests)
@@ -107,10 +109,10 @@ Run ChatGPT + Grok + Claude (new claude.ai tab) reviews at:
 |---|---|---|
 | Tasks 1-2 | After locks.py complete | ✅ Done |
 | Tasks 1-8 | After all 5 lifecycle methods | ✅ Done |
-| Task 9 | After session number generation | 🔜 Next |
-| Task 11 | After seed patch | 🔜 |
-| Task 21 | After full Asset Board UI | 🔜 |
-| Task 25 | Before Frappe Cloud deploy | 🔜 |
+| Task 9 | After session number generation | ✅ Done |
+| Task 11 | After seed patch | ✅ Done |
+| Task 21 | After full Asset Board UI | 🟡 In flight (V9.1 cart UX shipped as stub in PR #49; full Sales Invoice deferred to PR #51) |
+| Task 25 | Before Frappe Cloud deploy | 🔜 Next — review prompts at `docs/reviews/review_task25_blind.md` + `review_task25_context.md` (PR #27) |
 
 **Review files:**
 - Blind review prompt: docs/reviews/review_task9_blind.md
@@ -132,9 +134,12 @@ No single tool is enough. All 4 together give you near-certainty.
 
 ---
 
-## Current test count (as of 2026-04-14)
-- Full suite: **334 tests passing**, 0 failures, 7 skipped across **13 modules**
-- See CLAUDE.md "Test Suite" table for the per-module breakdown
+## Current test count (as of 2026-04-30)
+- Full suite: **460 tests** across 14+ modules. **2 failures + 6 errors are documented baseline** (pre-existing on main, verified via `git stash` baseline) — do NOT report these as regressions:
+  - 6 errors: `DocType Payment Gateway not found` setUpClass on shift_record / comp_admission_log / cash_reconciliation / cash_drop / venue_session / asset_status_log. Fix: install `frappe/payments` (CI handles automatically; local-bench fix lives in `scripts/init.sh`).
+  - 2 failures: `test_environment_health.test_59_assets_exist` + `test_asset_board_api_accessible_as_administrator` — intentional canaries for seed-wipe contamination.
+- 14 skipped (progressive unlocks per CLAUDE.md §Test Suite). 1 known-flaky test (`test_session_number_format_matches_dec033`) surfaces inconsistently.
+- See CLAUDE.md "Test Suite" table for the per-module breakdown.
 
 ---
 

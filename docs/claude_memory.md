@@ -4,7 +4,7 @@ Persistent reference for Claude Code sessions. Captures project state, history,
 best practices, planning notes, tooling decisions, and Phase 2 readiness that
 don't belong in code comments or decisions_log.md.
 
-**Last updated:** 2026-04-28
+**Last updated:** 2026-04-30 (third autonomous overnight run — see latest Checkpoint section)
 
 ---
 

@@ -16,7 +16,7 @@ hours discovering them.
 I have a partially built production custom app on ERPNext v16 / Frappe Cloud
 for a men's bathhouse/hospitality venue in Hamilton, Ontario. The app is called
 hamilton_erp and lives at csrnicek/hamilton_erp on GitHub. It is about 70% complete
-(Tasks 1-17 of 25 done) and will be handed off to a professional developer after
+(Tasks 1-24 of 25 done as of 2026-04-30; Task 25 = Frappe Cloud deploy + manual QA, gated on 3-AI review checkpoint) and will be handed off to a professional developer after
 Task 25.
 
 Before we finalize this build, search the internet and give me every best practice,

@@ -35,7 +35,7 @@
 
 **Source:** Research from Redis.io, Martin Kleppmann (Designing Data-Intensive Applications),
 FSM testing literature, and project-specific gaps identified during 3-AI reviews.
-**Updated:** 2026-04-11 after the security-audit + workflow-hardening sweep
+**Updated:** 2026-04-30 (post pre-Task-25 hardening sweep — Tasks 1-24 complete)
 
 ---
 
