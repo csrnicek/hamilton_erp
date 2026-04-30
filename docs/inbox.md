@@ -1317,3 +1317,70 @@ Repo: https://github.com/OpenAEC-Foundation/Frappe_Claude_Skill_Package
 Timing: install AFTER Task 25 ships and BEFORE starting DC/Crew Club multi-venue refactor. Don't install mid-Phase-1 — it changes Claude Code behavior and could introduce noise in in-flight PRs.
 
 When evaluating: review which of the 61 skills overlap with patterns already in claude_memory.md (avoid duplication), and which fill gaps (especially around Server Scripts, hooks.py, custom apps, and v16-specific behavior).
+
+---
+
+## 2026-04-30 — Third autonomous overnight run (8 PRs shipped)
+
+**Run summary.** Chris invoked an overnight autonomous stack run after PR #52 (PIPEDA research) merged. 8 PRs shipped across 5 stack items + 1 wording fix + 3 overflow items. Stack #3 deferred (bench migrate STOP condition).
+
+**PRs opened:**
+
+- **#53** — chore: stub-task purge + app_email fix → **MERGED**
+- **#54** — test: track_changes regression-pin (9 DocTypes) → auto-merge queued
+- **#55** — docs(research): PIPEDA wording fix (no "adult" classification) → **AWAITING CHRIS REVIEW** (no auto-merge per his instruction)
+- **#56** — test: fresh-install conformance test (28 tests) → auto-merge queued
+- **#57** — docs: operational RUNBOOK.md (10 sections) → auto-merge queued
+- **#58** — docs: CHANGELOG.md (46 merged PRs documented) → auto-merge queued
+- **#59** — chore: scripts/init.sh (fresh-bench bootstrap) → auto-merge queued
+- **#60** — docs: api_reference.md (7 whitelisted endpoints) → auto-merge queued
+
+### Stack #3 — DEFERRED until Chris-supervised session
+
+**Original scope:** Add `mask: 1` to Cash Drop, Cash Reconciliation, and Comp Admission Log fields per `permissions_matrix.md` Task 25 item 7.
+
+**Why deferred:** Adding `mask: 1` to a DocType JSON requires `bench migrate` to apply the schema change. CLAUDE.md "Autonomous Command Rules" lists "bench migrate is required" as a STOP condition — autonomous Opus does not run migrate without Chris's approval.
+
+**Field-name reconciliation already done.** `permissions_matrix.md` lists:
+- `Cash Drop.amount` → actual field is `declared_amount` (also `section_amount`)
+- `Cash Reconciliation.expected_cash` → actual field is `system_expected`
+- `Cash Reconciliation.actual_cash` → actual field is `actual_count`
+- `Cash Reconciliation.variance` → actual field is `variance_amount`
+- `Comp Admission Log.value_at_door` → actual field is `comp_value`
+
+**When picked up next:** the same PR should also fix these labels in `permissions_matrix.md` to match the actual JSON. The doc-update half of the work needs no migrate; the JSON-update half does.
+
+**Suggested PR scope:**
+1. Fix `permissions_matrix.md` field names (no migrate)
+2. Add `mask: 1` to the 6 fields listed above (migrate required)
+3. Decide field-level `permlevel` strategy — currently no fields have `permlevel: 1`, so `mask: 1` alone may be a no-op for the default-permlevel-0 viewer (need to verify Frappe v16 mask: 1 behavior with context7 first)
+4. Add tests pinning `mask: 1` on each field (regression-pin similar to track_changes Stack #2)
+5. Run `bench --site hamilton-unit-test.localhost migrate` (Chris's hands)
+
+**Reference:** `docs/research/pipeda_venue_session_pii.md` for the broader v16 masking pattern; PR #50 (security: field masking gap #1 — Shift Record.system_expected) is the existing precedent for how this work is done on Hamilton DocTypes.
+
+### Tests baseline — 2 failures + 6 errors all pre-existing
+
+Confirmed via `git stash` + run on main:
+- 2 failures: env_health asset count + asset board accessibility — seed contamination canary
+- 6 errors: doctype setUpClass — `DocType Payment Gateway not found` (frappe/payments missing on local bench)
+
+Not regressions from any of this run's changes.
+
+### Tasks 18–21 (Asset Board UI) NOT picked up
+
+Yellow-list items per the original "what can run autonomously overnight" analysis. Code can be drafted autonomously but visual verification in a browser requires Chris. Skipped per the autonomous-vs-yellow-vs-red triage.
+
+### Open green-list items still available
+
+Not picked up this run, available for next overnight:
+- SECURITY.md (1-2 hr) — vuln-disclosure template
+- README.md rewrite (1-2 hr) — taste-driven, may want Chris's eye
+- CONTRIBUTING.md (1-2 hr) — mostly mechanical
+
+### What this run validated
+
+- Multi-PR autonomous flow with auto-merge queueing works cleanly. 8 PRs shipped in ~1.5 hours.
+- Pre-flight checks save time: track_changes Stack #2 was discovered already-implemented; Stack #3 was caught as a STOP condition before any code was written.
+- The `git stash` baseline trick is the cleanest way to attribute test failures (mine vs pre-existing).
+- Chris's `wording-fix` label + no-auto-merge instruction worked perfectly for PR #55.
