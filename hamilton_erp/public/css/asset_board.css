@@ -253,6 +253,14 @@
 }
 .hamilton-tile-time.hamilton-countdown { color: #f87171; }
 .hamilton-tile.hamilton-overtime .hamilton-tile-time { color: #ef4444; }
+/* Dirty-for-Xm timer (added 2026-04-29). Dirty tiles are amber background;
+   muted dark text reads cleanly against it without competing with the OOS
+   day counter or expand affordance. */
+.hamilton-tile-time.hamilton-dirty-elapsed {
+	color: #78350f;
+	font-weight: 600;
+	font-size: 11px;
+}
 
 /* OT corner badge — tab-style hanging off top edge, NOT in corner.
    V9 Decision 3.4: corner placement REJECTED, must be centered on top border.
@@ -502,17 +510,6 @@
 	font-style: italic;
 }
 
-.hamilton-footer-bulk {
-	padding: 4px 10px;
-	font-size: 11px;
-	font-weight: 600;
-	background: #d97706;
-	color: #fff;
-	border: none;
-	border-radius: 4px;
-	cursor: pointer;
-}
-.hamilton-footer-bulk:hover { background: #b45309; }
 
 /* ── Watch tab empty state ────────────────────── */
 .hamilton-watch-empty {
@@ -538,17 +535,6 @@
 	font-size: 14px;
 }
 
-/* ── Bulk clean dialog ────────────────────────── */
-.hamilton-bulk-list {
-	padding-left: 20px;
-	margin: 8px 0;
-	max-height: 300px;
-	overflow-y: auto;
-}
-.hamilton-bulk-list li {
-	margin-bottom: 4px;
-	font-size: 13px;
-}
 
 /* ── OOS modal + Return modal (V9 Decisions 5.5, S2, S6) ─────────
    Mockup parallel: V9_CANONICAL_MOCKUP.html lines 525-672. */

@@ -473,20 +473,6 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 		finally:
 			frappe.in_test = prev
 
-	def test_bulk_clean_log_has_distinguishing_reason(self):
-		"""Item 53 — bulk clean log has distinguishing reason (DEC-054)."""
-		frappe.db.set_value("Venue Asset", self.asset.name, "status", "Dirty")
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
-			mark_asset_clean(self.asset.name, operator=OPERATOR,
-			                 bulk_reason="Bulk sweep — morning reset")
-			log = frappe.get_last_doc("Asset Status Log",
-			                          filters={"venue_asset": self.asset.name})
-			self.assertEqual(log.reason, "Bulk sweep — morning reset")
-		finally:
-			frappe.in_test = prev
-
 
 # ===========================================================================
 # Category 4 — Concurrency

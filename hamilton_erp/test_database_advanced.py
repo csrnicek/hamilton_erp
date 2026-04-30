@@ -458,23 +458,6 @@ class TestFraudDetection(IntegrationTestCase):
 		with self.assertRaises(frappe.ValidationError):
 			start_session_for_asset(asset.name, operator=OPERATOR)
 
-	def test_bulk_clean_does_not_affect_occupied_assets(self):
-		"""_mark_all_clean skips Occupied assets — never transitions Occupied -> Available."""
-		asset_dirty = _make_asset("Bulk Dirty Room")
-		asset_occupied = _make_asset("Bulk Occupied Room")
-
-		start_session_for_asset(asset_dirty.name, operator=OPERATOR)
-		vacate_session(asset_dirty.name, operator=OPERATOR, vacate_method="Key Return")
-
-		start_session_for_asset(asset_occupied.name, operator=OPERATOR)
-
-		from hamilton_erp.api import _mark_all_clean
-		_mark_all_clean(category="Room")
-
-		occupied_status = frappe.db.get_value("Venue Asset", asset_occupied.name, "status")
-		self.assertEqual(occupied_status, "Occupied",
-		                 "Occupied asset must NOT be cleaned by bulk operation")
-
 	def test_vacate_method_stored_correctly(self):
 		"""Vacate method is correctly stored on the Venue Session record."""
 		asset = _make_asset("Vacate Method Room")

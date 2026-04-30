@@ -353,6 +353,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		// Time text on tile — V9 Decision 3.3 wording:
 		//   countdown → "Xm left" (red)
 		//   overtime  → "Xm late" / "Xh Xm late" (red)
+		//   dirty     → "Dirty for Xm" (added 2026-04-29 from V9 browser-test
+		//               session — helps cleaners prioritize stalest tiles)
 		//   normal    → no text (keeps board quiet)
 		let time_html = "";
 		if (ts === "countdown") {
@@ -365,6 +367,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			const stay = asset.expected_stay_duration || 360;
 			const over_by = Math.floor(elapsed_min - stay);
 			time_html = `<div class="hamilton-tile-time">${this._format_minutes(over_by)} late</div>`;
+		} else if (asset.status === "Dirty" && asset.hamilton_last_status_change) {
+			const dirty_at = new Date(asset.hamilton_last_status_change);
+			const dirty_min = Math.max(0, Math.floor((new Date() - dirty_at) / 60000));
+			time_html = `<div class="hamilton-tile-time hamilton-dirty-elapsed">${__("Dirty for")} ${this._format_minutes(dirty_min)}</div>`;
 		}
 
 		return `
@@ -770,14 +776,23 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const days_text = this._format_oos_days_ago(asset);
 
 		// V9 mockup format: "Set by M. CHEN · 4 days ago" — combined who+when.
-		const set_by_who = asset.oos_set_by
+		// Per browser-test 2026-04-29: include time-of-day to match the OOS
+		// audit format ("by NAME at HH:MM AM/PM"). hamilton_last_status_change
+		// is always populated by every state transition, so the timestamp
+		// renders even when the days-ago row would be empty.
+		const set_at_time = this._format_oos_set_time(asset);
+		const who_part = asset.oos_set_by
 			? `${__("by")} ${frappe.utils.escape_html(asset.oos_set_by)}`
 			: "";
+		const time_part = set_at_time
+			? `${__("at")} ${frappe.utils.escape_html(set_at_time)}`
+			: "";
+		const who_time = [who_part, time_part].filter(Boolean).join(" ");
 		let set_value = "";
-		if (set_by_who && days_text) {
-			set_value = `${set_by_who} · ${frappe.utils.escape_html(days_text)}`;
-		} else if (set_by_who) {
-			set_value = set_by_who;
+		if (who_time && days_text) {
+			set_value = `${who_time} · ${frappe.utils.escape_html(days_text)}`;
+		} else if (who_time) {
+			set_value = who_time;
 		} else if (days_text) {
 			set_value = frappe.utils.escape_html(days_text);
 		}
@@ -849,6 +864,17 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		return `${days} ${__("days ago")}`;
 	}
 
+	_format_oos_set_time(asset) {
+		// Time-of-day the asset entered its current OOS state, taken from
+		// hamilton_last_status_change. Used by the RTS modal SET line to
+		// match the OOS audit format ("by NAME at HH:MM AM/PM"). Returns
+		// null when the timestamp is missing or unparseable.
+		if (!asset.hamilton_last_status_change) return null;
+		const set_at = new Date(asset.hamilton_last_status_change);
+		if (isNaN(set_at.getTime())) return null;
+		return this._format_time(set_at);
+	}
+
 	// ── Run action against API — type: "POST" per DEC-058 ──
 	async _run_action(asset, action, extra = {}) {
 		const api_map = {
@@ -877,56 +903,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		}
 	}
 
-	// ── Bulk clean (DEC-054) ────────────────────────────────
-	confirm_bulk_clean(category) {
-		const dirty = this.assets.filter(
-			(a) => a.asset_category === category && a.status === "Dirty"
-		);
-		if (dirty.length === 0) {
-			frappe.show_alert({message: __("No dirty assets to clean"), indicator: "orange"});
-			return;
-		}
-		const list_html = `
-			<p>${__("The following {0} assets will be marked clean:", [dirty.length])}</p>
-			<ul class="hamilton-bulk-list">
-				${dirty.map((a) =>
-					`<li><strong>${frappe.utils.escape_html(a.asset_code)}</strong>
-					 ${frappe.utils.escape_html(a.asset_name)}</li>`
-				).join("")}
-			</ul>
-		`;
-		const d = new frappe.ui.Dialog({
-			title: __("Confirm Bulk Mark Clean \u2014 {0}s", [category]),
-			fields: [{fieldtype: "HTML", options: list_html}],
-			primary_action_label: __("Mark All Clean"),
-			primary_action: async () => {
-				d.get_primary_btn().prop("disabled", true);
-				const method = category === "Room"
-					? "hamilton_erp.api.mark_all_clean_rooms"
-					: "hamilton_erp.api.mark_all_clean_lockers";
-				try {
-					const r = await frappe.xcall(method, {});
-					frappe.show_alert({
-						message: __("{0} cleaned, {1} failed",
-							[r.succeeded.length, r.failed.length]),
-						indicator: r.failed.length ? "orange" : "green",
-					});
-					d.hide();
-					await this.fetch_board();
-					this.render_active_tab();
-					this._update_tab_badges();
-				} catch (err) {
-					frappe.msgprint({
-						title: __("Bulk Mark Clean failed"),
-						message: (err && err.message) || String(err),
-						indicator: "red",
-					});
-					d.get_primary_btn().prop("disabled", false);
-				}
-			},
-		});
-		d.show();
-	}
+	// Bulk Mark All Clean was REMOVED 2026-04-29 (DEC-054 reversed). Cleaning
+	// happens per-tile via the Dirty tile's expand-overlay "Mark Clean" action.
 
 	// ── Footer ──────────────────────────────────────────────
 	_render_footer() {
@@ -946,15 +924,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			oos: tab_assets.filter((a) => a.status === "Out of Service").length,
 		};
 
-		const bulk_category = tab.id === "lockers" ? "Locker" : "Room";
-		const bulk_btn = counts.dirty > 0
-			? `<button class="hamilton-footer-bulk" data-category="${bulk_category}">${__("Mark All Clean")}</button>`
-			: "";
-
-		// V9 Decision 6.2: footer shows 3 status counts (Available / Occupied / OOS).
-		// Dirty count is tracked but not displayed in the footer per spec \u2014
-		// dirty tiles are visible in the section above the footer with their
-		// own count. The "Mark All Clean" button still appears when dirty>0.
+		// V9 Decision 6.2: footer shows 3 status counts (Available / Occupied /
+		// OOS). Dirty count is tracked but not displayed in the footer per
+		// spec \u2014 dirty tiles are visible in the section above the footer
+		// with their own count.
 		$footer.html(`
 			<div class="hamilton-footer-counts">
 				<span class="hamilton-footer-item">
@@ -969,16 +942,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 					<span class="hamilton-footer-dot dot-oos"></span>
 					${__("OOS")} ${counts.oos}
 				</span>
-				${bulk_btn}
 			</div>
 			<div class="hamilton-footer-right">
 				<span class="hamilton-footer-hint">${__("Tap to expand \u00b7 Tap outside to close")}</span>
 			</div>
 		`);
-
-		$footer.find(".hamilton-footer-bulk").on("click", (e) => {
-			this.confirm_bulk_clean($(e.currentTarget).data("category"));
-		});
 	}
 
 	// ── Tab badges ──────────────────────────────────────────

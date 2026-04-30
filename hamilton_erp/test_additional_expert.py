@@ -275,57 +275,6 @@ class TestSessionIntegrity(IntegrationTestCase):
 		self.assertEqual(session.vacate_method, "Discovery on Rounds")
 
 
-# ---------------------------------------------------------------------------
-# Category E: Bulk Clean
-# Source: DEC-054 bulk clean requirements
-# ---------------------------------------------------------------------------
-
-class TestBulkClean(IntegrationTestCase):
-	"""Tests for mark_all_clean (Tasks 14-15 — mark as FUTURE until implemented)."""
-
-	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
-
-	def setUp(self):
-		self.operator = frappe.session.user
-
-	def tearDown(self):
-		frappe.db.rollback()
-
-	def test_mark_asset_clean_with_bulk_reason(self):
-		"""mark_asset_clean with bulk_reason sets distinguishing log reason (DEC-054)."""
-		asset = _make_asset("Test Bulk Reason Room")
-		frappe.db.set_value("Venue Asset", asset.name, "status", "Dirty")
-
-		# Temporarily clear in_test flag to allow log creation
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
-			mark_asset_clean(asset.name, operator=self.operator,
-			                 bulk_reason="Bulk Mark Clean — morning reset")
-		finally:
-			frappe.in_test = prev
-
-		# Verify the log entry has the distinguishing reason
-		log = frappe.get_last_doc("Asset Status Log",
-		                          filters={"venue_asset": asset.name})
-		self.assertEqual(log.reason, "Bulk Mark Clean — morning reset")
-
-	def test_mark_asset_clean_without_bulk_reason_has_no_reason(self):
-		"""Single-tile mark_clean has no reason (None), not bulk reason."""
-		asset = _make_asset("Test Single Clean Room")
-		frappe.db.set_value("Venue Asset", asset.name, "status", "Dirty")
-
-		prev = frappe.in_test
-		frappe.in_test = False
-		try:
-			mark_asset_clean(asset.name, operator=self.operator)
-		finally:
-			frappe.in_test = prev
-
-		log = frappe.get_last_doc("Asset Status Log",
-		                          filters={"venue_asset": asset.name})
-		self.assertIsNone(log.reason)
-
 
 # ---------------------------------------------------------------------------
 # Category H: Guard Condition Boundaries

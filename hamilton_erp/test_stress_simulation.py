@@ -22,7 +22,7 @@ Phase 1 stress scope (concurrency and bulk integrity only):
 
 NOT in scope (covered by other modules or out of Phase 1):
 - POS, pricing, refunds, cash drops, shift reconciliation (Phase 2+).
-- Bulk Mark Clean (covered by `test_bulk_clean.py`).
+- Bulk Mark Clean (REMOVED 2026-04-29 — DEC-054 reversed; cleaning is per-tile).
 - Asset count smoke checks (covered by `test_environment_health.py`).
 - 59-asset seed integrity (covered by `test_seed_patch.py`).
 """

@@ -1,8 +1,8 @@
 """Venue Asset state-transition and session lifecycle core.
 
-Public API (called from venue_asset.py whitelisted methods and from api.py):
+Public API (called from api.py whitelisted methods):
     start_session_for_asset, vacate_session, mark_asset_clean,
-    set_asset_out_of_service, return_asset_to_service, mark_all_clean
+    set_asset_out_of_service, return_asset_to_service
 
 All public functions:
   - acquire the three-layer lock (locks.asset_status_lock)
@@ -403,18 +403,8 @@ def _set_vacated_timestamp(asset_name: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def mark_asset_clean(
-	asset_name: str,
-	*,
-	operator: str,
-	bulk_reason: Optional[str] = None,
-) -> None:
-	"""Dirty → Available.
-
-	`bulk_reason`, when provided, is written to the Asset Status Log row's
-	reason field (DEC-054 §5). Used by the bulk Mark All Clean flow to tag
-	which sweep a given transition belonged to. Single-asset calls pass None.
-	"""
+def mark_asset_clean(asset_name: str, *, operator: str) -> None:
+	"""Dirty → Available."""
 	from hamilton_erp.locks import asset_status_lock
 	from hamilton_erp.realtime import publish_status_change
 
@@ -425,7 +415,7 @@ def mark_asset_clean(
 			asset_name,
 			new_status="Available",
 			session=None,
-			log_reason=bulk_reason,
+			log_reason=None,
 			operator=operator,
 			previous="Dirty",
 			expected_version=row["version"],
