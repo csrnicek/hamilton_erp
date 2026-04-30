@@ -110,6 +110,21 @@ class TestHamiltonAccountingSeed(IntegrationTestCase):
 			"records of type Material Receipt.",
 		)
 
+	def test_price_list_standard_selling_seeded(self):
+		"""Price List "Standard Selling" must exist or
+		``submit_retail_sale``'s fallback (``selling_price_list =
+		pos_profile.selling_price_list or "Standard Selling"``) errors
+		with ``ValidationError: Price List Standard Selling is disabled
+		or does not exist``. Fifth in the fresh-install gap family.
+		"""
+		self.assertTrue(
+			frappe.db.exists("Price List", "Standard Selling"),
+			"Price List 'Standard Selling' must be seeded by "
+			"_ensure_erpnext_prereqs — required by submit_retail_sale's "
+			"fallback selling_price_list and any standard ERPNext flow "
+			"that expects the seed Price Lists to exist.",
+		)
+
 	def test_mode_of_payment_cash_seeded(self):
 		"""Mode of Payment "Cash" must exist or every downstream
 		seeding helper bails silently and the POS Profile never gets

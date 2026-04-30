@@ -282,6 +282,26 @@ def _ensure_erpnext_prereqs():
 			"enabled": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Mode of Payment 'Cash'")
+	# Price List "Standard Selling" — fifth fresh-install gap of the same
+	# class. ERPNext seeds the standard Price Lists ("Standard Selling",
+	# "Standard Buying") via the setup wizard's ``install_fixtures.py``;
+	# Hamilton's unattended install skips the wizard. Without it,
+	# ``submit_retail_sale``'s fallback ``selling_price_list = "Standard
+	# Selling"`` errors with ``ValidationError: Price List Standard
+	# Selling is disabled or does not exist``.
+	#
+	# Seeded with currency=CAD because Hamilton operates in CAD; ERPNext's
+	# Price List validation enforces a currency. If a future Hamilton
+	# venue uses a different currency, that venue's seed should override.
+	if not frappe.db.exists("Price List", "Standard Selling"):
+		frappe.get_doc({
+			"doctype": "Price List",
+			"price_list_name": "Standard Selling",
+			"currency": "CAD",
+			"selling": 1,
+			"enabled": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Price List 'Standard Selling' (CAD, selling)")
 
 
 def _seed_hamilton_data():
