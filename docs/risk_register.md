@@ -46,6 +46,22 @@ This file is **not** a lessons-learned log. The lessons file (`docs/lessons_lear
 - **Why deferred:** Real regulated-industry hardening would add `CODEOWNERS` for `docs/design/` and require dual approval. Out of scope for solo-developer phase. Re-evaluate when a second engineer joins.
 - **Severity:** Low (solo phase) → Medium (multi-developer).
 
+## R-006 — `Comp Admission Log.comp_value` readable by Hamilton Operator (PRE-GO-LIVE BLOCKER)
+
+- **Source:** Field masking audit (Task 25 item 7), 2026-04-30. Field-level gap #2.
+- **Description:** `permissions_matrix.md` "Sensitive fields" section already names `Comp Admission Log.value_at_door` (now `comp_value`) as Hamilton Manager+ only — but the DocType JSON grants Hamilton Operator full read on the field. Schema lags documented intent. An operator can see the notional revenue cost of comps they (or peers) issued, which leaks margin information and creates a self-justification path for inflated comps.
+- **Mitigation in place:** None at the schema level. Operators have row-level read on Comp Admission Log so they can list comps they're issuing — the gap is the field, not the row.
+- **Why deferred:** Sequenced *after* gap #1 (Shift Record blind reveal) because gap #1 directly contradicts a documented invariant (DEC-038); gap #2 contradicts a documented intent line in `permissions_matrix.md` but no decision-log invariant. The fix is the same shape: `permlevel: 1` on `comp_value` + paired Manager/Admin permlevel-1 read rows + a regression test in `test_security_audit.py` modeled on `TestShiftRecordBlindRevealGuardrail`.
+- **Severity:** **HIGH — pre-go-live blocker.** Must land before the production URL flips. Track as the next PR after gap #1.
+
+## R-007 — Venue Session PII fields (Philadelphia forward-compat) readable by Hamilton Operator (PRE-GO-LIVE BLOCKER)
+
+- **Source:** Field masking audit (Task 25 item 7), 2026-04-30. Field-level gap #3.
+- **Description:** Eight fields ship on `Venue Session` for the Philadelphia rollout: `identity_method`, `member_id`, `full_name`, `date_of_birth`, `block_status`, `arrears_amount`, `scanner_data`, `eligibility_snapshot`. They are null at Hamilton today (Hamilton uses anonymous walk-in sessions), but the schema is shared across venues. The day Philadelphia begins populating these fields, every Hamilton Operator with row-level read on Venue Session inherits read access to PII (full names, DOB, ID scan blobs) they have no operational need to see — and that no Hamilton operator is contractually trained to handle.
+- **Mitigation in place:** None. The fields render at Hamilton today as blank because they're null in storage; the moment data lands, Hamilton operators can see it.
+- **Why deferred:** Hamilton goes to production first; Philadelphia rollout is post-go-live. The gap is latent at Hamilton but becomes immediate the day Philadelphia lights up. Fix mechanism: `permlevel: 1` on each of the eight fields + Manager/Admin permlevel-1 read rows + regression test class. The test must enumerate all eight fields, not just one.
+- **Severity:** **HIGH — pre-go-live blocker for Philadelphia, deferable for Hamilton-only deploy.** If Hamilton ships before this fix, OK; Philadelphia *cannot* ship without it. Practical interpretation: must land before any second-venue rollout. Recommend landing alongside gap #2 to retire the field-masking audit cleanly.
+
 ## R-008 — Single-acquirer SPOF (downgraded for Hamilton's actual classification)
 
 - **Source:** PR #51 deeper audit (2026-04-30, Topic 2 — merchant redundancy patterns).

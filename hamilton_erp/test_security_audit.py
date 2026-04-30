@@ -422,6 +422,159 @@ class TestNoFrontDeskSelfEscalation(IntegrationTestCase):
 					)
 
 
+# ---------------------------------------------------------------------------
+# Field masking audit — gap #1 (Task 25 item 7 / DEC-038)
+# ---------------------------------------------------------------------------
+
+
+import json as _json  # avoid shadowing the existing top-level imports
+
+_SHIFT_RECORD_JSON = (
+	PACKAGE_ROOT
+	/ "hamilton_erp"
+	/ "doctype"
+	/ "shift_record"
+	/ "shift_record.json"
+)
+
+
+class TestShiftRecordBlindRevealGuardrail(IntegrationTestCase):
+	"""Field masking audit gap #1 — system_expected_card_total must be
+	hidden from Hamilton Operator at the API layer, not just the form.
+
+	Why this exists: ``Shift Record.system_expected_card_total`` is the
+	card-mode parallel of ``Cash Reconciliation.system_expected``
+	(DEC-021 + DEC-038). Both are blind-reveal theft-detection figures:
+	the operator enters their counted total *first*, then the manager
+	reviews the system-expected. If the operator can read
+	system-expected before they submit their count, the blind-reveal
+	invariant is defeated — they can match the figure to hide skims.
+
+	The Cash Reconciliation DocType enforces this structurally: Hamilton
+	Operator has *no row-level read* on Cash Reconciliation at all.
+	Shift Record cannot use the same approach because operators DO need
+	to read their own shift row (it tracks cash drops, comps, etc.) —
+	they only need to be blocked from this one field. That's exactly
+	what ``permlevel`` is for.
+
+	The fix is two coupled JSON edits:
+
+	  1. Set ``"permlevel": 1`` on the field itself.
+	  2. Add a permission row at level 1 for Hamilton Manager and
+	     Hamilton Admin (and NOT for Hamilton Operator).
+
+	Either edit alone is broken: edit 1 without edit 2 hides the field
+	from everyone (no role has permlevel-1 access); edit 2 without edit
+	1 grants permlevel-1 access to a level that has no fields, which
+	does nothing. This test asserts both edits are present and
+	consistent — if a future contributor reverts either half, the test
+	catches the regression before the blind-reveal invariant is broken
+	in production.
+
+	Static JSON parse: same philosophy as the rest of this module — we
+	read the committed schema file rather than spinning up a DB. A
+	runtime test would require a full Shift Record + permlevel seed and
+	would only catch regressions that happen to cross the specific
+	read path the test exercises. The static check catches the *class*
+	of misconfig.
+	"""
+
+	BLIND_REVEAL_FIELD = "system_expected_card_total"
+	REQUIRED_PERMLEVEL = 1
+	# Operator must NOT have permlevel-1 read. Manager and Admin must.
+	MUST_HAVE_PERMLEVEL_READ = ("Hamilton Manager", "Hamilton Admin")
+	MUST_NOT_HAVE_PERMLEVEL_READ = ("Hamilton Operator",)
+
+	def setUp(self):
+		# Parse once per test method — cheap, isolates each assertion.
+		self.schema = _json.loads(_SHIFT_RECORD_JSON.read_text())
+		self.field = next(
+			(f for f in self.schema.get("fields", [])
+				if f.get("fieldname") == self.BLIND_REVEAL_FIELD),
+			None,
+		)
+		self.assertIsNotNone(
+			self.field,
+			f"Field {self.BLIND_REVEAL_FIELD!r} no longer exists on "
+			"Shift Record — either it was renamed (update this test) "
+			"or removed (revisit DEC-038 first).",
+		)
+
+	def test_field_has_permlevel_1(self):
+		"""The schema half: the field itself must declare permlevel: 1.
+
+		If this is missing or zero, the field is exposed at level 0
+		(default), which means every role with row-level read sees it.
+		That includes Hamilton Operator — which is the gap.
+		"""
+		self.assertEqual(
+			self.field.get("permlevel"), self.REQUIRED_PERMLEVEL,
+			f"Shift Record.{self.BLIND_REVEAL_FIELD} is missing "
+			f"permlevel: {self.REQUIRED_PERMLEVEL}. This field is the "
+			"card-mode blind-reveal theft-detection figure (DEC-038, "
+			"parallel to DEC-021). Without permlevel, Hamilton "
+			"Operator can read system-expected before submitting their "
+			"counted figure, defeating the blind-reveal invariant.",
+		)
+
+	def test_managers_have_permlevel_1_read(self):
+		"""The permissions half: Manager and Admin must hold a
+		permlevel-1 read row.
+
+		Without this, the field is invisible to *everyone* — including
+		the roles who are supposed to review it at submit. The schema
+		half (permlevel on the field) and the permissions half
+		(permlevel rows in the perms array) move together; testing one
+		without the other lets a half-fix slip in.
+		"""
+		permlevel_reads = {
+			p.get("role")
+			for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+		}
+		missing = [r for r in self.MUST_HAVE_PERMLEVEL_READ
+			if r not in permlevel_reads]
+		self.assertEqual(
+			missing, [],
+			f"Shift Record permission grid is missing permlevel-"
+			f"{self.REQUIRED_PERMLEVEL} read rows for {missing}. "
+			"Without these, the blind-reveal field is hidden from "
+			"the very roles that need to review it. Add a "
+			'permission row {"permlevel": '
+			f'{self.REQUIRED_PERMLEVEL}, "read": 1, "role": '
+			'<role>} for each missing role.',
+		)
+
+	def test_operator_does_not_have_permlevel_1_read(self):
+		"""The negative case: Hamilton Operator must NOT have
+		permlevel-1 read.
+
+		This is the actual security invariant. The two tests above
+		assert the structure is *present* and *correct shape*. This
+		one asserts the structure is *not granting access to the
+		wrong role*. A future fixture that adds Operator at level 1
+		(by accident or by misunderstanding the DEC-038 design) is
+		caught here before merge.
+		"""
+		offenders = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+			and p.get("role") in self.MUST_NOT_HAVE_PERMLEVEL_READ
+		]
+		self.assertEqual(
+			offenders, [],
+			f"Shift Record grants permlevel-{self.REQUIRED_PERMLEVEL} "
+			"read to a role that must not have it: "
+			f"{[p.get('role') for p in offenders]}. The "
+			f"{self.BLIND_REVEAL_FIELD} field is a blind-reveal "
+			"theft-detection figure (DEC-038); only Manager+ may "
+			"see it before the operator submits their counted "
+			"total. Remove the offending permlevel row.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
