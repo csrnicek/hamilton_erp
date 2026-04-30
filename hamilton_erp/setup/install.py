@@ -111,10 +111,10 @@ def _ensure_erpnext_prereqs():
 			"is_group": 0,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Territory 'Default'")
-	# V9.1 retail amendment — Item Group root needed by
+	# V9.1 retail amendment — Item Group root + UOM needed by
 	# `seed_hamilton_env._ensure_retail_items` for the Drink/Food child
-	# group's parent reference. Standard ERPNext setup_complete creates
-	# this; CI's unattended install does not.
+	# group and the sample Items' stock_uom. Standard ERPNext
+	# setup_complete creates these; CI's unattended install does not.
 	if not frappe.db.exists("Item Group", "All Item Groups"):
 		frappe.get_doc({
 			"doctype": "Item Group",
@@ -122,6 +122,13 @@ def _ensure_erpnext_prereqs():
 			"is_group": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created Item Group 'All Item Groups' (root)")
+	if not frappe.db.exists("UOM", "Nos"):
+		frappe.get_doc({
+			"doctype": "UOM",
+			"uom_name": "Nos",
+			"must_be_whole_number": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created UOM 'Nos'")
 
 
 def _seed_hamilton_data():
