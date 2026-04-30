@@ -1,5 +1,39 @@
 # Inbox
 
+## 2026-04-30 (afternoon) — PR #51 ready for human review
+
+Follow-up to PR #49 (cart UX stub). Ships the QBO-mirrored accounting seed and replaces the cart Confirm stub with real POS Sales Invoice creation. PR: https://github.com/csrnicek/hamilton_erp/pull/51 — auto-merge enabled (squash + delete branch).
+
+### Commits made
+- `95cccc3` feat(asset-board): V9.1 Phase 2 cart → POS Sales Invoice with QBO-mirrored accounting seed
+- `2389e6c` fix(install): POS Profile requires write_off_account + write_off_cost_center
+- `635a77c` chore(tests): remove stale test_bulk_clean reference from /run-tests
+
+### Tests run
+Full local suite green on `hamilton-unit-test.localhost` after `bench migrate`. 415 pass / 6 skipped across 17 modules. New `test_retail_sales_invoice` module: 18 tests (9 seed verification + 9 end-to-end submit_retail_sale flow). All 78 `test_asset_board_rendering` tests still pass after replacing the 2 stub-contract tests with 3 positive contracts.
+
+### CI result
+CI started immediately on push: claude-review (queued), Linter (queued), Server Tests (in progress). Auto-merge gated on all three passing. Watch at https://github.com/csrnicek/hamilton_erp/actions/runs/25173827418.
+
+### Files changed
+13 files, +1294 / -70. New files: `hamilton_erp/test_retail_sales_invoice.py` (340), `hamilton_erp/patches/v0_1/seed_hamilton_accounting.py` (28). Largest existing-file changes: `setup/install.py` (+411), `api.py` (+120), `seed_hamilton_env.py` (+118), `inbox.md` (+90), `asset_board.js` (60 lines redone).
+
+### Remaining risks
+1. Production sites with an existing non-`Club Hamilton` company need `bench --site SITE set-config hamilton_company "<name>"` BEFORE migrate, else seed creates a sibling company.
+2. Day-one stock seeding still required — the seed deliberately does NOT auto-create Stock Entries. First retail sale on production will fail until a Material Receipt lands the SKUs.
+3. `_find_account_parent` heuristic tested only on `country=Canada, chart_of_accounts=Standard`. Country-specific CoAs may have different parent-group naming.
+
+### Rollback notes
+Reversible via `git revert -m 1 <merge SHA>`. Seeded artifacts persist on production after rollback (POS Profile, accounts, company) but are inert if the cart UX reverts to stub state. Optional cleanup: `frappe.delete_doc('POS Profile', 'Hamilton Front Desk')`. Item Defaults rows on retail items are additive — only fire when POS Profile is referenced.
+
+### Recommended merge command
+Already set: `gh pr merge --squash --auto --delete-branch` — fires when CI green.
+
+### Open questions for Chris
+1. **Production company pinning.** Pin `hamilton_company` on `hamilton-erp.v.frappe.cloud` BEFORE running migrate? If so, what's the existing real company name, or should production run under "Club Hamilton" too?
+2. **Initial stock on day one.** Want a small follow-up PR that seeds 24 units of each retail SKU as a Material Receipt (gated by `frappe.conf.seed_initial_retail_stock=true`), or do the first Material Receipt manually via Desk?
+3. **Phase 2 hardware queue priority.** Receipt printer first (operational impact) or merchant adapter first (longest lead time on processor approval)?
+
 2026-04-24: V9 of asset board shipped to main as squash commit 1cc9125. PR #8 merged. decisions_log.md Part 3.1 amended (countdown text amber→red). V9 plan archived at docs/design/archive/. NEXT SESSION: update docs/claude_memory.md to reflect V9 shipping; cancel unused Frappe Cloud site (~$40/mo, won't need until deploy 6-8 weeks out).
 
 ## 2026-04-27 — Late evening
