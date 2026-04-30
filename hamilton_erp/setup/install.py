@@ -650,12 +650,22 @@ def _ensure_pos_profile():
 			"hamilton_erp: Mode of Payment 'Cash' missing — POS Profile not seeded"
 		)
 		return
+	# write_off_account is mandatory on POS Profile. ERPNext's Standard CoA
+	# creates "Round Off - {abbr}" for this purpose; fall back to the Cash
+	# account if Round Off is missing.
+	write_off_account = None
+	for candidate in (f"Round Off - {abbr}", f"Cash - {abbr}"):
+		if frappe.db.exists("Account", candidate):
+			write_off_account = candidate
+			break
+
 	profile = {
 		"doctype": "POS Profile",
 		"name": HAMILTON_POS_PROFILE_NAME,
 		"company": company,
 		"warehouse": warehouse,
 		"cost_center": cost_center,
+		"write_off_cost_center": cost_center,
 		"currency": frappe.db.get_value("Company", company, "default_currency") or "CAD",
 		"update_stock": 1,
 		"ignore_pricing_rule": 1,
@@ -664,6 +674,8 @@ def _ensure_pos_profile():
 			"default": 1,
 		}],
 	}
+	if write_off_account:
+		profile["write_off_account"] = write_off_account
 	if frappe.db.exists("Sales Taxes and Charges Template", tax_template):
 		profile["taxes_and_charges"] = tax_template
 	frappe.get_doc(profile).insert(ignore_permissions=True)
