@@ -378,6 +378,24 @@ The following are KNOWN OPEN ITEMS but NOT a reason to revisit the decisions abo
 
 ---
 
+## Amendment 2026-04-29 (b) — V10 canonical bump + V9.1 retail amendment
+
+The canonical mockup pointer was bumped from V9 to V10. **The V10 file's body is byte-identical to V9** — the body SHA-256 in `docs/design/canonical_mockup_manifest.json` is unchanged. The bump bookkeeps the V9.1 retail amendment, whose visual + behavioural spec lives in `docs/design/V9.1_RETAIL_AMENDMENT.md` rather than inlined in the canonical HTML. V9 is archived to `docs/design/archive/V9_CANONICAL_MOCKUP.html`.
+
+The full V9.1 retail decisions (V9.1-D1 through V9.1-D7) are documented in the amendment file. They are summarized here for cross-reference:
+
+- **V9.1-D1:** SKUs live in ERPNext `Item` (no custom DocType).
+- **V9.1-D2:** Inventory tracked per venue via `Bin`/`Warehouse`.
+- **V9.1-D3:** Tabs map to ERPNext `Item Group`.
+- **V9.1-D4:** Per-venue `site_config.json` key `retail_tabs` lists Item Groups.
+- **V9.1-D5:** Tab framework data-driven; combined config + data rule extends.
+- **V9.1-D6:** Retail tile shape — code + stock badge + name + price; stock state palette reuses asset palette (green ≥4, amber 1–3, red 0).
+- **V9.1-D7:** Retail tile click is a no-op in V9.1 (cart UX is round 2).
+
+Round 2 deferred work (NOT in V9.1, will land after browser test): cart UX, add-to-cart, payment flow, refunds/voids, operator price overrides, multi-warehouse selection, low-stock alerts.
+
+---
+
 ## Amendment 2026-04-29 — V9 browser-test session
 
 After end-to-end browser testing on hamilton-test.localhost on 2026-04-29 (25 tests, 6 critical V9 launch-blockers all confirmed fixed), the following decisions were made and locked.
