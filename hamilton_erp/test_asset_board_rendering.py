@@ -947,6 +947,164 @@ class TestV9BrowserTestAmendments(IntegrationTestCase):
 		)
 
 
+# ───────────────────────────────────────────────────────────────────────
+# V9.1 Retail amendment regression guards
+# Spec: docs/design/V9.1_RETAIL_AMENDMENT.md
+# ───────────────────────────────────────────────────────────────────────
+
+class TestV91RetailFoundation(IntegrationTestCase):
+	"""Regression guards for the V9.1 retail SKU foundation."""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# Make sure the seed has run so the Drink/Food Item Group + 4 Items
+		# exist for the integration assertions below. Idempotent.
+		from hamilton_erp.patches.v0_1 import seed_hamilton_env
+		seed_hamilton_env.execute()
+		frappe.db.commit()
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "public", "css", "asset_board.css"
+		)
+
+	# ── Backend / API tests ───────────────────────────────────
+
+	def test_seed_creates_drink_food_item_group(self):
+		self.assertTrue(
+			frappe.db.exists("Item Group", "Drink/Food"),
+			"Hamilton seed missing the V9.1 Drink/Food Item Group.",
+		)
+
+	def test_seed_creates_four_sample_items(self):
+		expected_codes = {"WAT-500", "GAT-500", "BAR-PROT", "BAR-ENRG"}
+		actual = set(frappe.get_all(
+			"Item",
+			filters={"item_code": ["in", list(expected_codes)]},
+			pluck="item_code",
+		))
+		self.assertEqual(
+			actual, expected_codes,
+			f"V9.1 sample Items missing. Expected {expected_codes}, got {actual}.",
+		)
+
+	def test_get_asset_board_data_returns_items_and_retail_tabs_keys(self):
+		from hamilton_erp import api
+		data = api.get_asset_board_data()
+		self.assertIn("items", data,
+			"V9.1: API payload must include 'items' key (may be empty list).")
+		self.assertIn("retail_tabs", data,
+			"V9.1: API payload must include 'retail_tabs' key (may be empty list).")
+		self.assertIsInstance(data["items"], list)
+		self.assertIsInstance(data["retail_tabs"], list)
+
+	def test_items_payload_shape_when_retail_configured(self):
+		"""Configure retail_tabs in site_config and assert per-item shape.
+
+		The site-config write happens via a Frappe helper that bypasses the
+		normal request flow. We restore the previous value in tearDown.
+		"""
+		from hamilton_erp import api
+		prior = frappe.conf.get("retail_tabs")
+		try:
+			# Set the per-test retail_tabs flag in process-local conf so
+			# get_asset_board_data sees it.
+			frappe.conf["retail_tabs"] = ["Drink/Food"]
+			data = api.get_asset_board_data()
+			self.assertEqual(data["retail_tabs"], ["Drink/Food"])
+			self.assertGreaterEqual(
+				len(data["items"]), 4,
+				"V9.1: at least the 4 seeded items should appear when "
+				"Drink/Food is configured.",
+			)
+			required_keys = {
+				"name", "item_code", "item_name", "item_group",
+				"image", "standard_rate", "stock",
+			}
+			sample = data["items"][0]
+			missing = required_keys - set(sample.keys())
+			self.assertEqual(
+				missing, set(),
+				f"V9.1: item row missing keys {missing}. Got: {sorted(sample.keys())}",
+			)
+			# Stock should be a number (0.0 if Bin missing).
+			self.assertIsInstance(sample["stock"], (int, float))
+		finally:
+			# Restore prior state so other tests aren't polluted.
+			if prior is None:
+				frappe.conf.pop("retail_tabs", None)
+			else:
+				frappe.conf["retail_tabs"] = prior
+
+	def test_no_retail_config_returns_empty_lists(self):
+		from hamilton_erp import api
+		prior = frappe.conf.get("retail_tabs")
+		try:
+			# Force retail_tabs to absent / empty.
+			frappe.conf.pop("retail_tabs", None)
+			data = api.get_asset_board_data()
+			self.assertEqual(data["items"], [])
+			self.assertEqual(data["retail_tabs"], [])
+		finally:
+			if prior is not None:
+				frappe.conf["retail_tabs"] = prior
+
+	# ── Frontend (JS source-substring) tests ──────────────────
+
+	def test_js_reads_items_and_retail_tabs_from_api(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn("r.message.items", src,
+			"asset_board.js doesn't read message.items — V9.1 retail payload contract broken.")
+		self.assertIn("r.message.retail_tabs", src,
+			"asset_board.js doesn't read message.retail_tabs — V9.1 retail tab list contract broken.")
+
+	def test_js_defines_render_retail_tile(self):
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"_render_retail_tile", src,
+			"asset_board.js missing _render_retail_tile — V9.1-D6 tile shape not implemented.",
+		)
+		self.assertIn(
+			"_render_retail_grid", src,
+			"asset_board.js missing _render_retail_grid — retail tab content path not wired.",
+		)
+
+	def test_js_retail_tabs_have_item_filter(self):
+		"""Retail tabs are built from this.retail_tabs and filter by item_group."""
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn("retail: true", src,
+			"asset_board.js doesn't tag retail tab objects with retail:true — render dispatch broken.")
+		self.assertIn("item_group", src,
+			"asset_board.js retail tabs don't carry item_group reference for filtering.")
+
+	def test_css_defines_retail_tile_classes(self):
+		with open(self._css_path()) as f:
+			src = f.read()
+		for cls in (
+			".hamilton-retail-grid",
+			".hamilton-retail-tile",
+			".hamilton-retail-code",
+			".hamilton-retail-stock",
+			".hamilton-retail-name",
+			".hamilton-retail-price",
+		):
+			self.assertIn(
+				cls, src,
+				f"asset_board.css missing {cls!r} — V9.1-D6 retail tile styling absent.",
+			)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

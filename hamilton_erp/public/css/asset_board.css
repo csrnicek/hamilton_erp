@@ -759,3 +759,51 @@
 	font-size: 11px;
 	padding: 6px 6px;
 }
+
+/* ── V9.1 Retail tiles ─────────────────────────────────────
+   Per docs/design/V9.1_RETAIL_AMENDMENT.md.
+   Retail tiles reuse asset-tile chrome (border, padding, status colour
+   palette) but lay out their internals differently — code+stock on top,
+   name in middle, price on bottom. Read-only in V9.1; cart UX is round 2.
+*/
+.hamilton-retail-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+	gap: 8px;
+	padding: 12px;
+}
+.hamilton-retail-tile {
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	min-height: 78px;
+	padding: 8px;
+	cursor: default;
+}
+.hamilton-retail-row1 {
+	display: flex;
+	justify-content: space-between;
+	align-items: baseline;
+	font-size: 11px;
+	font-weight: 700;
+	margin-bottom: 4px;
+}
+.hamilton-retail-code {
+	letter-spacing: 0.5px;
+}
+.hamilton-retail-stock {
+	font-size: 13px;
+	font-weight: 700;
+}
+.hamilton-retail-name {
+	font-size: 12px;
+	font-weight: 600;
+	flex: 1;
+	line-height: 1.2;
+	overflow: hidden;
+}
+.hamilton-retail-price {
+	font-size: 13px;
+	font-weight: 700;
+	margin-top: 4px;
+}

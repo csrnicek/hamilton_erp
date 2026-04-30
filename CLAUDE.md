@@ -17,13 +17,18 @@ pattern.
 
 When in doubt, the answer is "let me check first."
 
-## V9 Canonical Mockup — Gospel Reference
+## V10 Canonical Mockup — Gospel Reference
 
-The file `docs/design/V9_CANONICAL_MOCKUP.html` is INTENDED to be the canonical
-V9 specification for the Asset Board UI. Whether it currently IS canonical
+The file `docs/design/V10_CANONICAL_MOCKUP.html` is INTENDED to be the canonical
+V10 specification for the Asset Board UI. Whether it currently IS canonical
 depends on the verification checks in the gospel block at the top of the file
 (canonical chain intact, manifest points here, content integrity via fingerprint
 test, recency). Verify those checks before trusting the file as authoritative.
+
+V9 is archived at `docs/design/archive/V9_CANONICAL_MOCKUP.html`. The V10 body is
+byte-identical to V9 (the asset-board visual spec hasn't changed); V10 was
+bumped to bookkeep the V9.1 retail amendment, whose spec lives in
+`docs/design/V9.1_RETAIL_AMENDMENT.md` rather than inlined in the HTML.
 
 **Rules for Claude:**
 
@@ -38,7 +43,7 @@ test, recency). Verify those checks before trusting the file as authoritative.
    `docs/decisions_log.md`.
 4. If a future design change fully supersedes this file, the next Claude
    session should create a new version-numbered canonical file (e.g.,
-   `V10_CANONICAL_MOCKUP.html`) — do not edit the V9 file in place.
+   `V11_CANONICAL_MOCKUP.html`) — do not edit the V10 file in place.
 
 **For port-from-mockup work:**
 - Read the mockup's relevant function/CSS section

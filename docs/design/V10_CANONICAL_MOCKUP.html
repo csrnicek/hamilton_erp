@@ -1,0 +1,1836 @@
+<!DOCTYPE html>
+<!-- GOSPEL_BLOCK_START -->
+<!--
+================================================================================
+V10 CANONICAL MOCKUP — GOSPEL REFERENCE FOR ASSET BOARD UI
+
+This file is INTENDED to be the canonical V10 specification for the Asset
+Board UI. Whether it currently IS canonical depends on verification checks
+below — do not assume canonicality just because this comment claims it.
+
+VERIFY BEFORE TRUSTING (perform these checks in order):
+
+  1. CANONICAL CHAIN INTACT:
+     Check that no successor exists. Look for:
+       - docs/design/V10_CANONICAL_MOCKUP.html or higher
+       - any other V*_CANONICAL_MOCKUP.html in docs/design/
+     If a successor exists alongside this file, the canonical chain is
+     broken. STOP. Flag the discrepancy to the user. Do not use this file
+     as authoritative until the chain is repaired (typically by archiving
+     this file to docs/design/archive/).
+
+  2. MANIFEST POINTS HERE:
+     Check docs/design/canonical_mockup_manifest.json. Confirm:
+       - canonical_path matches this file's path
+       - canonical_version matches the V-number in this filename
+     If the manifest disagrees with this file, the manifest wins — it's
+     the machine-verifiable source of truth. This file may be stale.
+
+  3. CONTENT INTEGRITY:
+     The governance test test_canonical_mockup_body_fingerprint_matches_manifest
+     verifies the body of this file (excluding this gospel block) matches the
+     SHA-256 in the manifest. If that test is failing in CI, this file's
+     design content has been edited without going through the canonical-bump
+     process. The body is suspect.
+
+  4. RECENCY:
+     Last verified canonical: 2026-04-29. If today is more than 90 days
+     after that date, double-check that no design decisions in
+     docs/decisions_log.md have superseded content here. Stale verification
+     dates are a yellow flag, not an automatic invalidation.
+
+ONLY AFTER ALL FOUR CHECKS PASS:
+
+  This file is canonical V10. Port from it verbatim per CLAUDE.md rule 1
+  ("V10 Canonical Mockup — Gospel Reference"). When the mockup and production
+  disagree, the mockup wins. Production drift is the bug.
+
+IF ANY CHECK FAILS:
+
+  Do NOT use this file as authoritative. Flag the discrepancy to the user
+  and stop the task. The governance regime exists precisely to prevent
+  silent drift — a failing check means the regime is doing its job.
+
+CROSS-REFERENCE:
+  - Locked decisions: docs/decisions_log.md (Parts 1-12)
+  - Canonical manifest: docs/design/canonical_mockup_manifest.json
+  - V9.1 retail amendment: docs/design/V9.1_RETAIL_AMENDMENT.md
+  - V9 amendment plan: docs/design/archive/v9_integration_plan.md
+  - Governance tests: hamilton_erp/test_canonical_mockup_governance.py
+  - Implementation: hamilton_erp/hamilton_erp/page/asset_board/
+
+Contains V9 amendments (M1-M5 + S1-S6 from V9 ship commit 1cc9125)
+plus the V9.1 retail amendment (Item Group tabs + retail tile rendering).
+The V9 asset board body in this file is byte-identical to the original
+V9 canonical mockup; only the gospel block was updated for V10.
+Retail tab visual spec is documented in docs/design/V9.1_RETAIL_AMENDMENT.md
+rather than inlined in this HTML file because retail tile rendering is
+data-driven (Item Group + Item DocType) and varies per venue config.
+================================================================================
+-->
+<!-- GOSPEL_BLOCK_END -->
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hamilton Asset Board — V8 (V6 spec + OOS day counter + OOS reason dropdown)</title>
+<style>
+  :root {
+    --available-bg: #0f2010;
+    --available-dot: #22c55e;
+    --available-text: #4ade80;
+    --occupied-bg: #200f0f;
+    --occupied-dot: #ef4444;
+    --occupied-text: #f87171;
+    --dirty-bg: #201a0a;
+    --dirty-dot: #f59e0b;
+    --dirty-text: #fbbf24;
+    --oos-bg: #141420;
+    --oos-dot: #6366f1;
+    --oos-text: #818cf8;
+
+    --warning-amber: #f59e0b;
+    --overtime-red: #ef4444;
+    --watch-bg: #1a1000;
+    --watch-border: #92400e;
+    --watch-text: #d97706;
+    --watch-active-bg: #2a1a00;
+    --watch-active-border: #f59e0b;
+
+    --page-bg: #080808;
+    --tab-inactive-bg: #141414;
+    --tab-inactive-border: #777;
+    --tab-active-bg: #2a2a2a;
+    --tab-active-border: #bbb;
+    --text-dim: #6b7280;
+    --text-mid: #9ca3af;
+    --text-bright: #fff;
+    --panel-2: #1a1a1a;
+    --border-soft: #2a2a2a;
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: 'SF Pro Display', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #000;
+    color: var(--text-bright);
+    padding: 20px;
+    min-height: 100vh;
+  }
+
+  .page-header {
+    max-width: 1200px;
+    margin: 0 auto 14px auto;
+    text-align: center;
+  }
+  .page-header .badge {
+    display: inline-block;
+    background: #0f2010;
+    color: #22c55e;
+    border: 1px solid #22c55e;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+  }
+  .page-header h1 { margin: 0 0 4px 0; font-size: 22px; font-weight: 600; }
+  .page-header p { margin: 0; color: var(--text-mid); font-size: 13px; }
+
+  .instructions {
+    max-width: 1100px;
+    margin: 0 auto 14px auto;
+    padding: 12px 18px;
+    background: #1e2a3f;
+    border: 1px solid #3b82f6;
+    border-radius: 8px;
+    font-size: 12.5px;
+    color: #93c5fd;
+    line-height: 1.65;
+  }
+  .instructions strong { color: #fff; }
+
+  /* TABLET FRAME — iPad 11 / iPad 10 landscape (1080x810 CSS px),
+     simulating Safari with address bar visible (~95-110px chrome) */
+  .tablet-wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  .tablet {
+    background: var(--panel-2);
+    border: 8px solid var(--border-soft);
+    border-radius: 20px;
+    padding: 8px;
+    width: 100%;
+    height: 716px;
+    overflow: hidden;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+  }
+  .screen {
+    background: var(--page-bg);
+    border-radius: 10px;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* HEADER — single row, no summary strip */
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 7px 14px;
+    background: var(--page-bg);
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-mid);
+  }
+  .header-left { display: flex; gap: 14px; align-items: center; }
+  .header-left .venue { color: var(--text-bright); font-weight: 700; letter-spacing: 0.1em; }
+  .header-right { display: flex; gap: 8px; align-items: center; }
+  .online-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; }
+  .attendant { color: var(--text-bright); font-weight: 700; }
+
+  /* TAB BAR — 56px height (accessibility for 50+ staff) */
+  .tab-bar {
+    display: flex;
+    height: 56px;
+    background: #0a0a0a;
+    border-bottom: 1px solid #1a1a1a;
+    flex-shrink: 0;
+    padding: 0 6px;
+    gap: 3px;
+    align-items: flex-end;
+  }
+  .tab {
+    height: 50px;
+    padding: 0 12px;
+    border-radius: 8px 8px 0 0;
+    border: 2px solid var(--tab-inactive-border);
+    background: var(--tab-inactive-bg);
+    color: var(--text-dim);
+    font-size: 15px;
+    font-weight: 500;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    user-select: none;
+    transition: all 0.15s ease;
+  }
+  .tab:hover { color: var(--text-bright); }
+  .tab.active {
+    background: var(--tab-active-bg);
+    color: var(--text-bright);
+    border-color: var(--tab-active-border);
+    border-bottom-color: var(--tab-active-bg);
+    font-weight: 700;
+    margin-bottom: -2px;
+    padding-bottom: 2px;
+  }
+  .tab-spacer { flex: 1; }
+  .tab.watch {
+    background: var(--watch-bg);
+    border-color: var(--watch-border);
+    color: var(--watch-text);
+  }
+  .tab.watch.active {
+    background: var(--watch-active-bg);
+    border-color: var(--watch-active-border);
+    color: var(--watch-active-border);
+  }
+  .tab-badge {
+    background: #166534;
+    color: #4ade80;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 10px;
+    min-width: 18px;
+    text-align: center;
+  }
+  .tab.active .tab-badge { background: #0f2010; color: #22c55e; }
+  .tab.watch .tab-badge {
+    background: #ef4444;
+    color: #fff;
+    animation: pulse-badge 1.5s infinite;
+  }
+  @keyframes pulse-badge {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  /* BOARD AREA */
+  .board {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    min-height: 0;
+  }
+
+  /* SECTIONS */
+  .section { margin-bottom: 12px; }
+  .section:last-child { margin-bottom: 0; }
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 8px;
+    margin-bottom: 7px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .section-header.available { background: rgba(34,197,94,0.08); color: var(--available-text); border-left: 3px solid var(--available-dot); }
+  .section-header.dirty { background: rgba(245,158,11,0.08); color: var(--dirty-text); border-left: 3px solid var(--dirty-dot); }
+  .section-header.occupied { background: rgba(239,68,68,0.08); color: var(--occupied-text); border-left: 3px solid var(--occupied-dot); }
+  .section-header.oos { background: rgba(99,102,241,0.08); color: var(--oos-text); border-left: 3px solid var(--oos-dot); }
+  .section-count { font-size: 10px; font-weight: 400; opacity: 0.7; }
+
+  .tile-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+    gap: 7px;
+  }
+
+  /* TILES — 95×width, ~58 min-height (smaller now that status label is removed) */
+  .tile {
+    width: 100%;
+    min-height: 58px;
+    border-radius: 8px;
+    border: 3px solid;
+    padding: 6px 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    cursor: pointer;
+    position: relative;
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
+    user-select: none;
+  }
+  .tile.available { background: var(--available-bg); border-color: var(--available-dot); color: var(--available-text); }
+  .tile.occupied { background: var(--occupied-bg); border-color: var(--occupied-dot); color: var(--occupied-text); }
+  .tile.dirty { background: var(--dirty-bg); border-color: var(--dirty-dot); color: var(--dirty-text); }
+  .tile.oos { background: var(--oos-bg); border-color: var(--oos-dot); color: var(--oos-text); }
+  /* OPTION A — single overtime state. Late = late.
+     OT badge appears, red border, strong pulse animation.
+     No more "warning" stage with confusing amber border. */
+  .tile.overtime {
+    background: var(--occupied-bg);
+    border-color: var(--overtime-red);
+    color: var(--occupied-text);
+    animation: pulse-strong 1.4s infinite ease-in-out;
+  }
+  @keyframes pulse-strong {
+    0%, 100% {
+      box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.9);
+      background-color: var(--occupied-bg);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);
+      background-color: #6b1a1a;
+    }
+  }
+
+  .tile-code {
+    font-size: 17px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+  }
+  .tile-time {
+    /* V9 M3: bumped 10→12px for legibility per Grok review (50+ staff target).
+       Tile min-height stays 58px; with 17px code + 12px time + paddings = ~37px,
+       well under the 58px floor.
+       Amendment 2026-04-24: countdown/late text colour reversed from amber to
+       red (#f87171) to match the Occupied tile border. Amber on red read as
+       visually similar to the all-amber Dirty tile in V9 visual review — see
+       decisions_log.md Part 3.1 amendment note. */
+    font-size: 12px;
+    color: #f87171;
+    font-weight: 700;
+    margin-top: 1px;
+  }
+  /* Countdown: red text matching tile border. Distinguished from Overtime by
+     "left" wording, absence of OT badge, and absence of pulse animation. */
+  .tile-time.countdown { color: #f87171; }
+  /* Overtime overrides to red, works whether or not .countdown class is present */
+  .tile.overtime .tile-time { color: var(--overtime-red); }
+
+  .tile-corner-badge {
+    position: absolute;
+    top: 3px; right: 4px;
+    font-size: 11px;
+    line-height: 1;
+  }
+  /* OT badge sits ON the top border, centered — like a tab hanging off the edge.
+     Does not overlap the room code. */
+  .tile-corner-badge.ot {
+    top: -8px;
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--overtime-red);
+    color: #fff;
+    font-size: 9px;
+    font-weight: 800;
+    padding: 2px 7px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.4);
+    z-index: 5;
+  }
+
+  /* OOS DAY COUNTER — bottom-right (V8 addition) */
+  .oos-days {
+    position: absolute;
+    bottom: 3px; right: 5px;
+    font-size: 9px;
+    font-weight: 600;
+    color: var(--oos-text);
+    opacity: 0.75;
+    line-height: 1;
+  }
+
+  /* Source tile is dimmed while overlay is shown.
+     V9 M5: kill the pulse animation on the source tile too — pulsing under
+     the overlay was distracting and wasted GPU cycles on a tile the user
+     can't interact with anyway. */
+  .tile.is-source {
+    opacity: 0.3;
+    pointer-events: none;
+    animation: none !important;
+  }
+
+  /* EXPANDED OVERLAY — absolute-positioned floating tile that doesn't
+     affect grid row heights. Positioned in JS via positionExpandedOverlay() */
+  .tile.expanded-overlay {
+    position: absolute;
+    z-index: 100;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.85);
+    cursor: default;
+    /* Width set in JS to match source tile; height auto-fits content */
+    min-height: 0;
+    min-width: 130px;
+    padding: 10px 8px;
+    gap: 4px;
+    /* Override pulse animation when expanded */
+    animation: none !important;
+  }
+  .tile.expanded-overlay .tile-code { font-size: 18px; }
+  .tile.expanded-overlay .tile-actions {
+    display: flex !important;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
+    margin-top: 6px;
+  }
+  .tile-actions {
+    display: none;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    margin-top: 4px;
+  }
+
+  .action-btn {
+    /* V9 S3: bumped from 8.5px → 12px font and 4/5px → 7/6px padding so
+       primary buttons land in the 28-30px tall range called for in the
+       review (shape-recognition for 50+ staff). M1 label shortening keeps
+       widths inside the overlay's content box. */
+    width: 100%;
+    padding: 7px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    cursor: pointer;
+    border: 1px solid;
+    background: transparent;
+    line-height: 1.1;
+  }
+  .action-btn.primary-green { background: #22c55e; color: #052e13; border-color: #22c55e; }
+  .action-btn.primary-red { background: #ef4444; color: #2a0707; border-color: #ef4444; }
+  .action-btn.primary-amber { background: #f59e0b; color: #2a1e08; border-color: #f59e0b; }
+  .action-btn.secondary {
+    /* One step down from primaries, still up from V8's 7.5px */
+    background: transparent;
+    color: var(--text-mid);
+    border-color: var(--text-dim);
+    font-size: 10px;
+    padding: 6px 6px;
+  }
+
+  /* Guest info on expanded occupied tile */
+  .guest-info {
+    background: rgba(0,0,0,0.3);
+    padding: 3px 5px;
+    border-radius: 3px;
+    margin-top: 3px;
+    font-size: 7.5px;
+    line-height: 1.3;
+    width: 100%;
+    text-align: left;
+  }
+  .guest-info .guest-name { color: var(--text-bright); font-weight: 700; font-size: 8.5px; }
+  .guest-info .guest-elapsed { color: var(--text-mid); }
+
+  /* OOS info on expanded OOS tile — shows reason + who + when */
+  .oos-info {
+    background: rgba(0,0,0,0.3);
+    padding: 3px 5px;
+    border-radius: 3px;
+    margin-top: 3px;
+    font-size: 7.5px;
+    line-height: 1.3;
+    width: 100%;
+    text-align: left;
+  }
+  .oos-info .oos-info-reason { color: var(--oos-text); font-weight: 700; font-size: 8.5px; }
+  .oos-info .oos-info-meta { color: var(--text-mid); }
+
+  /* Vacate sub-buttons */
+  .vacate-subs {
+    display: none;
+    flex-direction: column;
+    gap: 3px;
+    width: 100%;
+    margin-top: 3px;
+    padding: 3px;
+    background: rgba(239,68,68,0.1);
+    border-radius: 3px;
+    border: 1px solid rgba(239,68,68,0.3);
+  }
+  .vacate-subs.shown { display: flex; }
+  .vacate-subs .action-btn {
+    /* V9 S3: bumped from 7.5/3-5 → 11/6-6 to match the new primary button
+       hierarchy without quite matching primaries (these are sub-options,
+       not the main action). */
+    background: rgba(239,68,68,0.25);
+    border-color: #ef4444;
+    color: #fca5a5;
+    font-size: 11px;
+    padding: 6px 6px;
+  }
+
+  /* OOS REASON MODAL */
+  .modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.75);
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+  }
+  .modal-backdrop.shown { display: flex; }
+  .oos-modal {
+    background: #1a1a1a;
+    border: 1px solid #444;
+    border-radius: 10px;
+    padding: 18px;
+    width: 320px;
+    max-width: 100%;
+    max-height: 100%;
+    overflow: auto;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.8);
+  }
+  .oos-modal-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-bright);
+    margin: 0 0 4px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .oos-modal-asset { font-size: 11px; color: var(--text-mid); margin-bottom: 14px; }
+  .oos-modal label {
+    display: block;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-mid);
+    margin-bottom: 4px;
+    font-weight: 600;
+  }
+  .oos-modal select, .oos-modal textarea {
+    width: 100%;
+    padding: 8px 10px;
+    background: #0a0a0a;
+    color: var(--text-bright);
+    border: 1px solid #444;
+    border-radius: 5px;
+    font-size: 13px;
+    font-family: inherit;
+    margin-bottom: 12px;
+  }
+  .oos-modal textarea { resize: vertical; min-height: 60px; }
+  .oos-modal textarea.hidden { display: none; }
+
+  /* V9 S6: "Other" reason note group — label + textarea + Clear button.
+     Hidden by default; shown when Other is selected. */
+  .oos-note-wrap { margin-bottom: 12px; }
+  .oos-note-wrap.hidden { display: none; }
+  .oos-note-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .oos-note-header label { margin-bottom: 0; }
+  .oos-note-clear {
+    background: transparent;
+    border: 1px solid #444;
+    color: var(--text-mid);
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+  }
+  .oos-note-clear:hover { background: #1f1f2e; color: var(--text-bright); }
+  .oos-note-wrap textarea { margin-bottom: 0; }
+  .oos-modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
+  /* Return to Service modal body */
+  .return-modal-context {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid #333;
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+  }
+  .return-modal-row {
+    display: flex;
+    gap: 10px;
+    font-size: 12px;
+    line-height: 1.8;
+  }
+  .return-modal-key {
+    color: var(--text-mid);
+    min-width: 110px;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    padding-top: 3px;
+  }
+  .return-modal-val {
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  .return-modal-audit {
+    background: rgba(34,197,94,0.08);
+    border: 1px solid #166534;
+    border-radius: 5px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 11px;
+    color: var(--text-mid);
+    line-height: 1.5;
+  }
+  .return-modal-audit strong {
+    color: var(--available-text);
+    font-weight: 700;
+  }
+  .oos-modal-btn {
+    padding: 7px 14px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+  .oos-modal-btn.confirm {
+    background: var(--oos-dot);
+    color: #fff;
+    border-color: var(--oos-dot);
+  }
+  .oos-modal-btn.cancel {
+    background: transparent;
+    color: var(--text-mid);
+    border-color: #444;
+  }
+
+  /* FOOTER — per-tab status counts */
+  .footer {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding: 7px 14px;
+    background: #0a0a0a;
+    border-top: 1px solid #1a1a1a;
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .footer-stat { display: flex; align-items: center; gap: 5px; color: var(--text-mid); }
+  .footer-stat-dot { width: 7px; height: 7px; border-radius: 50%; }
+  .footer-stat-count { color: var(--text-bright); font-weight: 700; }
+  .footer-help { margin-left: auto; color: var(--text-dim); font-size: 10px; font-style: italic; }
+
+  /* WATCH TAB — grouped rows */
+  .watch-row { margin-bottom: 12px; }
+  .watch-row-header {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    padding: 4px 8px;
+    margin-bottom: 7px;
+    background: rgba(245,158,11,0.08);
+    border-left: 3px solid var(--warning-amber);
+    color: var(--dirty-text);
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .watch-row-header.oos {
+    background: rgba(99,102,241,0.08);
+    border-left-color: var(--oos-dot);
+    color: var(--oos-text);
+  }
+  .watch-empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .watch-empty .check {
+    color: var(--available-dot);
+    font-size: 28px;
+    margin-bottom: 8px;
+    display: block;
+  }
+
+  /* Empty placeholder for feature-flag tabs */
+  .tab-placeholder {
+    text-align: center;
+    padding: 80px 20px;
+    color: var(--text-dim);
+    font-size: 14px;
+  }
+  .tab-placeholder .icon {
+    font-size: 32px;
+    margin-bottom: 10px;
+    display: block;
+    opacity: 0.5;
+  }
+
+  /* Test results panel */
+  #test-results {
+    max-width: 1100px;
+    margin: 16px auto 0 auto;
+    padding: 14px 20px;
+    border-radius: 10px;
+    font-size: 12.5px;
+    line-height: 1.6;
+    font-family: 'SF Mono', monospace;
+  }
+  #test-results.pass {
+    background: #0d2818;
+    border: 1px solid #22c55e;
+    color: #86efac;
+  }
+  #test-results.fail {
+    background: #2a1111;
+    border: 1px solid #ef4444;
+    color: #f87171;
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="badge">V8 · Option A · Single overtime state</div>
+  <h1>Hamilton Asset Board — V8 Option A</h1>
+  <p>iPad 11 (1080×810) Safari · single overtime state with strong red pulse · "Xm late" wording · OOS day counter · OOS reason dropdown</p>
+</div>
+
+<div class="instructions">
+  <strong>Look at R002 and R003 in the Single tab</strong> — both are now treated identically (red pulsing border + OT badge). The number tells you how late: 2h 20m vs 10m.<br>
+  Tap any tile to expand. OOS tiles show day counter. Watch tab groups all overtime + OOS items.
+</div>
+
+<div class="tablet-wrap"><div class="tablet"><div class="screen" id="screen"></div></div></div>
+
+<div id="test-results"></div>
+
+<script>
+/* =================================================================
+   V8 ASSET BOARD — V6 spec recovered + OOS day counter + OOS dropdown
+   Designed for iPad 11 / iPad 10 (1080×810 CSS pixels) Safari
+   ================================================================= */
+
+/* SAMPLE DATA — placeholder names. The real production app will pull
+   subtype names from the database (tier-name-agnostic). */
+const STATE = {
+  currentTab: 'lockers',
+  expandedTileId: null,
+  vacateExpandedTileId: null,
+  oosModalOpen: false,
+  oosModalAssetId: null,
+  returnModalOpen: false,
+  returnModalAssetId: null,
+  attendant: 'A. NOLAN',
+  shift: 'PM Shift',
+  venue: 'Club Hamilton',
+  /* Venue tab configuration — each tab can be enabled/disabled per venue.
+     In production this loads from site_config.json per venue.
+     A tab renders only when: enabled_in_config AND has_at_least_one_asset.
+     This means admins control which tabs a venue CAN have, and the system
+     auto-hides empty ones so staff never see a blank tab.
+
+     Hamilton's real production config: lockers + singles + doubles + VIP only.
+     In this mockup we enable ALL six so you can see the full layout working. */
+  venueConfig: {
+    tabs: {
+      lockers:  true,
+      single:   true,
+      double:   true,
+      vip:      true,
+      waitlist: true,   // Hamilton prod: false
+      other:    true,   // Hamilton prod: false
+    }
+  },
+  graceMinutes: 15,
+};
+
+/* OOS REASONS — GLOBAL LIST shared across all venues.
+   PHASE 2: wire this to an admin-editable DocType (OOS Reason) in Frappe
+   so ops managers can add/retire reasons from the admin UI without a deploy.
+   Use SOFT-DELETE (`is_active` flag) not hard delete, so historical OOS
+   records preserve their original reason label even after the taxonomy changes.
+   'Other' must always remain the last option — it's the required escape hatch
+   and triggers the note field. */
+const OOS_REASONS = [
+  'Plumbing',
+  'Electrical',
+  'Lock or Hardware',
+  'Cleaning required (deep)',
+  'Damage',
+  'Maintenance scheduled',
+  'Other',
+];
+
+const ASSETS = [
+  // Lockers (33)
+  ...Array.from({length: 33}, (_, i) => {
+    const code = `L${String(i+1).padStart(3,'0')}`;
+    const n = i+1;
+    let status = 'available';
+    if ([3,7,12,18,22,28].includes(n)) status = 'occupied';
+    if ([15,20].includes(n)) status = 'oos';
+    const a = {id: code, code, category: 'Lockers', subtype: 'Locker', status};
+    if (status === 'oos') {
+      a.oosDays = (n === 15) ? 4 : 11;
+      a.oosReason = 'Lock or Hardware';
+      a.oosSetBy = (n === 15) ? 'M. CHEN' : 'A. NOLAN';
+    }
+    if (status === 'occupied') {
+      a.guestName = ['M. SMITH','J. CHEN','R. PATEL','K. WILSON','D. MURPHY','T. NGUYEN'][[3,7,12,18,22,28].indexOf(n)];
+      a.elapsedMin = [45, 92, 220, 230, 185, 12][[3,7,12,18,22,28].indexOf(n)];
+      // L003=45m (normal), L007=92m (normal), L012=20m left (countdown!), L018=10m left (countdown!)
+      // L022=55m left (countdown!), L028=12m (normal)
+      a.expectedMin = 240;
+    }
+    return a;
+  }),
+
+  // Single rooms (11) — placeholder name "Single"
+  ...Array.from({length: 11}, (_, i) => {
+    const code = `R${String(i+1).padStart(3,'0')}`;
+    const n = i+1;
+    let status = 'available';
+    if ([2,3,5,8].includes(n)) status = 'occupied';
+    if ([4].includes(n)) status = 'dirty';
+    if ([10].includes(n)) status = 'oos';
+    const a = {id: code, code, category: 'Single', subtype: 'Single', status};
+    if (status === 'oos') { a.oosDays = 2; a.oosReason = 'Plumbing'; a.oosSetBy = 'J. REYES'; }
+    if (status === 'dirty') { a.dirtyMin = 18; }
+    if (status === 'occupied') {
+      const idx = [2,3,5,8].indexOf(n);
+      a.guestName = ['B. KING','S. LOPEZ','M. WONG','J. BROWN'][idx];
+      a.elapsedMin = [380, 250, 195, 65][idx]; // R002=2h 20m late, R003=10m late, R005=45m left (countdown), R008=2h 55m left (normal, no text)
+      a.expectedMin = 240;
+    }
+    return a;
+  }),
+
+  // Double rooms (3) — placeholder name "Double"
+  // Data designed to show normal + countdown + overtime states on this tab
+  ...Array.from({length: 3}, (_, i) => {
+    const code = `R${String(i+12).padStart(3,'0')}`;
+    const n = i+12;
+    let status = 'available';
+    if (n === 12) status = 'occupied'; // will be in overtime
+    if (n === 13) status = 'occupied'; // will be in countdown
+    const a = {id: code, code, category: 'Double', subtype: 'Double', status};
+    if (status === 'occupied') {
+      if (n === 12) {
+        a.guestName = 'A. THOMPSON';
+        a.elapsedMin = 295;   // 55m late (overtime)
+        a.expectedMin = 240;
+      }
+      if (n === 13) {
+        a.guestName = 'P. WALKER';
+        a.elapsedMin = 210;   // 30m left (countdown)
+        a.expectedMin = 240;
+      }
+    }
+    return a;
+  }),
+
+  // VIP rooms (2) — placeholder name "VIP"
+  // Data designed to show overtime state on this tab
+  ...Array.from({length: 2}, (_, i) => {
+    const code = `R${String(i+15).padStart(3,'0')}`;
+    const n = i+15;
+    let status = 'available';
+    if (n === 15) status = 'occupied'; // countdown
+    if (n === 16) status = 'occupied'; // overtime
+    const a = {id: code, code, category: 'VIP', subtype: 'VIP', status};
+    if (status === 'occupied') {
+      if (n === 15) {
+        a.guestName = 'C. RUSSO';
+        a.elapsedMin = 195;  // 45m left (countdown)
+        a.expectedMin = 240;
+      }
+      if (n === 16) {
+        a.guestName = 'T. HALEY';
+        a.elapsedMin = 320;  // 1h 20m late (overtime)
+        a.expectedMin = 240;
+      }
+    }
+    return a;
+  }),
+];
+
+/* Compute time status from elapsed vs expected.
+   Three states:
+     - 'normal': more than 60 minutes remaining — no text shown
+     - 'countdown': 60 minutes or less remaining — amber "Xm left" text
+     - 'overtime': past expected stay — red "Xm late" text + pulse + OT badge
+   The number always tells you HOW MUCH — the word tells you direction. */
+const COUNTDOWN_THRESHOLD_MIN = 60;
+function computeTimeStatus(asset) {
+  if (asset.status !== 'occupied') return null;
+  const remaining = asset.expectedMin - asset.elapsedMin;
+  if (remaining <= 0) return 'overtime';
+  if (remaining <= COUNTDOWN_THRESHOLD_MIN) return 'countdown';
+  return 'normal';
+}
+function isWatched(asset) {
+  if (asset.status === 'oos') return true;
+  return computeTimeStatus(asset) === 'overtime';
+}
+function fmtElapsed(minutes) {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (h === 0) return `${m}m`;
+  return `${h}h ${m}m`;
+}
+function watchCount() { return ASSETS.filter(isWatched).length; }
+function availableCountFor(category) {
+  return ASSETS.filter(a => a.category === category && a.status === 'available').length;
+}
+
+/* TABS — combined visibility rule:
+   A tab renders only when BOTH conditions are true:
+     1. enabled in venue config (admin-controlled)
+     2. has at least one asset for that category (auto-hides empty tabs)
+   Watch tab is always visible (it's a filtered view, not category-based). */
+function getTabs() {
+  const cfg = STATE.venueConfig.tabs;
+  const categoryHasAssets = (categoryName) =>
+    ASSETS.some(a => a.category === categoryName);
+
+  const tabs = [
+    {id: 'lockers',  label: 'Lockers', visible: !!cfg.lockers  && categoryHasAssets('Lockers')},
+    {id: 'single',   label: 'Single',  visible: !!cfg.single   && categoryHasAssets('Single')},
+    {id: 'double',   label: 'Double',  visible: !!cfg.double   && categoryHasAssets('Double')},
+    {id: 'vip',      label: 'VIP',     visible: !!cfg.vip      && categoryHasAssets('VIP')},
+    {id: 'waitlist', label: 'Waitlist',visible: !!cfg.waitlist && categoryHasAssets('Waitlist')},
+    {id: 'other',    label: 'Other',   visible: !!cfg.other    && categoryHasAssets('Other')},
+    {id: 'watch',    label: 'Watch',   visible: true, isWatch: true},
+  ];
+  return tabs.filter(t => t.visible);
+}
+
+/* CATEGORY FILTERING — tab id → category match */
+function tabIdToCategory(tabId) {
+  const map = {
+    'lockers': 'Lockers',
+    'single': 'Single',
+    'double': 'Double',
+    'vip': 'VIP',
+    'waitlist': 'Waitlist',
+    'other': 'Other',
+  };
+  return map[tabId];
+}
+
+function tileHTML(asset) {
+  const isExpanded = STATE.expandedTileId === asset.id;
+  const ts = computeTimeStatus(asset);
+  const classes = ['tile', asset.status];
+  if (ts === 'countdown') classes.push('countdown');
+  if (ts === 'overtime') classes.push('overtime');
+  if (isExpanded) classes.push('is-source'); // dim the source while overlay is shown
+
+  // Top-right corner badge — only on overtime tiles
+  let cornerBadge = '';
+  if (ts === 'overtime') cornerBadge = `<span class="tile-corner-badge ot">OT</span>`;
+
+  // OOS day counter (bottom-right) — V8 addition
+  let oosDaysHTML = '';
+  if (asset.status === 'oos' && asset.oosDays != null) {
+    oosDaysHTML = `<span class="oos-days">${asset.oosDays}d</span>`;
+  }
+
+  // Time text on tile — two states:
+  //   'countdown' → amber "Xm left" when within the last hour
+  //   'overtime'  → red "Xm late" / "Xh Xm late"
+  // Normal occupied (>60m left) shows no text, keeps the board quiet.
+  let timeHTML = '';
+  if (ts === 'countdown') {
+    const remaining = asset.expectedMin - asset.elapsedMin;
+    timeHTML = `<div class="tile-time countdown">${fmtElapsed(remaining)} left</div>`;
+  } else if (ts === 'overtime') {
+    const overBy = asset.elapsedMin - asset.expectedMin;
+    timeHTML = `<div class="tile-time">${fmtElapsed(overBy)} late</div>`;
+  }
+
+  // Status label REMOVED per Chris — tab + section header + tile colour
+  // already convey status.
+
+  // Source tile in grid — never gets action buttons. Action buttons live
+  // in a separate absolute-positioned overlay so they don't stretch the row.
+  return `
+    <div class="${classes.join(' ')}" data-tile-id="${asset.id}" onclick="onTileClick(event, '${asset.id}')">
+      ${cornerBadge}
+      <div class="tile-code">${asset.code}</div>
+      ${timeHTML}
+      ${oosDaysHTML}
+    </div>
+  `;
+}
+
+/* The expanded overlay — a separate, absolute-positioned element rendered AFTER
+   the grid. Replicates the source tile's appearance + adds action buttons.
+   Anchored via inline top/left set in onTileClick. */
+function expandedOverlayHTML() {
+  if (!STATE.expandedTileId) return '';
+  const asset = ASSETS.find(a => a.id === STATE.expandedTileId);
+  if (!asset) return '';
+  const ts = computeTimeStatus(asset);
+  const classes = ['tile', 'expanded-overlay', asset.status];
+  if (ts === 'countdown') classes.push('countdown');
+  if (ts === 'overtime') classes.push('overtime');
+
+  let cornerBadge = '';
+  if (ts === 'overtime') cornerBadge = `<span class="tile-corner-badge ot">OT</span>`;
+
+  let oosDaysHTML = '';
+  if (asset.status === 'oos' && asset.oosDays != null) {
+    oosDaysHTML = `<span class="oos-days">${asset.oosDays}d</span>`;
+  }
+  let timeHTML = '';
+  if (ts === 'countdown') {
+    const remaining = asset.expectedMin - asset.elapsedMin;
+    timeHTML = `<div class="tile-time countdown">${fmtElapsed(remaining)} left</div>`;
+  } else if (ts === 'overtime') {
+    const overBy = asset.elapsedMin - asset.expectedMin;
+    timeHTML = `<div class="tile-time">${fmtElapsed(overBy)} late</div>`;
+  }
+
+  const isVacateExpanded = STATE.vacateExpandedTileId === asset.id;
+  const actionsHTML = renderActions(asset, isVacateExpanded);
+
+  return `
+    <div class="${classes.join(' ')}" id="expanded-overlay" onclick="event.stopPropagation()">
+      ${cornerBadge}
+      <div class="tile-code">${asset.code}</div>
+      ${timeHTML}
+      ${oosDaysHTML}
+      <div class="tile-actions" style="display:flex">${actionsHTML}</div>
+    </div>
+  `;
+}
+
+function renderActions(asset, vacateExpanded) {
+  switch(asset.status) {
+    case 'available':
+      return `
+        <button class="action-btn primary-green" onclick="alert('Assign Guest flow — Phase 2')">Assign Guest</button>
+        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set OOS</button>
+      `;
+    case 'occupied':
+      const subClass = vacateExpanded ? 'vacate-subs shown' : 'vacate-subs';
+      return `
+        <div class="guest-info">
+          <div class="guest-name">${asset.guestName||'GUEST'}</div>
+          <div class="guest-elapsed">${fmtElapsed(asset.elapsedMin)} elapsed</div>
+        </div>
+        <button class="action-btn primary-red" onclick="toggleVacateSubs('${asset.id}')">${vacateExpanded ? 'Cancel Vacate' : 'Vacate'}</button>
+        <div class="${subClass}">
+          <button class="action-btn" onclick="alert('Vacate via Key Return — Phase 2')">Key Return</button>
+          <button class="action-btn" onclick="alert('Vacate via Discovery on Rounds — Phase 2')">Rounds</button>
+        </div>
+      `;
+    case 'dirty':
+      return `
+        <button class="action-btn primary-amber" onclick="alert('Mark Clean flow — Phase 2')">Mark Clean</button>
+        <button class="action-btn secondary" onclick="openOOSModal('${asset.id}')">Set OOS</button>
+      `;
+    case 'oos':
+      // Show reason + days + who set it OOS above the Return to Service button
+      const daysText = asset.oosDays === 1 ? '1 day ago' : `${asset.oosDays} days ago`;
+      const whoText = asset.oosSetBy ? ` by ${asset.oosSetBy}` : '';
+      return `
+        <div class="oos-info">
+          <div class="oos-info-reason">${asset.oosReason || 'Reason unknown'}</div>
+          <div class="oos-info-meta">Set${whoText} · ${daysText}</div>
+        </div>
+        <button class="action-btn primary-green" onclick="openReturnModal('${asset.id}')">Return to Service</button>
+      `;
+  }
+  return '';
+}
+
+function renderRegularTab(category) {
+  // Sections by category:
+  //   Rooms (Single/Double/VIP) have 4 sections: Available → Dirty → Occupied → OOS
+  //   Lockers have 3 sections: Available → Occupied → OOS (NO dirty state — lockers
+  //     skip the cleaning cycle; they go straight from Occupied back to Available on vacate)
+  const all = ASSETS.filter(a => a.category === category);
+  const available = all.filter(a => a.status === 'available').sort((a,b) => a.code.localeCompare(b.code));
+  const dirty = all.filter(a => a.status === 'dirty').sort((a,b) => (b.dirtyMin||0) - (a.dirtyMin||0));
+  const occupied = all.filter(a => a.status === 'occupied').sort((a,b) => (b.elapsedMin||0) - (a.elapsedMin||0));
+  const oos = all.filter(a => a.status === 'oos').sort((a,b) => (b.oosDays||0) - (a.oosDays||0));
+
+  let html = '';
+  if (available.length) {
+    html += `<div class="section">
+      <div class="section-header available">Available <span class="section-count">(${available.length})</span></div>
+      <div class="tile-grid">${available.map(tileHTML).join('')}</div>
+    </div>`;
+  }
+  if (dirty.length) {
+    html += `<div class="section">
+      <div class="section-header dirty">Dirty <span class="section-count">(${dirty.length})</span></div>
+      <div class="tile-grid">${dirty.map(tileHTML).join('')}</div>
+    </div>`;
+  }
+  if (occupied.length) {
+    html += `<div class="section">
+      <div class="section-header occupied">Occupied <span class="section-count">(${occupied.length})</span></div>
+      <div class="tile-grid">${occupied.map(tileHTML).join('')}</div>
+    </div>`;
+  }
+  if (oos.length) {
+    html += `<div class="section">
+      <div class="section-header oos">Out of Service <span class="section-count">(${oos.length})</span></div>
+      <div class="tile-grid">${oos.map(tileHTML).join('')}</div>
+    </div>`;
+  }
+  if (!html) {
+    // Defensive: this shouldn't render in normal flow since the combined
+    // tab visibility rule (config AND has-assets) hides empty tabs entirely.
+    html = `<div class="tab-placeholder"><span class="icon">∅</span>No assets in this category</div>`;
+  }
+  return html;
+}
+
+function renderWatchTab() {
+  const watched = ASSETS.filter(isWatched);
+  if (!watched.length) {
+    return `<div class="watch-empty"><span class="check">✓</span>All clear — No assets need attention right now.</div>`;
+  }
+  // Group warning/overtime by category, OOS in its own bucket at bottom
+  const byCategoryWarning = {};
+  const oosAssets = [];
+  watched.forEach(a => {
+    if (a.status === 'oos') { oosAssets.push(a); return; }
+    if (!byCategoryWarning[a.category]) byCategoryWarning[a.category] = [];
+    byCategoryWarning[a.category].push(a);
+  });
+  let html = '';
+  Object.keys(byCategoryWarning).forEach(cat => {
+    const items = byCategoryWarning[cat].sort((a,b) => (b.elapsedMin||0) - (a.elapsedMin||0));
+    html += `<div class="watch-row">
+      <div class="watch-row-header">${cat} <span class="section-count">(${items.length})</span></div>
+      <div class="tile-grid">${items.map(tileHTML).join('')}</div>
+    </div>`;
+  });
+  if (oosAssets.length) {
+    const sorted = oosAssets.sort((a,b) => (b.oosDays||0) - (a.oosDays||0));
+    html += `<div class="watch-row">
+      <div class="watch-row-header oos">Out of Service <span class="section-count">(${sorted.length})</span></div>
+      <div class="tile-grid">${sorted.map(tileHTML).join('')}</div>
+    </div>`;
+  }
+  return html;
+}
+
+function renderFooter() {
+  const tab = STATE.currentTab;
+  let assetsForFooter;
+  if (tab === 'watch') {
+    assetsForFooter = ASSETS.filter(isWatched);
+  } else {
+    const cat = tabIdToCategory(tab);
+    assetsForFooter = ASSETS.filter(a => a.category === cat);
+  }
+  const counts = {
+    available: assetsForFooter.filter(a => a.status === 'available').length,
+    occupied: assetsForFooter.filter(a => a.status === 'occupied').length,
+    dirty: assetsForFooter.filter(a => a.status === 'dirty').length,
+    oos: assetsForFooter.filter(a => a.status === 'oos').length,
+  };
+  const stats = [
+    {key: 'available', label: 'Available', dot: 'var(--available-dot)'},
+    {key: 'occupied', label: 'Occupied', dot: 'var(--occupied-dot)'},
+    {key: 'dirty', label: 'Dirty', dot: 'var(--dirty-dot)'},
+    {key: 'oos', label: 'OOS', dot: 'var(--oos-dot)'},
+  ].filter(s => counts[s.key] > 0);
+  let html = stats.map(s => `<div class="footer-stat">
+    <span class="footer-stat-dot" style="background: ${s.dot}"></span>
+    <span>${s.label}</span>
+    <span class="footer-stat-count">${counts[s.key]}</span>
+  </div>`).join('');
+  html += `<div class="footer-help">Tap to expand · Tap outside to close</div>`;
+  return `<div class="footer">${html}</div>`;
+}
+
+function render() {
+  const tabs = getTabs();
+
+  // Defensive: if the currently-selected tab was removed (e.g. admin
+  // disabled it or the last asset was removed), fall back to the first
+  // available tab so the user doesn't see a blank board.
+  const currentIsVisible = tabs.some(t => t.id === STATE.currentTab);
+  if (!currentIsVisible && tabs.length > 0) {
+    STATE.currentTab = tabs[0].id;
+  }
+
+  let now = new Date();
+  let timeStr = now.toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit', hour12: false});
+
+  let tabsHTML = tabs.map(t => {
+    const active = t.id === STATE.currentTab ? ' active' : '';
+    const watchCls = t.isWatch ? ' watch' : '';
+    let badgeHTML = '';
+    if (t.isWatch) {
+      const wc = watchCount();
+      if (wc > 0) badgeHTML = `<span class="tab-badge">${wc}</span>`;
+    } else {
+      const cat = tabIdToCategory(t.id);
+      const ac = availableCountFor(cat);
+      if (ac > 0) badgeHTML = `<span class="tab-badge">${ac}</span>`;
+    }
+    const spacerBefore = t.isWatch ? '<div class="tab-spacer"></div>' : '';
+    return `${spacerBefore}<div class="tab${active}${watchCls}" onclick="onTabClick('${t.id}')">${t.label}${badgeHTML}</div>`;
+  }).join('');
+
+  let boardHTML;
+  if (STATE.currentTab === 'watch') {
+    boardHTML = renderWatchTab();
+  } else {
+    // Regular category tab (lockers/single/double/vip/waitlist/other).
+    // The combined visibility rule in getTabs() ensures this tab only renders
+    // when it has at least one asset, so no placeholder is needed.
+    const cat = tabIdToCategory(STATE.currentTab);
+    boardHTML = renderRegularTab(cat);
+  }
+
+  const screen = document.getElementById('screen');
+  screen.innerHTML = `
+    <div class="header">
+      <div class="header-left">
+        <span class="venue">${STATE.venue}</span>
+        <span>· Asset Board</span>
+        <span>· ${STATE.shift}</span>
+        <span>· ${timeStr}</span>
+      </div>
+      <div class="header-right">
+        <span class="online-dot"></span>
+        <span class="attendant">${STATE.attendant}</span>
+      </div>
+    </div>
+    <div class="tab-bar" onclick="event.stopPropagation()">${tabsHTML}</div>
+    <div class="board" onclick="closeAllOverlays(event)">${boardHTML}</div>
+    ${renderFooter()}
+    ${expandedOverlayHTML()}
+    <div class="modal-backdrop ${STATE.oosModalOpen ? 'shown' : ''}" id="oos-modal-backdrop" onclick="if(event.target.id==='oos-modal-backdrop') closeOOSModal()">
+      <div class="oos-modal">
+        <div class="oos-modal-title">Set OOS</div>
+        <div class="oos-modal-asset">${STATE.oosModalAssetId || ''}</div>
+        <label for="oos-reason">Reason</label>
+        <select id="oos-reason" onchange="onOOSReasonChange()">
+          <option value="">— Select reason —</option>
+          ${OOS_REASONS.map(r => `<option>${r}</option>`).join('')}
+        </select>
+        <!-- V9 S6: wrap label+textarea+Clear button so the whole "Other" group
+             toggles together. Clear button gives staff a one-tap reset for
+             the touch-keyboard typo case. -->
+        <div id="oos-note-wrap" class="oos-note-wrap hidden">
+          <div class="oos-note-header">
+            <label for="oos-note" id="oos-note-label">Note (required for "Other")</label>
+            <button type="button" id="oos-note-clear" class="oos-note-clear" onclick="clearOOSNote()">Clear</button>
+          </div>
+          <textarea id="oos-note" placeholder="Describe the issue..."></textarea>
+        </div>
+        <!-- V9 S2: mirror the Return-to-Service modal's audit pattern so the
+             Set OOS path has the same accountability preview without adding
+             a second tap. -->
+        <div class="return-modal-audit">
+          By confirming, this action will be recorded as:<br>
+          <strong>Set out of service by ${STATE.attendant} at ${timeStr}</strong>
+        </div>
+        <div class="oos-modal-actions">
+          <button class="oos-modal-btn cancel" onclick="closeOOSModal()">Cancel</button>
+          <button class="oos-modal-btn confirm" onclick="confirmOOS()">Confirm</button>
+        </div>
+      </div>
+    </div>
+    <div class="modal-backdrop ${STATE.returnModalOpen ? 'shown' : ''}" id="return-modal-backdrop" onclick="if(event.target.id==='return-modal-backdrop') closeReturnModal()">
+      <div class="oos-modal">
+        <div class="oos-modal-title">Return to Service</div>
+        <div class="oos-modal-asset">${STATE.returnModalAssetId || ''}</div>
+        ${renderReturnModalBody()}
+        <div class="oos-modal-actions">
+          <button class="oos-modal-btn cancel" onclick="closeReturnModal()">Cancel</button>
+          <button class="oos-modal-btn confirm" onclick="confirmReturn()">Confirm reason resolved</button>
+        </div>
+      </div>
+    </div>
+  `;
+  // After render: if a tile is expanded, position the overlay AND attach a
+  // one-shot scroll listener that closes the overlay if the .board scrolls.
+  // The overlay is positioned once via getBoundingClientRect() — scrolling
+  // the board would detach it visually from its source tile (V9 M4).
+  if (STATE.expandedTileId) {
+    positionExpandedOverlay();
+    const boardEl = document.querySelector('.board');
+    if (boardEl) {
+      boardEl.addEventListener('scroll', () => {
+        if (!STATE.expandedTileId) return;
+        STATE.expandedTileId = null;
+        STATE.vacateExpandedTileId = null;
+        render();
+      }, {passive: true, once: true});
+    }
+  }
+}
+
+/* Position the expanded overlay over its source tile, then clamp to screen
+   so it never clips off-screen. The overlay starts at the same x/y as the
+   source tile, but we shift it left/up if it would overflow. */
+function positionExpandedOverlay() {
+  const overlay = document.getElementById('expanded-overlay');
+  const source = document.querySelector(`.tile[data-tile-id="${STATE.expandedTileId}"]`);
+  const screenEl = document.getElementById('screen');
+  if (!overlay || !source || !screenEl) return;
+
+  const sRect = source.getBoundingClientRect();
+  const screenRect = screenEl.getBoundingClientRect();
+
+  // Make overlay match source tile width (so anchor point is consistent)
+  overlay.style.width = sRect.width + 'px';
+  // Position relative to screen
+  let x = sRect.left - screenRect.left;
+  let y = sRect.top - screenRect.top;
+  overlay.style.left = x + 'px';
+  overlay.style.top = y + 'px';
+
+  // Now measure the expanded overlay's actual size (with action buttons)
+  const oRect = overlay.getBoundingClientRect();
+
+  // Clamp inside screen — shift if overflowing right or bottom
+  const padding = 6;
+  const overflowRight = (oRect.right) - (screenRect.right - padding);
+  const overflowBottom = (oRect.bottom) - (screenRect.bottom - padding);
+  if (overflowRight > 0) x -= overflowRight;
+  if (overflowBottom > 0) y -= overflowBottom;
+  // Also clamp left/top edges
+  if (x < padding) x = padding;
+  if (y < padding) y = padding;
+
+  overlay.style.left = x + 'px';
+  overlay.style.top = y + 'px';
+}
+
+/* INTERACTIONS */
+function onTabClick(tabId) {
+  STATE.currentTab = tabId;
+  STATE.expandedTileId = null;
+  STATE.vacateExpandedTileId = null;
+  render();
+}
+function onTileClick(event, tileId) {
+  event.stopPropagation();
+  if (STATE.expandedTileId === tileId) return; // already expanded
+  STATE.expandedTileId = tileId;
+  STATE.vacateExpandedTileId = null;
+  render();
+}
+function closeAllOverlays(event) {
+  // Tap-outside-to-close
+  STATE.expandedTileId = null;
+  STATE.vacateExpandedTileId = null;
+  render();
+}
+function toggleVacateSubs(tileId) {
+  STATE.vacateExpandedTileId = STATE.vacateExpandedTileId === tileId ? null : tileId;
+  render();
+}
+function openOOSModal(assetId) {
+  STATE.oosModalOpen = true;
+  STATE.oosModalAssetId = assetId;
+  render();
+}
+function closeOOSModal() {
+  STATE.oosModalOpen = false;
+  STATE.oosModalAssetId = null;
+  render();
+}
+function onOOSReasonChange() {
+  // V9 S6: toggle the wrapping element so label, textarea, and Clear button
+  // all show/hide together (no more separate display:none on the label).
+  const sel = document.getElementById('oos-reason');
+  const wrap = document.getElementById('oos-note-wrap');
+  if (!wrap) return;
+  if (sel.value === 'Other') wrap.classList.remove('hidden');
+  else wrap.classList.add('hidden');
+}
+function clearOOSNote() {
+  // V9 S6: reset the textarea on Clear tap. Refocus so the staff can keep typing.
+  const note = document.getElementById('oos-note');
+  if (!note) return;
+  note.value = '';
+  note.focus();
+}
+function confirmOOS() {
+  const sel = document.getElementById('oos-reason');
+  if (!sel.value) { alert('Please select a reason'); return; }
+  if (sel.value === 'Other') {
+    const note = document.getElementById('oos-note');
+    if (!note.value.trim()) { alert('Note required when "Other" is selected'); return; }
+  }
+  alert('OOS confirmed — Phase 2 will wire to backend');
+  closeOOSModal();
+}
+
+/* === RETURN TO SERVICE MODAL ===
+   Shows reason/days/who set it OOS, requires confirmation before returning.
+   On confirm: records who returned it + timestamp (will wire to backend Phase 2). */
+function openReturnModal(assetId) {
+  STATE.returnModalOpen = true;
+  STATE.returnModalAssetId = assetId;
+  STATE.expandedTileId = null; // collapse the tile when opening modal
+  render();
+}
+function closeReturnModal() {
+  STATE.returnModalOpen = false;
+  STATE.returnModalAssetId = null;
+  render();
+}
+function renderReturnModalBody() {
+  if (!STATE.returnModalAssetId) return '';
+  const asset = ASSETS.find(a => a.id === STATE.returnModalAssetId);
+  if (!asset) return '';
+  const daysText = asset.oosDays === 1 ? '1 day ago' : `${asset.oosDays} days ago`;
+  const whoText = asset.oosSetBy ? ` by ${asset.oosSetBy}` : '';
+  const now = new Date().toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12: false});
+  return `
+    <div class="return-modal-context">
+      <div class="return-modal-row">
+        <span class="return-modal-key">Reason:</span>
+        <span class="return-modal-val">${asset.oosReason || 'Unknown'}</span>
+      </div>
+      <div class="return-modal-row">
+        <span class="return-modal-key">Set${whoText}:</span>
+        <span class="return-modal-val">${daysText}</span>
+      </div>
+    </div>
+    <div class="return-modal-audit">
+      By confirming, this action will be recorded as:<br>
+      <strong>Returned to service by ${STATE.attendant} at ${now}</strong>
+    </div>
+  `;
+}
+function confirmReturn() {
+  const asset = ASSETS.find(a => a.id === STATE.returnModalAssetId);
+  if (!asset) return;
+  const now = new Date().toLocaleString();
+  alert(`Return to Service confirmed for ${asset.code}.\nRecorded: resolved by ${STATE.attendant} at ${now}.\nPhase 2 will wire this to the backend.`);
+  closeReturnModal();
+}
+
+/* INIT */
+render();
+
+/* V9 S4: live-tick — re-render every 15s so countdown→overtime transitions
+   surface without requiring a user interaction. The guard skips re-render
+   while the user has an open expanded overlay or modal so we don't
+   destroy in-flight DOM (form selections, typed notes, etc.). 15s is
+   visually imperceptible but cheap on Frappe; a future Phase 2 pass can
+   make this venue-configurable. */
+const LIVE_TICK_MS = 15000;
+function liveTick() {
+  if (STATE.oosModalOpen || STATE.returnModalOpen) return;
+  if (STATE.expandedTileId) return;
+  render();
+}
+let liveTickHandle = setInterval(liveTick, LIVE_TICK_MS);
+
+/* ===== AUTOMATED TESTS ===== */
+function runTests() {
+  const tests = [];
+
+  // 1. Header rendered
+  tests.push({name: 'Header has venue, shift, attendant', pass: document.querySelectorAll('.header .venue').length === 1 && document.querySelectorAll('.header .attendant').length === 1});
+
+  // 2. Tab bar — combined rule: config-enabled AND has-at-least-one-asset.
+  // Mockup data: lockers+single+double+VIP have assets. Waitlist+Other are
+  // enabled in config but have zero assets → auto-hidden. Plus Watch = 5 tabs.
+  tests.push({name: 'Tab bar shows 5 tabs (4 populated categories + Watch)', pass: document.querySelectorAll('.tab-bar .tab').length === 5});
+
+  // 2a. Waitlist + Other are hidden (enabled in config but no assets)
+  const tabLabels = [...document.querySelectorAll('.tab-bar .tab')].map(t => t.textContent.replace(/\d+/g,'').trim());
+  tests.push({name: 'Waitlist tab auto-hidden (config on but no assets)', pass: !tabLabels.some(l => l.includes('Waitlist'))});
+  tests.push({name: 'Other tab auto-hidden (config on but no assets)', pass: !tabLabels.some(l => l.includes('Other'))});
+
+  // 2b. Disabling a tab in config hides it even when it has assets
+  STATE.venueConfig.tabs.double = false; render();
+  const afterDoubleOff = [...document.querySelectorAll('.tab-bar .tab')].map(t => t.textContent.replace(/\d+/g,'').trim());
+  tests.push({name: 'Disabling a tab in config hides it (Double)', pass: !afterDoubleOff.some(l => l.includes('Double'))});
+  STATE.venueConfig.tabs.double = true; render(); // restore
+
+  // 2c. Adding an asset to a previously-empty enabled category makes tab appear
+  ASSETS.push({id: 'W001', code: 'W001', category: 'Waitlist', subtype: 'Waitlist', status: 'available'});
+  render();
+  const withWaitlist = [...document.querySelectorAll('.tab-bar .tab')].map(t => t.textContent.replace(/\d+/g,'').trim());
+  tests.push({name: 'Adding an asset makes empty enabled tab appear', pass: withWaitlist.some(l => l.includes('Waitlist'))});
+  ASSETS.pop(); render(); // clean up
+
+  // 3. Watch tab is last + has spacer before it
+  const tabs = document.querySelectorAll('.tab-bar .tab');
+  const lastTab = tabs[tabs.length - 1];
+  tests.push({name: 'Watch tab is last tab', pass: lastTab && lastTab.classList.contains('watch')});
+  tests.push({name: 'Spacer pushes watch tab right', pass: document.querySelectorAll('.tab-bar .tab-spacer').length === 1});
+
+  // 4. Lockers tab is active by default and shows correct sections
+  STATE.currentTab = 'lockers'; render();
+  const sections = document.querySelectorAll('.board .section-header');
+  tests.push({name: 'Lockers tab has Available section', pass: !!document.querySelector('.section-header.available')});
+  tests.push({name: 'Lockers tab has Occupied section', pass: !!document.querySelector('.section-header.occupied')});
+  tests.push({name: 'Lockers tab has OOS section', pass: !!document.querySelector('.section-header.oos')});
+  // Lockers shouldn't have dirty
+  tests.push({name: 'Lockers tab does NOT have Dirty section', pass: !document.querySelector('.section-header.dirty')});
+
+  // 5. Single tab has Dirty section (R004 is dirty)
+  STATE.currentTab = 'single'; render();
+  tests.push({name: 'Single tab has Dirty section', pass: !!document.querySelector('.section-header.dirty')});
+
+  // 6. Overtime tile detection — R002 (140m late) and R003 (10m late) both overtime
+  const overtimeTiles = document.querySelectorAll('.tile.overtime');
+  tests.push({name: 'Overtime tiles rendered (R002 + R003 both late)', pass: overtimeTiles.length >= 2});
+
+  // 6a. Countdown tile detection — R005 should be in countdown state (45m left)
+  const countdownTiles = document.querySelectorAll('.tile.countdown');
+  tests.push({name: 'Countdown tiles rendered when <60m left (R005)', pass: countdownTiles.length >= 1});
+
+  // 7. Time text should ONLY appear on overtime OR countdown tiles, never on normal occupied
+  const allTiles = document.querySelectorAll('.tile');
+  let normalOccupiedHasTime = false;
+  allTiles.forEach(t => {
+    if (t.classList.contains('occupied') && !t.classList.contains('overtime') && !t.classList.contains('countdown')) {
+      if (t.querySelector('.tile-time')) normalOccupiedHasTime = true;
+    }
+  });
+  tests.push({name: 'Time NOT shown on normal occupied tiles (>60m left)', pass: !normalOccupiedHasTime});
+
+  // 7a. Overtime time text uses "late" wording
+  let allLateUsesLateWording = true;
+  overtimeTiles.forEach(t => {
+    const tt = t.querySelector('.tile-time');
+    if (tt && !tt.textContent.includes('late')) allLateUsesLateWording = false;
+  });
+  tests.push({name: 'Overtime time text uses "late" wording', pass: allLateUsesLateWording && overtimeTiles.length > 0});
+
+  // 7b. Countdown time text uses "left" wording
+  let allCountdownUsesLeftWording = true;
+  countdownTiles.forEach(t => {
+    const tt = t.querySelector('.tile-time');
+    if (tt && !tt.textContent.includes('left')) allCountdownUsesLeftWording = false;
+  });
+  tests.push({name: 'Countdown time text uses "left" wording', pass: allCountdownUsesLeftWording && countdownTiles.length > 0});
+
+  // 8. OOS day counter shown on OOS tiles
+  STATE.currentTab = 'lockers'; render();
+  const oosTiles = document.querySelectorAll('.tile.oos');
+  let allOosHaveDays = true;
+  oosTiles.forEach(t => { if (!t.querySelector('.oos-days')) allOosHaveDays = false; });
+  tests.push({name: 'OOS day counter shown on all OOS tiles', pass: oosTiles.length > 0 && allOosHaveDays});
+
+  // 9. Expand a tile and verify action buttons appear
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L001'; render();
+  const expanded = document.querySelector('#expanded-overlay');
+  tests.push({name: 'Expanded tile renders as overlay', pass: !!expanded});
+  tests.push({name: 'Expanded Available tile shows Assign Guest', pass: expanded && expanded.innerHTML.includes('Assign Guest')});
+  tests.push({name: 'Expanded Available tile shows Set OOS button (M1)', pass: expanded && expanded.innerHTML.includes('Set OOS')});
+
+  // 9b. CRITICAL: Overlay must NOT cause grid row tiles to stretch.
+  //     Measure the height of every other tile in the same row and compare against an unexpanded tile.
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L022'; render();
+  // Pick L022's neighbors in the Occupied section (L018, L012, L007, L003, L028)
+  const neighborIds = ['L018','L012','L007','L003','L028'];
+  let allNeighborsCorrectHeight = true;
+  let neighborHeightDetail = '';
+  // Get an unexpanded tile's height as the reference
+  const refTile = document.querySelector('.tile[data-tile-id="L020"]'); // OOS tile, definitely not in expanded row
+  const refHeight = refTile ? Math.round(refTile.getBoundingClientRect().height) : 0;
+  neighborIds.forEach(nid => {
+    const t = document.querySelector(`.tile[data-tile-id="${nid}"]`);
+    if (t) {
+      const h = Math.round(t.getBoundingClientRect().height);
+      if (Math.abs(h - refHeight) > 5) {
+        allNeighborsCorrectHeight = false;
+        neighborHeightDetail += `${nid}=${h} `;
+      }
+    }
+  });
+  tests.push({
+    name: 'Expanding L022 does NOT stretch other tiles in its row',
+    pass: allNeighborsCorrectHeight,
+    detail: !allNeighborsCorrectHeight ? `ref=${refHeight}px but ${neighborHeightDetail}` : ''
+  });
+
+  // 10. Expand an Occupied tile and verify all buttons
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L003'; render();
+  const occExpanded = document.querySelector('#expanded-overlay');
+  tests.push({name: 'Expanded Occupied tile shows guest name', pass: occExpanded && occExpanded.querySelector('.guest-name')});
+  tests.push({name: 'Expanded Occupied tile shows Vacate', pass: occExpanded && occExpanded.innerHTML.includes('Vacate')});
+  // M2: Extend Stay button hidden entirely in V9 (was disabled "Phase 2" pill)
+  tests.push({name: 'Expanded Occupied tile does NOT show Extend Stay (M2)', pass: occExpanded && !occExpanded.innerHTML.includes('Extend Stay')});
+
+  // 11. Vacate sub-buttons reveal
+  STATE.vacateExpandedTileId = 'L003'; render();
+  const subBtns = document.querySelector('#expanded-overlay .vacate-subs.shown');
+  tests.push({name: 'Vacate sub-buttons appear when toggled', pass: !!subBtns});
+  tests.push({name: 'Sub-buttons include Key Return', pass: subBtns && subBtns.innerHTML.includes('Key Return')});
+  tests.push({name: 'Sub-buttons include Rounds (M1 shortened from "Discovery on Rounds")', pass: subBtns && subBtns.innerHTML.includes('Rounds')});
+
+  // 12. Expand OOS tile — shows reason, days, who set it, and Return to Service
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L015'; STATE.vacateExpandedTileId = null; render();
+  const oosExpanded = document.querySelector('#expanded-overlay');
+  tests.push({name: 'Expanded OOS tile shows Return to Service', pass: oosExpanded && oosExpanded.innerHTML.includes('Return to Service')});
+  tests.push({name: 'Expanded OOS tile does NOT show Set OOS button (no offline-while-OOS)', pass: oosExpanded && !oosExpanded.innerHTML.includes('Set OOS')});
+  tests.push({name: 'Expanded OOS tile shows reason (Lock or Hardware)', pass: oosExpanded && oosExpanded.innerHTML.includes('Lock or Hardware')});
+  tests.push({name: 'Expanded OOS tile shows who set it (M. CHEN)', pass: oosExpanded && oosExpanded.innerHTML.includes('M. CHEN')});
+  tests.push({name: 'Expanded OOS tile shows days ago', pass: oosExpanded && /\d+ days? ago/.test(oosExpanded.innerHTML)});
+
+  // 12a. Return to Service modal — opens with reason + who + audit info
+  STATE.expandedTileId = null; openReturnModal('L015');
+  const retModal = document.getElementById('return-modal-backdrop');
+  tests.push({name: 'Return to Service modal opens', pass: retModal && retModal.classList.contains('shown')});
+  tests.push({name: 'Return modal shows reason', pass: retModal && retModal.innerHTML.includes('Lock or Hardware')});
+  tests.push({name: 'Return modal shows who set OOS', pass: retModal && retModal.innerHTML.includes('M. CHEN')});
+  tests.push({name: 'Return modal shows audit line (resolved by attendant)', pass: retModal && retModal.innerHTML.includes(STATE.attendant)});
+  tests.push({name: 'Return modal has "Confirm reason resolved" button', pass: retModal && retModal.innerHTML.includes('Confirm reason resolved')});
+  closeReturnModal();
+
+  // 13. OOS modal opens and has all 7 reasons
+  STATE.expandedTileId = null; openOOSModal('L001');
+  const modal = document.getElementById('oos-modal-backdrop');
+  tests.push({name: 'OOS modal opens', pass: modal && modal.classList.contains('shown')});
+  const reasons = document.getElementById('oos-reason').options;
+  tests.push({name: 'OOS modal has 7 reason options + placeholder (8 total)', pass: reasons.length === 8});
+
+  // 14. Footer shows per-tab counts (active tab only)
+  closeOOSModal();
+  STATE.currentTab = 'single'; render();
+  const footer = document.querySelector('.footer');
+  tests.push({name: 'Footer rendered with status counts', pass: footer && footer.querySelectorAll('.footer-stat').length > 0});
+  tests.push({name: 'Footer help text present', pass: footer && footer.querySelector('.footer-help')});
+
+  // 15. Watch tab — empty state + populated state
+  STATE.currentTab = 'watch'; render();
+  // Should have content because we have warning/overtime/OOS items
+  const watchEmpty = document.querySelector('.watch-empty');
+  tests.push({name: 'Watch tab shows content (not empty)', pass: !watchEmpty});
+  tests.push({name: 'Watch tab has OOS row at bottom', pass: !!document.querySelector('.watch-row-header.oos')});
+
+  // 16. Tab badge — Watch tab badge has pulsing animation class
+  const watchTab = document.querySelector('.tab.watch');
+  const watchBadge = watchTab && watchTab.querySelector('.tab-badge');
+  tests.push({name: 'Watch tab badge present', pass: !!watchBadge});
+
+  // 17. Visual size verification — board fits in tablet viewport
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = null; STATE.vacateExpandedTileId = null; render();
+  const tablet = document.querySelector('.tablet');
+  const screen = document.querySelector('.screen');
+  const board = document.querySelector('.board');
+  tests.push({name: 'Tablet height is 716px (iPad 11 Safari simulation)', pass: tablet.offsetHeight === 716});
+  tests.push({name: 'Screen fits within tablet (no overflow)', pass: screen.scrollHeight <= screen.offsetHeight + 1});
+
+  // 18. CRITICAL: Expanded overlay must NEVER clip off-screen.
+  //     Test EVERY tile in EVERY tab — corner tiles, edge tiles, center tiles.
+  function testOverlayContainment(tileId, tabId) {
+    STATE.currentTab = tabId; STATE.expandedTileId = null; render();
+    const tile = document.querySelector(`.tile[data-tile-id="${tileId}"]`);
+    if (!tile) return {ok: true, skip: true};
+    STATE.expandedTileId = tileId; STATE.vacateExpandedTileId = null;
+    render();
+    // Overlay positioning runs synchronously after render. Measure now.
+    const overlay = document.getElementById('expanded-overlay');
+    const screenEl = document.getElementById('screen');
+    if (!overlay || !screenEl) return {ok: false, msg: 'overlay missing'};
+    const oRect = overlay.getBoundingClientRect();
+    const sRect = screenEl.getBoundingClientRect();
+    const overL = Math.max(0, sRect.left - oRect.left);
+    const overR = Math.max(0, oRect.right - sRect.right);
+    const overT = Math.max(0, sRect.top - oRect.top);
+    const overB = Math.max(0, oRect.bottom - sRect.bottom);
+    const totalOver = overL + overR + overT + overB;
+    return {
+      ok: totalOver < 2,
+      msg: totalOver >= 2 ? `clips by L:${Math.round(overL)} R:${Math.round(overR)} T:${Math.round(overT)} B:${Math.round(overB)}` : ''
+    };
+  }
+  const expansionCases = [
+    {tab:'lockers', tile:'L001', desc:'top-left corner of Available'},
+    {tab:'lockers', tile:'L013', desc:'top-right corner of Available'},
+    {tab:'lockers', tile:'L033', desc:'bottom row of Available'},
+    {tab:'lockers', tile:'L018', desc:'first Occupied tile (left edge)'},
+    {tab:'lockers', tile:'L020', desc:'first OOS tile (bottom edge)'},
+    {tab:'single', tile:'R001', desc:'top-left of Single Available'},
+    {tab:'single', tile:'R002', desc:'overtime tile (Occupied)'},
+    {tab:'single', tile:'R004', desc:'Dirty tile'},
+    {tab:'single', tile:'R010', desc:'OOS tile in Single tab'},
+    {tab:'watch', tile:'R002', desc:'overtime tile in Watch tab'},
+    {tab:'watch', tile:'L020', desc:'OOS tile in Watch tab (bottom row)'},
+  ];
+  expansionCases.forEach(c => {
+    const result = testOverlayContainment(c.tile, c.tab);
+    if (result.skip) return;
+    tests.push({
+      name: `Expand ${c.tile} (${c.desc}) overlay stays in viewport`,
+      pass: result.ok,
+      detail: result.msg
+    });
+  });
+
+  // M4: scrolling the .board closes any open expanded overlay
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = 'L001'; STATE.vacateExpandedTileId = null; render();
+  const m4Board = document.querySelector('.board');
+  if (m4Board) m4Board.dispatchEvent(new Event('scroll'));
+  tests.push({name: 'Scrolling .board closes the expanded overlay (M4)', pass: STATE.expandedTileId === null});
+
+  // S2: Set OOS modal includes the audit-preview line mirroring Return-to-Service
+  STATE.expandedTileId = null; openOOSModal('L001');
+  const s2Modal = document.getElementById('oos-modal-backdrop');
+  tests.push({
+    name: 'Set OOS modal shows audit preview line (S2)',
+    pass: !!s2Modal && s2Modal.innerHTML.includes('Set out of service by') && s2Modal.innerHTML.includes(STATE.attendant)
+  });
+  closeOOSModal();
+
+  // S4: liveTick re-renders normally and skips when overlay/modal is open
+  STATE.expandedTileId = null; STATE.oosModalOpen = false; STATE.returnModalOpen = false; render();
+  const s4Header1 = document.querySelector('.header');
+  liveTick();
+  const s4Header2 = document.querySelector('.header');
+  tests.push({
+    name: 'liveTick re-renders header when no overlay/modal (S4)',
+    pass: !!s4Header2 && s4Header1 !== s4Header2
+  });
+  // Skip when expanded overlay is open
+  STATE.expandedTileId = 'L001'; render();
+  const s4OverlayBefore = document.getElementById('expanded-overlay');
+  liveTick();
+  const s4OverlayAfter = document.getElementById('expanded-overlay');
+  tests.push({
+    name: 'liveTick skips render while expanded overlay is open (S4)',
+    pass: !!s4OverlayBefore && s4OverlayBefore === s4OverlayAfter
+  });
+  // Skip when modal is open — typed-note state survives the tick
+  STATE.expandedTileId = null; openOOSModal('L001');
+  document.getElementById('oos-reason').value = 'Plumbing';
+  liveTick();
+  tests.push({
+    name: 'liveTick skips render while OOS modal is open, preserves selection (S4)',
+    pass: document.getElementById('oos-reason').value === 'Plumbing'
+  });
+  closeOOSModal();
+
+  // S6: Clear button clears the OOS note textarea when "Other" is selected
+  openOOSModal('L001');
+  document.getElementById('oos-reason').value = 'Other';
+  onOOSReasonChange();
+  const s6Wrap = document.getElementById('oos-note-wrap');
+  const s6ClearBtn = document.getElementById('oos-note-clear');
+  const s6Note = document.getElementById('oos-note');
+  s6Note.value = 'Some typed text';
+  tests.push({
+    name: 'OOS Note wrapper visible when "Other" reason selected (S6)',
+    pass: !!s6Wrap && !s6Wrap.classList.contains('hidden')
+  });
+  tests.push({name: 'OOS Note Clear button rendered (S6)', pass: !!s6ClearBtn});
+  if (s6ClearBtn) s6ClearBtn.click();
+  tests.push({name: 'OOS Note Clear button empties the textarea (S6)', pass: s6Note.value === ''});
+  closeOOSModal();
+
+  // M5: source tile must have animation:none so it doesn't pulse under the overlay
+  STATE.currentTab = 'single'; STATE.expandedTileId = 'R002'; STATE.vacateExpandedTileId = null; render();
+  const m5Source = document.querySelector('.tile.is-source');
+  const m5Anim = m5Source ? getComputedStyle(m5Source).animationName : '';
+  tests.push({name: 'is-source tile has animation:none (M5, no pulse-strong under overlay)', pass: m5Anim === 'none'});
+
+  // Reset for user interaction
+  STATE.currentTab = 'lockers'; STATE.expandedTileId = null; STATE.vacateExpandedTileId = null;
+  STATE.oosModalOpen = false; STATE.oosModalAssetId = null;
+  render();
+
+  // Render results
+  const passed = tests.filter(t => t.pass).length;
+  const failed = tests.filter(t => !t.pass);
+  const resultsEl = document.getElementById('test-results');
+  if (failed.length === 0) {
+    resultsEl.className = 'pass';
+    resultsEl.innerHTML = `<strong>✓ ALL ${tests.length} INTERACTIVE TESTS PASS</strong><br>Verified: header, tabs, sections, tiles, warning/overtime states, OOS day counter, expand-to-1.5×, action buttons (all 4 statuses), Vacate sub-buttons, OOS reason modal with 7 options, Watch tab, footer per-tab counts, viewport fits iPad 11 Safari (716px tablet height), <strong>and every expanded tile stays inside the screen at all corners and edges</strong>.`;
+  } else {
+    resultsEl.className = 'fail';
+    resultsEl.innerHTML = `<strong>✗ ${failed.length} of ${tests.length} TESTS FAILED:</strong><br>` + failed.map(f => `· ${f.name}${f.detail ? ' — '+f.detail : ''}`).join('<br>');
+  }
+}
+setTimeout(runTests, 50);
+</script>
+
+</body>
+</html>
