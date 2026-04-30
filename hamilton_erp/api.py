@@ -178,7 +178,67 @@ def get_asset_board_data() -> dict:
 			if a["status"] == "Out of Service" else None
 		)
 
-	return {"assets": assets, "settings": _get_hamilton_settings()}
+	# V9.1 retail amendment: enrich payload with retail Items grouped by
+	# Item Group when the venue has `retail_tabs` configured in
+	# site_config.json. Empty config (or no retail Items) returns empty
+	# arrays — venues with no retail surface get an asset-only board with
+	# no extra queries.
+	retail_payload = _get_retail_payload()
+	return {
+		"assets": assets,
+		"settings": _get_hamilton_settings(),
+		"items": retail_payload["items"],
+		"retail_tabs": retail_payload["retail_tabs"],
+	}
+
+
+def _get_retail_payload() -> dict:
+	"""Return retail Items + tab list for venues that opt in via site_config.
+
+	`site_config.json` key `retail_tabs` is a list of Item Group names. Each
+	maps to a tab in the Asset Board. Items in the configured groups are
+	fetched in one batched query, and stock counts come from one batched
+	`Bin` query against the venue's default Warehouse.
+
+	Total queries: 0 (when no retail config), 2 (Item + Bin) otherwise.
+	No N+1.
+	"""
+	tabs = frappe.conf.get("retail_tabs") or []
+	if not isinstance(tabs, list) or not tabs:
+		return {"items": [], "retail_tabs": []}
+
+	default_warehouse = frappe.db.get_single_value(
+		"Stock Settings", "default_warehouse"
+	)
+	# Active Items in any of the configured groups.
+	items = frappe.get_all(
+		"Item",
+		filters={
+			"item_group": ["in", tabs],
+			"disabled": 0,
+		},
+		fields=[
+			"name", "item_code", "item_name", "item_group",
+			"image", "standard_rate",
+		],
+		order_by="item_group asc, item_code asc",
+	)
+	# Stock counts via Bin (per-warehouse). Filter to the venue's default
+	# warehouse — multi-warehouse selection is deferred per V9.1-D7.
+	stock_by_item: dict[str, float] = {}
+	if items and default_warehouse:
+		bin_rows = frappe.get_all(
+			"Bin",
+			filters={
+				"item_code": ["in", [i["item_code"] for i in items]],
+				"warehouse": default_warehouse,
+			},
+			fields=["item_code", "actual_qty"],
+		)
+		stock_by_item = {b["item_code"]: b["actual_qty"] for b in bin_rows}
+	for it in items:
+		it["stock"] = float(stock_by_item.get(it["item_code"], 0) or 0)
+	return {"items": items, "retail_tabs": tabs}
 
 
 def _get_hamilton_settings() -> dict:

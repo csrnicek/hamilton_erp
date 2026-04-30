@@ -62,7 +62,8 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	// Room assets get auto-hidden via the categoryHasAssets check.
 	// V9 Decision 1.2: tab visibility = enabled-in-config AND has-at-least-one-asset.
 	get tabs() {
-		return [
+		// Asset-category tabs (V9). Watch always renders far right.
+		const asset_tabs = [
 			{ id: "lockers", label: __("Lockers"), filter: (a) => a.asset_category === "Locker" },
 			{ id: "single", label: __("Single"), filter: (a) => a.asset_category === "Room" && (a.asset_tier === "Single Standard" || a.asset_tier === "Deluxe Single") },
 			{ id: "double", label: __("Double"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "Double Deluxe" },
@@ -70,6 +71,20 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			{ id: "gh-room", label: __("GH Room"), filter: (a) => a.asset_category === "Room" && a.asset_tier === "GH Room" },
 			{ id: "waitlist", label: __("Waitlist"), feature_flag: "show_waitlist_tab", placeholder: true },
 			{ id: "other", label: __("Other"), feature_flag: "show_other_tab", placeholder: true },
+		];
+		// V9.1 retail tabs from site_config.retail_tabs. Each Item Group
+		// becomes one retail tab. Tab id is "retail-<slug>" so it can't
+		// collide with asset tab ids.
+		const retail_tabs = (this.retail_tabs || []).map((group_name) => ({
+			id: `retail-${group_name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`,
+			label: group_name,
+			retail: true,
+			item_group: group_name,
+			item_filter: (it) => it.item_group === group_name,
+		}));
+		return [
+			...asset_tabs,
+			...retail_tabs,
 			{ id: "watch", label: __("Watch"), watch: true },
 		];
 	}
@@ -95,6 +110,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		});
 		this.assets = r.message.assets;
 		this.settings = r.message.settings;
+		// V9.1 retail amendment — items from configured Item Groups + the
+		// per-venue retail_tabs list. Empty for venues without retail config.
+		this.items = r.message.items || [];
+		this.retail_tabs = r.message.retail_tabs || [];
 	}
 
 	// ── Shell: header + tabs + content area + footer ────────
@@ -109,6 +128,9 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			if (t.watch) return true;
 			if (t.feature_flag && !this.settings[t.feature_flag]) return false;
 			if (t.placeholder) return true;  // placeholder tabs (Waitlist/Other) skip asset check
+			// V9.1 retail tabs: visible only if their Item Group has at
+			// least one Item (combined config + data rule extends to retail).
+			if (t.retail) return this.items.some(t.item_filter);
 			if (typeof t.filter !== "function") return true;
 			return this.assets.some(t.filter);
 		});
@@ -124,6 +146,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				if (count > 0) {
 					badge = `<span class="hamilton-badge hamilton-badge-watch">${count}</span>`;
 				}
+			} else if (t.retail) {
+				// Retail badge: count of Items in this Item Group.
+				const count = this.items.filter(t.item_filter).length;
+				badge = `<span class="hamilton-badge hamilton-badge-available">${count}</span>`;
 			} else if (!t.placeholder) {
 				const count = this.get_tab_available_count(t);
 				badge = `<span class="hamilton-badge hamilton-badge-available">${count}</span>`;
@@ -195,6 +221,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			$content.html(`<div class="hamilton-placeholder">
 				${__("No assets configured")} &mdash; ${__("This tab is controlled by venue settings")}
 			</div>`);
+		} else if (tab.retail) {
+			// V9.1 retail tab — render Item tiles instead of asset tiles.
+			const tab_items = this.items.filter(tab.item_filter);
+			$content.html(this._render_retail_grid(tab_items));
 		} else {
 			const tab_assets = this.assets.filter(tab.filter);
 			$content.html(this._render_status_sections(tab_assets));
@@ -381,6 +411,42 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>
 				${time_html}
 				${oos_days_html}
+			</div>
+		`;
+	}
+
+	// ── V9.1 Retail tiles ───────────────────────────────────
+	// Per docs/design/V9.1_RETAIL_AMENDMENT.md decisions D5–D7. Retail
+	// tiles are READ-ONLY in V9.1 — click does nothing. Cart UX is
+	// round-2 work and will define the click behavior.
+	_render_retail_grid(items) {
+		if (!items || items.length === 0) {
+			return `<div class="hamilton-empty">${__("No items in this category")}</div>`;
+		}
+		return `<div class="hamilton-retail-grid">${items.map((it) => this._render_retail_tile(it)).join("")}</div>`;
+	}
+
+	_render_retail_tile(item) {
+		// Stock state palette per V9.1-D6:
+		//   in stock (>=4) → green (matches asset Available)
+		//   low (1-3)      → amber (matches asset Dirty)
+		//   out (0)        → red   (matches asset Occupied)
+		const stock = Number(item.stock || 0);
+		let state_cls = "hamilton-status-available";
+		if (stock <= 0) state_cls = "hamilton-status-occupied";
+		else if (stock <= 3) state_cls = "hamilton-status-dirty";
+
+		const price = (Number(item.standard_rate) || 0).toFixed(2);
+		return `
+			<div class="hamilton-tile hamilton-retail-tile ${state_cls}"
+			     data-item-code="${frappe.utils.escape_html(item.item_code)}"
+			     data-stock="${stock}">
+				<div class="hamilton-retail-row1">
+					<span class="hamilton-retail-code">${frappe.utils.escape_html(item.item_code || "")}</span>
+					<span class="hamilton-retail-stock">${stock}</span>
+				</div>
+				<div class="hamilton-retail-name">${frappe.utils.escape_html(item.item_name || "")}</div>
+				<div class="hamilton-retail-price">$${price}</div>
 			</div>
 		`;
 	}

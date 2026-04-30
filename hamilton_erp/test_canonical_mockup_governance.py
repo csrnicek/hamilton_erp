@@ -217,7 +217,10 @@ class TestCanonicalMockupGovernance(IntegrationTestCase):
 
 	def test_canonical_mockup_has_gospel_block(self):
 		"""Canonical mockup must contain the gospel declaration block."""
-		path = os.path.join(_design_dir(), "V9_CANONICAL_MOCKUP.html")
+		# Resolve the canonical path via the manifest, not a hardcoded V9
+		# string — the canonical chain may have bumped to V10 or higher.
+		manifest = self._load_manifest_or_fail()
+		path = os.path.join(_hamilton_erp_root(), manifest["canonical_path"])
 		with open(path) as f:
 			content = f.read(8192)  # First 8KB; gospel block sits at top
 

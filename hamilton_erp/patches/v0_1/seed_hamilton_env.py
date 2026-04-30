@@ -15,6 +15,56 @@ def execute():
 	_ensure_walkin_customer()
 	_ensure_hamilton_settings()
 	_ensure_venue_assets()
+	_ensure_retail_items()
+
+
+# V9.1 retail amendment seed (Item Group + sample Items + initial stock).
+# Idempotent — safe to re-run. See docs/design/V9.1_RETAIL_AMENDMENT.md.
+HAMILTON_RETAIL_ITEM_GROUP = "Drink/Food"
+HAMILTON_RETAIL_ITEMS = [
+	{"item_code": "WAT-500", "item_name": "Water 500ml", "rate": 3.50},
+	{"item_code": "GAT-500", "item_name": "Sports Drink 500ml", "rate": 5.00},
+	{"item_code": "BAR-PROT", "item_name": "Protein Bar", "rate": 4.00},
+	{"item_code": "BAR-ENRG", "item_name": "Energy Bar", "rate": 4.50},
+]
+HAMILTON_RETAIL_INITIAL_STOCK_QTY = 24
+
+
+def _ensure_retail_items():
+	"""Seed Hamilton's V9.1 retail catalogue: 1 Item Group + 4 sample Items.
+
+	Inventory (initial stock count) is NOT seeded by this patch — Stock
+	Entries are venue-specific data that belongs in the venue's own stocking
+	flow, not in committed code. Hamilton's stocking is done manually via
+	`bench --site … console` after first install (or via the Frappe Cloud
+	Desk UI). The amendment doc lists the verification step.
+	"""
+	# Item Group
+	if not frappe.db.exists("Item Group", HAMILTON_RETAIL_ITEM_GROUP):
+		parent = frappe.db.get_value(
+			"Item Group", {"is_group": 1, "name": "All Item Groups"}, "name",
+		) or "All Item Groups"
+		frappe.get_doc({
+			"doctype": "Item Group",
+			"item_group_name": HAMILTON_RETAIL_ITEM_GROUP,
+			"parent_item_group": parent,
+			"is_group": 0,
+		}).insert(ignore_permissions=True)
+
+	# Items
+	for spec in HAMILTON_RETAIL_ITEMS:
+		if frappe.db.exists("Item", spec["item_code"]):
+			continue
+		frappe.get_doc({
+			"doctype": "Item",
+			"item_code": spec["item_code"],
+			"item_name": spec["item_name"],
+			"item_group": HAMILTON_RETAIL_ITEM_GROUP,
+			"stock_uom": "Nos",
+			"is_stock_item": 1,
+			"include_item_in_manufacturing": 0,
+			"standard_rate": spec["rate"],
+		}).insert(ignore_permissions=True)
 
 
 def _ensure_walkin_customer():
