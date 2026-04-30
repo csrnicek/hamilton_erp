@@ -613,3 +613,695 @@ Bug #1 ("RTS modal Reason unknown") is **already fixed in main** as of PR #35. I
 - Dirty-for-Xm timer
 
 If the "Reason unknown" symptom persists after the user's restart + refresh, the next investigation step is to capture the actual API response payload (browser DevTools → Network tab → `get_asset_board_data` response) and confirm whether `reason` is in the payload for the OOS asset.
+
+## 2026-04-29 — Late evening
+
+### Pre-Handoff Research — Prompt 1 (ERPNext production best practices)
+
+**Headline.** Hamilton ERP is in good structural shape for a v16 custom app — `hooks.py` is well-organized, fixtures are filtered to avoid cross-app contamination, `after_install` is idempotent, and CI runs on the upstream-correct Python 3.14 / Node 24 / MariaDB 11.8 / Redis stack. But there are six concrete gaps a senior Frappe developer would call out at handoff: (1) `hooks.py` line ~69 still uses `extend_doctype_class` correctly but the `override_doctype_class` migration story isn't documented, (2) the wildcard `*` in scheduler/doc_events isn't used yet but its perf trap should be a written rule before Phase 2, (3) `property_setter.json` is empty (0 bytes — known Frappe gotcha, file kept on disk by exporter but contributes nothing), (4) no Sentry/external error monitoring is wired up despite Frappe Cloud's built-in monitoring being analytics-only with no alerting, (5) v16's new `mask: 1` field-level data masking is unused even though comp/payment data would benefit, and (6) there is no documented `init.sh` or fresh-bench bootstrap script — the install path is `bench install-app` + `after_install` only, which works but doesn't capture the full re-create-from-zero workflow a new developer would need. Everything else (patches.txt structure, fixtures filter, role permission gating, audit/version tracking, CI conformance gates) is at or above industry standard for an AI-assisted single-developer build.
+
+---
+
+#### 1. Custom app structure and upgrade safety
+
+**What Frappe expects under `apps/<app>/<app>/`:** the canonical layout is `apps/<app_name>/<app_name>/` with `__init__.py`, `hooks.py`, `modules.txt`, `patches.txt`, plus subdirs for each module containing DocType folders. The outer directory holds `pyproject.toml`, `MANIFEST.in`, `license.txt`, `README.md`, `setup.py`. Hamilton ERP follows this exactly — verified at `/Users/chrissrnicek/hamilton_erp/hamilton_erp/`.
+
+**What breaks `bench update`:**
+- Editing core DocType JSON files in `apps/frappe/` or `apps/erpnext/` directly — these get overwritten on `bench update --pull`. Use Custom Field / Property Setter fixtures instead.
+- Forgetting to commit `modules.txt` after creating a new module — the migration runner can't find DocTypes whose `module` field references an unlisted module.
+- Mixing developer-mode JSON edits with database-only edits without `bench export-fixtures` — schema drift between dev and prod.
+- Leaving `developer_mode = 0` in `site_config.json` while editing DocType JSONs locally — changes go to DB only and disappear on next `bench migrate` from a fresh checkout.
+
+**`extend_doctype_class` vs `override_doctype_class` (v16):** `override_doctype_class` has a "last app wins" defect — when two apps both override the same DocType, only the last-installed wins, silently breaking the other app. v16 introduced `extend_doctype_class` which composes mixins via MRO so multiple apps can coexist. Hamilton ERP uses `extend_doctype_class` for `Sales Invoice → HamiltonSalesInvoice` (verified `hooks.py` line 69) — this is the correct v16 pattern. **Concrete rule for handoff:** never reach for `override_doctype_class` in v16+ unless you genuinely need to replace, not extend, the parent class. ([extend_doctype_class proposal #33940](https://github.com/frappe/frappe/issues/33940), [Override doctype hook PR #11527](https://github.com/frappe/frappe/pull/11527))
+
+**Already covered:** Hamilton ERP's app structure, `extend_doctype_class` usage, and modules.txt are correct.
+
+**Gap:** No `CHANGELOG.md` or `app_version` bump policy documented. v16 bench update behavior reads `app_version` to decide whether to run patches; if you forget to bump it the patches still run (driven by `patches.txt` row presence), but a release-discipline note would help the next dev.
+
+---
+
+#### 2. Fixtures
+
+**How declared in `hooks.py`:** the `fixtures` list takes either bare DocType names or dicts with `dt` and `filters`. Filters are crucial — without them, `bench export-fixtures` exports every Custom Field / Property Setter / Role on the site, including ones from other apps. Hamilton ERP gets this right with `[["name", "like", "%-hamilton_%"]]` filters on Custom Field and Property Setter.
+
+**What `bench export-fixtures` exports:** the command iterates the `fixtures` hook from every installed app and writes JSON files to `<app>/fixtures/<doctype_snake_case>.json`. The file is overwritten on every export — there is no merge.
+
+**Empty `property_setter.json` gotcha:** if your filter matches zero rows (or the filter is wrong), the exporter still creates/keeps the file at zero bytes — it does not delete it. Hamilton ERP has this exact symptom: `fixtures/property_setter.json` is 0 lines. This is **not necessarily a bug** — it just means no Hamilton-prefixed Property Setters exist yet — but a senior dev will flag it because (a) it's indistinguishable from a broken filter, and (b) on `bench migrate` the empty array is loaded and silently does nothing. Best practice: either add a comment in the file (`[]` with a header) or delete the empty file and let it regenerate when needed. ([Can't export property setter](https://discuss.frappe.io/t/cant-export-property-setter/131284))
+
+**Always-include fixtures for multi-venue rollout:**
+- `Custom Field` with name filter — schema customizations.
+- `Property Setter` with name filter — field reorders, defaults, validations.
+- `Role` — custom roles must exist before role-permission rows reference them.
+- `Custom DocPerm` — role permission rows (otherwise rebuilt sites have empty perm tables for your custom DocTypes).
+- `Workflow`, `Workflow State`, `Workflow Action Master` — only if your app uses workflows.
+- `Print Format` — if your app ships printable documents.
+- `Letter Head`, `Email Template` — if shipped per-venue.
+- `Server Script`, `Client Script` — controversial: many teams ban these from fixtures because they're code-as-data and bypass code review. Hamilton ERP's `tests.yml` enables `server_script_enabled = 1` but doesn't ship server scripts as fixtures — that's the right call.
+
+**Gap:** Hamilton ERP's fixtures don't include `Custom DocPerm`. The 6 Hamilton DocTypes all gate by the `Hamilton Operator` role (per memory observation 1691) but the *permission rows themselves* are created in `setup/install.py`, not exported. That works, but means if `install.py` changes a perm row, sites already deployed won't pick up the change without a separate patch. Industry-standard pattern: export `Custom DocPerm` filtered to your roles and let `bench migrate` reconcile.
+
+---
+
+#### 3. Patches
+
+**How `patches.txt` works:** INI-like file with `[pre_model_sync]` and `[post_model_sync]` sections. Each line is a Python module path. Lines must be unique. Frappe records executed patches in `tabPatch Log`; a patch never runs twice. ([Database Migrations docs](https://docs.frappe.io/framework/v15/user/en/database-migrations))
+
+**Section semantics:**
+- `[pre_model_sync]` runs *before* DocType JSON → DB schema sync. Use only when you need the OLD schema to migrate data (e.g. you're about to drop a column and want to copy values somewhere first).
+- `[post_model_sync]` runs *after* schema sync. All DocTypes already reloaded — no manual `frappe.reload_doc()` needed. **Default for ~95% of patches.** Hamilton ERP correctly puts both v0_1 patches here.
+
+**Hook firing order (full bench migrate cycle):**
+1. `before_migrate` (per app, in install order)
+2. Pre-model-sync patches (per app)
+3. DocType schema sync (all apps)
+4. Post-model-sync patches (per app)
+5. Fixtures sync (per app)
+6. `after_migrate` (per app, in install order)
+
+**`before_install` vs `after_install`:**
+- `before_install` — fires before any DocTypes from your app are loaded into the DB. Limited utility; can't reference your own DocTypes yet. Useful for prerequisite checks ("is ERPNext installed?").
+- `after_install` — fires after DocTypes loaded but before site is "ready". This is where seed data goes. **Critical v16 detail:** `install_app()` calls `set_all_patches_as_completed()` which marks `patches.txt` lines as done WITHOUT running them. So initial seed data MUST live in `after_install`, not in a patch. Hamilton ERP's `setup/install.py` docstring captures this correctly.
+
+**Right place for idempotent seed data:** `after_install` for first-time seed; a post_model_sync patch for *changes* to seed (e.g. adding a new role to existing sites). Always guard inserts with `frappe.db.exists()` checks.
+
+**Already covered:** Hamilton ERP's two patches and `after_install` follow this pattern correctly.
+
+**Gap:** No documented "patch authoring template." A senior dev expects a docstring on every patch describing what it does, why, and idempotency proof. Hamilton ERP's `seed_hamilton_env.py` and `rename_glory_hole_to_gh_room.py` should both have this — verify next session.
+
+---
+
+#### 4. `hooks.py` best practices
+
+**Wildcard `*` events vs specific DocType events:** `doc_events = {"*": {...}}` fires on every save of every DocType. For an audit-log app, fine. For a single-DocType validation, catastrophic — Frappe's hook dispatcher loads and calls your handler on every Note, every Comment, every File upload. Always prefer `doc_events = {"Sales Invoice": {...}}` over `*` unless you genuinely need universal coverage. ([Run on all event and all doctype](https://discuss.frappe.io/t/run-on-all-event-and-all-doctype/134607))
+
+**Try-except in doc_events (silent failures):** never wrap a doc_event handler body in `try/except: pass`. Frappe relies on hook handlers raising to abort the transaction. A swallowed exception leaves the DB in a half-saved state and produces no error log. **Rule:** if you must catch, log via `frappe.log_error()` and re-raise. The only legitimate catch-and-suppress is for non-critical side effects like analytics pings.
+
+**`extend_doctype_class` vs `override_doctype_class`:** covered in §1 above. Always call `super()` in extended methods.
+
+**`scheduler_events` caching:** scheduler reads `hooks.py` at process start. After editing `hooks.py` you must `bench restart` (or `supervisorctl restart all` in prod) — *and* run `bench --site SITE migrate` so the corresponding `Scheduled Job Type` rows get inserted/updated. Without migrate, the entry exists in `hooks.py` but the scheduler doesn't know about it because Scheduled Job Type is the source of truth at runtime. ([Scheduler not running](https://discuss.frappe.io/t/scheduler-from-hooks-is-not-working/61479), [Scheduler Not Working: Causes and Fixes](https://tidyrepo.com/frappe-scheduler-not-working-causes-and-fixes/))
+
+**Fixtures / patches / installs ordering:** within one bench operation:
+1. `before_install` (install only)
+2. App's DocTypes loaded into DB
+3. Patches (post_model_sync only on install, since `set_all_patches_as_completed` already ran)
+4. Fixtures synced
+5. `after_install` (install only) OR `after_migrate` (migrate only)
+
+So: do NOT depend on fixtures inside `before_install`, and DO depend on fixtures inside `after_install` (roles from `fixtures/role.json` are loaded before `after_install` fires — Hamilton ERP's `_set_role_permissions` correctly relies on this).
+
+**Already covered:** Hamilton ERP uses specific DocType events (no `*`), uses `extend_doctype_class`, restarts after hook changes (memory observation 915 documented this).
+
+**Gap:** No written rule banning `try/except: pass` in doc_events. Add to `coding_standards.md` before handoff.
+
+**Gap:** Memory observation 1063 flags "hooks.py Line 69 Uses override_doctype_class — Known Bug to Fix" but the current file shows `extend_doctype_class` at line 69. Either the bug was already fixed (likely, given the current file content) or the memory is stale. Verify and clear the observation.
+
+---
+
+#### 5. CI/CD with GitHub Actions
+
+**Canonical workflow shape:** Frappe doesn't ship an officially-published reusable Action — every custom app rolls its own. The community-canonical pattern is what Hamilton ERP's `tests.yml` already does:
+1. Service container: MariaDB 11.x with `MARIADB_ROOT_PASSWORD`
+2. `actions/checkout@v4` for app + `frappe/frappe@version-16` + `frappe/erpnext@version-16` (+ `frappe/payments@develop` if needed for setUpClass dependency walk)
+3. `actions/setup-python@v5` with `python-version: "3.14"`
+4. `actions/setup-node@v4` with `node-version: "24"`
+5. `npm install -g yarn`
+6. apt: `mariadb-client libmariadb-dev libcups2-dev redis-server wkhtmltopdf`
+7. `pip install frappe-bench`
+8. `bench init --frappe-path <local-checkout> --skip-assets --no-backups --python "$(which python)" --ignore-exist`
+9. Trim Procfile (drop `watch:` and `schedule:` lines for CI)
+10. `bench get-app --skip-assets <each app>`
+11. `bench start &` then poll Redis ports 13000 (cache) + 11000 (queue)
+12. `bench new-site test_site --install-app ...`
+13. `bench --site test_site set-config allow_tests 1 --parse`
+14. `bench --site test_site run-tests --app <app>`
+
+Hamilton ERP's `tests.yml` is unusually thorough — the install-conformance gate (lines 215+) that asserts `desktop:home_page='setup-wizard'` is cleared *without* a follow-up `bench migrate` is exactly the kind of regression pin a senior Frappe dev would write. ([Frappe DevOps CI/CD guide](https://frappedevops.hashnode.dev/how-to-setup-ci-cd-for-the-frappe-applications-using-github-actions))
+
+**Required upstream version pins (do not downgrade):**
+- Python: `>=3.14,<3.15` (PEP 695 syntax in Frappe v16 source — older Python fails with `SyntaxError`)
+- Node: `>=24` (Frappe's `package.json` `engines.node` enforces this; yarn install rejects Node 20)
+- MariaDB: `>=11.x` (UTF-8 charset + JSON column features)
+- Redis: any 6+ (bench Procfile spawns its own on 13000/11000)
+
+**Community-published Actions:** none official. Some teams use `rtCamp/frappe-deployer` for deploy steps, but for tests, in-line workflow is the norm. The Frappe wiki has a "Shared Test CI Actions" page but it's a stub — don't rely on it.
+
+**Already covered:** Hamilton ERP's CI is at the high end of community quality (PR #9 hardened it; install-conformance gate is rare).
+
+**Gap:** No nightly cron-triggered run against `frappe:develop` to catch upstream breaking changes early. Add `schedule: - cron: '0 6 * * *'` to a copy of the workflow that points at `develop` instead of `version-16`. This is the single most valuable add for handoff because it gives the new dev early warning of upstream regressions.
+
+**Gap:** No `concurrency:` block in `tests.yml` — concurrent pushes to the same PR all run in parallel. Add `concurrency: { group: ${{ github.workflow }}-${{ github.ref }}, cancel-in-progress: true }` to save CI minutes.
+
+---
+
+#### 6. Role-based permissions and field masking
+
+**Frappe v16 permission model basics (unchanged):** Role + DocPerm row + (optional) User Permission + (optional) Permission Query Conditions. Default deny — every read/write requires an explicit permission rule.
+
+**Permission Levels (perm_level):** group fields by integer level (0, 1, 2, ...). Role can have read/write on level 0 but only read on level 2. This is how you make a field read-only-for-some, editable-for-others without a separate DocType. ([Managing Perm Level](https://docs.frappe.io/erpnext/user/manual/en/managing-perm-level))
+
+**v16's new feature — field-level data masking:** add `"mask": 1` to a DocField. Users without the mask permlevel see `xxxx` placeholders; authorized users see the real value. Coverage: form, list, standard report, REST API (`/api/resource/...`, `/api/method/...`). **Limitation:** custom SQL queries and Query Reports using raw SQL bypass masking — you must mask manually in those code paths. Supports Data, Phone, Password, Currency, Date, Datetime, Float, Int, Link, Dynamic Link, Select, Read Only, Percent, Duration field types. ([Data Masking docs](https://docs.frappe.io/framework/data-masking))
+
+**How to test permissions:** in test code, switch user with `frappe.set_user("operator@example.com")`, then call `frappe.has_permission("DocType", "read", doc=doc)`. For ptype-specific tests use `frappe.has_permission("DocType", ptype="write", doc=doc)`. Reset with `frappe.set_user("Administrator")` in tearDown. The `frappe.tests.IntegrationTestCase` auto-resets user between tests but not within.
+
+**Already covered:** Hamilton ERP gates 6 DocTypes by `Hamilton Operator` role (memory observation 1691). Role fixtures are exported correctly.
+
+**Gap:** Comp Admission Log and Cash Drop both contain financially sensitive data (PIN entries, blind cash totals). Neither uses v16 field masking. Adding `"mask": 1` to the operator PIN and any expected_total fields would be a low-effort, high-signal hardening for handoff. **This is the single most v16-idiomatic improvement available right now.**
+
+**Gap:** No tests assert that `Hamilton Operator` cannot read `Hamilton Manager`-only fields. The role permissions exist; nothing pins them. Add a `test_role_perms.py` with: switch to operator user, attempt read on Hamilton Manager-gated field, assert `frappe.PermissionError`.
+
+---
+
+#### 7. Audit Trail vs Document Versioning
+
+**Document Versioning (`tabVersion`):** enabled by checking `track_changes` on the DocType. On every save, Frappe inserts a Version row containing JSON diff (`{"changed": [[fieldname, old, new]], "added": [...], "removed": [...]}`). Tracks: field changes, child table additions/removals, child table field changes. Does NOT track: deletions of the parent doc, document submission/cancellation transitions (those go to Comment), permission changes, raw SQL writes via `frappe.db.sql()`. ([Document Versioning](https://docs.frappe.io/erpnext/user/manual/en/document-versioning))
+
+**Audit Trail (built-in v16 doctype):** layered on top of Versioning specifically for *submittable* doctypes that get amended (cancelled → new doc with `-1`, `-2` suffix). Audit Trail follows the amendment chain across name changes. Limitation: shows at most 5 amended versions back. ([Audit Trail docs](https://docs.frappe.io/framework/user/en/audit-trail))
+
+**Why you need a custom audit log on top:**
+1. Versioning misses **deletes** — when a doc is deleted, its Version rows go too. For regulatory audit you need an append-only log keyed by `(doctype, name, action, user, timestamp)`.
+2. Versioning misses **permission changes** — who granted/revoked which role to whom is not tracked. Build a dedicated DocType.
+3. Versioning misses **non-doctype state** — Redis lock acquire/release, scheduler job runs, payment gateway calls. These need a custom log.
+4. Versioning's JSON-diff format is hostile to compliance reporters — they want columnar data they can pivot in Excel. A custom append-only log with one row per change is friendlier.
+
+**Already covered:** Hamilton ERP has `Asset Status Log` and `Shift Record` which serve exactly this append-only role for asset state and shift events.
+
+**Gap:** Hamilton ERP doesn't enable `track_changes` on its 6 custom DocTypes. Verify next session — for `Venue Session`, `Cash Drop`, and `Cash Reconciliation` the lack of Versioning means an operator can edit a cash_drop after the fact and there's no built-in record. Audit Trail won't help here because these are not submittable. **Recommended:** turn on `track_changes` for all 6 DocTypes, ship as a Property Setter fixture if not already a DocType field default.
+
+---
+
+#### 8. Scheduler Jobs
+
+**Registration in `hooks.py`:**
+```python
+scheduler_events = {
+    "all": [...],          # every ~3 minutes (the system tick)
+    "hourly": [...],
+    "daily": [...],
+    "weekly": [...],
+    "monthly": [...],
+    "cron": {
+        "*/15 * * * *": ["myapp.tasks.every_15_min"],
+        "0 9 * * MON": ["myapp.tasks.weekly_monday_9am"],
+    },
+    "hourly_long": [...],  # for jobs > 5 minutes
+    "daily_long": [...],
+}
+```
+
+**Hamilton ERP's pattern:** `*/15 * * * *` cron registering `hamilton_erp.tasks.check_overtime_sessions`. Currently a no-op stub (memory observation 2309). That's fine for now; the registration is correct.
+
+**The migration gotcha:** `hooks.py` is the **declaration**, but `tabScheduled Job Type` is the **runtime source of truth**. Editing `hooks.py` does NOT add/remove rows in that table. You must run `bench --site SITE migrate` after every change. Without migrate: scheduler's `enqueue_events()` loops over `Scheduled Job Type` rows; your hook entry is invisible to it. This is the #1 cause of "I added a scheduled job but it's not running." ([Scheduler from hooks not working](https://discuss.frappe.io/t/scheduler-from-hooks-is-not-working/61479))
+
+**Other gotchas:**
+- `scheduler_enabled` in site_config.json must be `true` (default true on new sites; some Frappe Cloud setups have it false during maintenance).
+- Procfile must include `schedule:` line (Hamilton ERP's CI deliberately strips this — fine for tests, but make sure prod has it).
+- Long-running jobs (>5 min) must use `hourly_long` / `daily_long` event names to run on the long worker queue, otherwise they hit the default worker timeout (300s).
+- Each scheduled job runs as user `Administrator` — if your task does `frappe.has_permission()` checks, they pass trivially.
+
+**Already covered:** Hamilton ERP's scheduler entry is registered correctly with cron syntax.
+
+**Gap:** `check_overtime_sessions` is a no-op stub. For handoff, either remove the registration entirely or implement the body. A no-op scheduled job pollutes `tabScheduled Job Log` with success rows for nothing.
+
+---
+
+#### 9. Frappe Cloud error log monitoring
+
+**Built-in error log:** `tabError Log` DocType, populated by `frappe.log_error(title, message)`. Accessible at `/app/error-log`. Retention: rows older than `error_log_retention_days` (default 30) are deleted by the daily `frappe.utils.scheduler.cleanup_email_log` patch. **No alerting** — you must check manually or build a notification.
+
+**Frappe Cloud-specific monitoring:** the dashboard's "Analytics" tab shows requests/min, CPU usage, background jobs, uptime (every 3 min ping). `web.log`, `web.err.log`, `worker.log`, `worker.err.log` are downloadable from the Logs section. **Critically, there is no built-in alerting on Frappe Cloud** — analytics are visualization-only. ([Frappe Cloud Logs](https://docs.frappe.io/cloud/logs), [Frappe Cloud Monitoring](https://docs.frappe.io/cloud/sites/monitoring))
+
+**Logs that persist vs ephemeral:**
+- Persist (DB): Error Log, Activity Log, Email Queue, Scheduled Job Log, Version (per DocType).
+- Ephemeral (file): web.log, worker.log — rotated, not backed up. Lost on container restart in some Frappe Cloud configurations.
+- Persist with retention: Error Log Snapshot (saved request payload), retention default 7 days.
+
+**Sentry integration:** the [ParsimonyGit/frappe-sentry](https://github.com/ParsimonyGit/frappe-sentry) app monkey-patches `frappe.log_error` to forward to Sentry. v14-tested; community reports of v15 working with minor patches; v16 untested as of 2025-11. **Recommended pattern:** wire Sentry's `sentry_sdk` initialization into a custom `app_init` hook (or in `hooks.py` module-load) and add `before_request` / `after_request` instrumentation for tracing. ([frappe-sentry repo](https://github.com/ParsimonyGit/frappe-sentry))
+
+**Gap:** Hamilton ERP has zero external error monitoring. For a single-venue go-live this is acceptable (Chris reads error log manually). For 6-venue rollout it is not — you need at minimum a daily email digest of new Error Log entries. Quick fix: add a daily scheduled job that queries `tabError Log` for `creation > now() - 1d` and emails Chris if count > 0. Better fix: Sentry. **Decision required at handoff.**
+
+**Gap:** No log retention policy documented. Frappe defaults are fine but the new dev should know what they are.
+
+---
+
+#### 10. `init.sh` / startup script pattern
+
+**No standard.** Frappe's `bench init` creates a bench skeleton, then `bench get-app` + `bench install-app` add your code, but there is no canonical "fresh-bench bootstrap" script in the framework. Each shop rolls their own. The Anthropic harness pattern (single shell script that idempotently installs all needed apps and seeds reference data) does map cleanly onto Frappe.
+
+**Recommended pattern (idempotent fresh-bench script):**
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+BENCH_DIR="${BENCH_DIR:-frappe-bench-hamilton}"
+SITE="${SITE:-hamilton.localhost}"
+
+# 1. Bench init — guard with -d check
+[ -d "$BENCH_DIR" ] || bench init "$BENCH_DIR" --frappe-branch version-16 --python python3.14
+
+cd "$BENCH_DIR"
+
+# 2. Get apps — bench get-app is idempotent (checks existing dir)
+bench get-app --branch version-16 https://github.com/frappe/erpnext
+bench get-app --branch develop https://github.com/frappe/payments  # for setUpClass dep walk
+bench get-app --branch main https://github.com/csrnicek/hamilton_erp
+
+# 3. Site — guard with bench --site list
+if ! bench --site "$SITE" list-apps >/dev/null 2>&1; then
+    bench new-site "$SITE" --admin-password admin --mariadb-root-password admin \
+      --install-app erpnext --install-app payments --install-app hamilton_erp
+fi
+
+# 4. Config — set-config is idempotent
+bench --site "$SITE" set-config allow_tests 1 --parse
+bench --site "$SITE" set-config developer_mode 1 --parse
+
+echo "OK — bench ready at $BENCH_DIR / site $SITE"
+```
+
+**What it should configure:** developer_mode (dev only), allow_tests (test site only), maintenance_mode off, scheduler enabled, admin_password, db_host/db_port if non-default.
+
+**What it should NOT do:** modify production data, install fixtures from a different branch, hardcode secrets (use `${ADMIN_PASSWORD:?must set}` instead).
+
+**Gap:** Hamilton ERP has no such script committed. The `tests.yml` workflow performs equivalent steps but is GHA-specific — a new dev cloning fresh has to read the workflow and reverse-engineer it. **Add `scripts/init.sh` for handoff.** Estimated effort: 30 min.
+
+---
+
+#### 11. What a clean professional handoff looks like
+
+A senior Frappe dev receiving this codebase will look for these artifacts in this order:
+
+**Confidence signals (Hamilton ERP has these):**
+- `CLAUDE.md` / `README.md` with bench setup, test invocation, deploy steps. **Present.**
+- `docs/decisions_log.md` with numbered decisions and dates. **Present** (DEC-001 through DEC-060).
+- `docs/coding_standards.md`. **Present.**
+- CI workflow that runs on PR + push, passes green. **Present** (`tests.yml`).
+- Test suite covering happy path + adversarial + edge cases, >80% coverage on critical modules. **Present** (306+ tests, 14 modules per CLAUDE.md).
+- `pyproject.toml` with pinned dependencies + `[test]` extra. **Present** (verified in `tests.yml` step "Install hamilton_erp test extras").
+- Idempotent `after_install` and `after_migrate` hooks. **Present** (`setup/install.py`).
+- Filtered fixtures (no cross-app contamination). **Present.**
+- Conformance tests (assert install path produces correct state). **Present** (the desktop:home_page gate).
+
+**Confidence signals (Hamilton ERP missing):**
+- `CHANGELOG.md` with version → date → changes. **Gap.**
+- `scripts/init.sh` for fresh-bench bootstrap. **Gap.**
+- External error monitoring (Sentry or daily digest). **Gap.**
+- Production runbook (how to deploy, how to roll back, how to handle X failure). Some of this is in `docs/venue_rollout_playbook.md` but not phrased as a runbook. **Partial.**
+- Architecture diagram (3-layer locking, asset state machine, data flow). **Gap** unless it's in `docs/design/` and I missed it.
+- `SECURITY.md` (vuln reporting policy, supported versions). **Gap.**
+- Load test results from a representative bench. **Present** (`test_load_10k.py` exists; results need a write-up).
+
+**Lack-of-confidence signals (avoid):**
+- `# TODO`, `# FIXME`, `# HACK` comments scattered in code without tracking.
+- Tests that import but don't actually assert (rubber-stamp tests).
+- Commented-out code blocks > 10 lines.
+- `print()` calls left in production code.
+- Hardcoded paths, passwords, or URLs.
+- Tests that depend on global seed and break in isolation.
+- A `requirements.txt` AND a `pyproject.toml` (pick one).
+- Empty fixture files (looks like a misconfigured filter).
+- `override_doctype_class` in v16 code (use `extend_doctype_class`).
+
+**Top-3 handoff priorities ranked by ROI:**
+
+1. **Add Sentry or equivalent error monitoring.** No senior dev will accept a multi-venue production deploy with manual error-log review. Highest ROI.
+2. **Enable v16 field masking on Cash Drop's `expected_total` and Comp Admission Log's PIN field.** This is the most v16-idiomatic improvement available and signals "this dev is up to date with v16 features." Low effort.
+3. **Write `scripts/init.sh`.** Lets the new dev clone, run one command, get a working bench. Reduces ramp-up from 2 hours to 5 minutes.
+
+**Citations / references:**
+
+- [Frappe Hooks Reference](https://docs.frappe.io/framework/user/en/python-api/hooks)
+- [Frappe v16 Migration Wiki](https://github.com/frappe/frappe/wiki/Migrating-to-version-16)
+- [Frappe v16 Release Notes](https://frappe.io/releases/version-16)
+- [extend_doctype_class proposal #33940](https://github.com/frappe/frappe/issues/33940)
+- [Database Migrations docs](https://docs.frappe.io/framework/v15/user/en/database-migrations)
+- [Audit Trail docs](https://docs.frappe.io/framework/user/en/audit-trail)
+- [Document Versioning](https://docs.frappe.io/erpnext/user/manual/en/document-versioning)
+- [Data Masking docs](https://docs.frappe.io/framework/data-masking)
+- [Managing Perm Level](https://docs.frappe.io/erpnext/user/manual/en/managing-perm-level)
+- [Frappe Cloud Logs](https://docs.frappe.io/cloud/logs)
+- [Frappe Cloud Monitoring](https://docs.frappe.io/cloud/sites/monitoring)
+- [Frappe Cloud App Patches](https://docs.frappe.io/cloud/benches/app-patches)
+- [Frappe-Sentry app](https://github.com/ParsimonyGit/frappe-sentry)
+- [Scheduler from hooks not working](https://discuss.frappe.io/t/scheduler-from-hooks-is-not-working/61479)
+- [Run on all event and all doctype](https://discuss.frappe.io/t/run-on-all-event-and-all-doctype/134607)
+- [Can't export property setter](https://discuss.frappe.io/t/cant-export-property-setter/131284)
+- [Override doctype hook PR #11527](https://github.com/frappe/frappe/pull/11527)
+- [Mastering ERPNext 16 Custom App Guide](https://davidmuraya.com/blog/develop-erpnext-custom-app/)
+- [Frappe DevOps CI/CD guide](https://frappedevops.hashnode.dev/how-to-setup-ci-cd-for-the-frappe-applications-using-github-actions)
+- [Frappe v16 release feature summary](https://tcbinfotech.com/frappe-version-16-release-notes/)
+
+---
+
+### Pre-Handoff Research — Prompt 4 (Multi-venue portability)
+
+**Headline:** Hamilton ERP's existing knowledge architecture (CLAUDE.md, claude_memory.md, decisions_log.md, lessons_learned.md, venue_rollout_playbook.md, Hamilton Settings SingleType) is fundamentally sound and mostly canonical for Frappe v16, but it has three structural gaps that will cost you on venue #2: (a) docs are chronological-only with no venue tag or topic index, so a Philadelphia-builder Claude can't ask "what does Hamilton know about cash drops" in one query; (b) the feature-flag layer is split between `site_config.json`, `Hamilton Settings`, and hardcoded venue logic with no documented decision rule on which to use when; (c) fixtures live in the repo (correct) but there is no `apply_venue_config.py` patch that idempotently materializes a venue from a single declarative config file, so onboarding still has manual steps. Fixing these three things — venue-tagged + topic-indexed docs, a written feature-flag decision rule, and a single-config-file venue installer — is what makes venue #2 50% faster than venue #1.
+
+#### 1. Repo vs AI memory vs external docs — what should live where
+
+The current buckets are roughly right. Mapped to canonical purpose:
+
+| Bucket | Current file | Purpose | Status |
+|---|---|---|---|
+| Hard rules + style | `CLAUDE.md` | Rules that must apply to every code change | Good |
+| Session bridge | `docs/claude_memory.md` | "What was done last session, where to start" | Good — but bloating (802 lines) |
+| Architectural decisions | `docs/decisions_log.md` | Why we chose X, what alternatives we rejected | Good |
+| Bug retrospectives | `docs/lessons_learned.md` | What broke and how we fixed it | Good — but venue-agnostic format |
+| Deploy runbook | `docs/venue_rollout_playbook.md` | Step-by-step new-venue checklist | Thin (156 lines) |
+| Inbox | `docs/inbox.md` | claude.ai → Claude Code bridge | Working as designed |
+
+**Gap:** no operations runbook for after a venue is live. The playbook stops at go-live. Each venue site needs documented procedures for: rotating an operator password, handling a stuck Redis lock in production, restoring a corrupt cash-drop, resetting setup_wizard.
+
+**Gap:** no `docs/venue_config_schema.md`. There is no single document that lists every per-venue configurable knob (tabs, currency, tax_mode, tablet_count, asset categories enabled, room count, locker count, etc.) with type, default, and where it lives.
+
+**Improve:** `claude_memory.md` is becoming a chronological session log instead of an index. At 802 lines it's eating context budget on every session. Split it: keep a short top-of-file "current state + last session summary" (max 100 lines) and move pre-2026-04-15 history to `docs/retrospectives/claude_memory_archive_2026Q1.md`.
+
+**Missing bucket:** `docs/venue_config/<venue>.yaml`. A declarative per-venue config file. Today the venue-specific values are scattered across the playbook table, hardcoded in JS (`venueConfig.tabs`), and implied in DEC-061..DEC-066. Centralize.
+
+#### 2. Doc structure for portability — venue-tagged, topic-indexed, hybrid
+
+**Today's structure is chronological-only.** That works for Hamilton-the-only-venue. It fails the moment a Philadelphia Claude session asks "show me everything we know about cash drops."
+
+**Proposal:** every entry gets two tags: `[venue]` and `[topic]`.
+
+```
+## DEC-061 — Tab visibility uses combined config + data rule
+- Date: 2026-04-13
+- Venues: [all]
+- Topic: [asset-board, frontend, venue-config]
+- Status: LOCKED
+- ...
+
+## LL-014 — Multi-tenant fixture export trap
+- Date: 2026-03-18
+- Venues: [hamilton]
+- Topic: [fixtures, deployment]
+- ...
+```
+
+Add a topic index at the head of each file. A venue-#2 Claude session can grep `[venue:hamilton]` to find Hamilton-specific lessons, and `[venues:all]` for cross-venue invariants.
+
+**Improve:** promote `docs/decisions_log.md` Part 1/2/3 structure into a real ADR (Architecture Decision Record) format. The current file mixes ADRs (DEC-001, DEC-002...) with prose sections. Pure ADR format (one decision per `## DEC-NNN` heading, with Context / Decision / Consequences subsections) matches what ChatGPT and Grok will expect when reading the file in 3-AI review.
+
+#### 3. Git branching strategy — single main, per-venue config files
+
+Frappe Cloud's architecture documents the canonical answer. Per [Frappe Cloud Benches docs](https://docs.frappe.io/cloud/what-are-benches-and-bench-groups): "A Bench is a collection of apps and sites where all sites on a Bench share the same configuration."
+
+**Recommendation: single `main` branch, per-venue config files. Do NOT use per-venue branches or per-venue forks.**
+
+- Per-venue branches diverge fast. Frappe and ERPNext push 5–20 commits per week to develop. Maintaining 6 long-lived venue branches and rebasing each one onto main is a maintenance tax that compounds.
+- Per-venue forks lose CI symmetry.
+- Per-venue config files match Frappe Cloud's mental model. Frappe Cloud expects one app, one repo, one branch, many sites. Each site gets its own `site_config.json`.
+
+**The "Group House Room category" problem (Hamilton has it, others won't) is a feature-flag problem, not a branching problem.**
+
+**For Frappe Cloud release groups:** use one private bench per region, not per venue. `bench-canada` → Hamilton (Toronto, Ottawa eventually); `bench-us-east` → Philadelphia, DC; `bench-us-central` → Dallas. This batches deploys within a region and lets you stagger v16.x → v16.y upgrades by region, not by venue.
+
+**Tags:** use git tags for production releases. `v0.4.0-hamilton`, `v0.4.1-hamilton-fix-cashdrop`. Frappe Cloud can pin a bench to a tag rather than a moving branch, which is the safest pattern for production.
+
+#### 4. Feature flags in Frappe — canonical pattern is layered
+
+Frappe gives you four mechanisms. Each has a canonical use. **Document the decision rule in CLAUDE.md** so future Claude sessions don't reinvent.
+
+| Mechanism | Where it lives | When to use | When NOT to use |
+|---|---|---|---|
+| **`site_config.json`** | Per-site JSON, accessed via `frappe.conf.get("key")` | Static venue identity (venue_id, currency, tax_mode), boolean feature toggles, secrets/API keys | User-editable settings, anything that needs validation, anything with a UI |
+| **SingleType DocType (e.g., `Hamilton Settings`)** | One row per site in DB, has Desk UI | User-editable settings (tablet_count, default_session_duration, cleaning_threshold_min) | Bootstrap config (chicken-and-egg if needed before DocType exists) |
+| **Custom Field with site default** | Per-site DB row | Per-document-type defaults (e.g., default warehouse on Sales Invoice) | Cross-cutting venue identity |
+| **Property Setter** | Per-site DB row | Modifying existing DocType field properties (hidden, mandatory, default, options) per venue | Anything that needs business logic |
+| **`frappe.get_hooks()` + conditional** | hooks.py code | Conditional registration of doc_events, scheduler tasks, override classes | Runtime-flippable flags (hooks load at boot) |
+
+**Canonical decision rule (recommend adding to CLAUDE.md):**
+
+1. Bootstrap / identity / secrets → `site_config.json`. Set with `bench --site X set-config key value`. Read with `frappe.conf.get("key", default)`.
+2. User-editable runtime settings → `Hamilton Settings` SingleType.
+3. Per-DocType field tweaks → fixture (Custom Field or Property Setter), filter-scoped.
+4. Hook-level conditional → read `site_config.json` inside the registered handler, not at registration time (per [issue #24680](https://github.com/frappe/frappe/issues/24680), `frappe.conf` is not always populated at hooks-load time).
+
+**Where Hamilton ERP gets this right today:** `Hamilton Settings` SingleType for venue runtime config. `site_config.json` flags. Filter-scoped fixtures in hooks.py.
+
+**Gap:** no documented decision rule. Write the rule into CLAUDE.md and into a new `docs/venue_config_schema.md`.
+
+**Improve:** rename `Hamilton Settings` → `Venue Settings`. It encodes Hamilton in the DocType name, but it's installed on every venue site. Per Frappe naming conventions, settings DocTypes are usually generic (`Stock Settings`, not `ERPNext Stock Settings`). Low-risk rename via a Frappe rename DocType patch but should be done before Philadelphia goes live.
+
+#### 5. Fixtures + Patches strategy — declarative venue config + idempotent installer
+
+**The canonical fixtures-from-app-source-not-from-site pattern.** Hamilton ERP already does this right via the filtered hooks.py declaration. Filters prevent the trap [documented in this thread](https://discuss.frappe.io/t/bench-export-fixtures-includes-custom-field-added-by-erpnext-patches/73805) where bench captures Custom Fields added by ERPNext patches that don't belong to your app.
+
+**What goes in committed fixtures (Hamilton already does):**
+- Custom Fields filtered to `*-hamilton_*` naming pattern
+- Property Setters filtered to `*-hamilton_*`
+- Roles: `Hamilton Operator`, `Hamilton Manager`, `Hamilton Admin` (filtered by name list)
+
+**What does NOT go in committed fixtures:**
+- Venue Asset records (the 26 rooms + 33 lockers) — venue-specific data
+- `Hamilton Settings` singleton row — venue-specific
+- Letter Heads, Print Formats with venue branding — venue-specific
+- Any DocType row that contains a Link to a user, customer, or company
+
+**Gap:** Hamilton ERP loads venue-specific data via `seed_hamilton_env.execute` patch, hardcoded. Philadelphia would need either a separate `seed_philadelphia_env.execute` patch (duplication) or, better, a single `apply_venue_config.py` patch that reads from a per-venue config file.
+
+**Recommended:** declarative per-venue config + one idempotent installer.
+
+```
+docs/venue_config/hamilton.yaml
+docs/venue_config/philadelphia.yaml
+docs/venue_config/dc.yaml
+docs/venue_config/dallas.yaml
+```
+
+Each file declares everything that differs (venue_id, venue_name, currency, tax_mode, tablet_count, features, tabs, assets/rooms/lockers).
+
+Then a single patch `hamilton_erp/patches/v0_2/apply_venue_config.py`:
+
+```python
+def execute():
+    venue_id = frappe.conf.get("anvil_venue_id")
+    if not venue_id:
+        frappe.throw("anvil_venue_id not set in site_config.json")
+    config = load_venue_config(venue_id)
+    apply_settings_singleton(config)
+    apply_assets(config)
+    apply_features(config)
+```
+
+Idempotency via `frappe.db.exists()` guards (already required by Hamilton's CLAUDE.md hard rules).
+
+**Letter Heads + Print Formats:** keep one *template* in fixtures (e.g., `LetterHead-anvil_template`) and have the venue config patch clone it with the venue's name and address. Don't commit per-venue letter heads.
+
+**Custom Fields on standard ERPNext DocTypes (e.g., Sales Invoice):** keep in committed fixtures with the `-hamilton_` filter.
+
+**Property Setters that need to differ per venue** (e.g., default value differs between Hamilton CAD and Philadelphia USD): should NOT be Property Setters — make them Custom Fields with a venue-config-driven default.
+
+**Improve:** add `docs/venue_config_schema.md` documenting every key in the YAML schema with type, default, and which Frappe mechanism it maps to.
+
+#### 6. What's missing — the second-venue gap
+
+Distilled across forum threads on multi-tenant setup, fixture-includes-other-app-fields trap, and the [Site Fixture feature request](https://github.com/frappe/frappe/issues/36398):
+
+1. **Fixture filtering is not the default.** First-time builders run `bench export-fixtures` without a filter, capture every Custom Field on the site, commit it, and deploy to venue #2 — which now has Custom Fields it shouldn't. **Hamilton already mitigates this** with the `name like %-hamilton_%` filter.
+
+2. **Custom Field naming convention matters as a fixture filter.** Hamilton's `-hamilton_` suffix is workable.
+
+3. **`Single` DocType data** is included in fixtures only if explicitly listed. **Hamilton already does NOT export Hamilton Settings as a fixture.** Correct.
+
+4. **Workspaces and Dashboards are global app fixtures, not site-overridable.** If Hamilton's `Asset Board` Workspace gets edited on the Hamilton site and re-exported, that change deploys to Philadelphia too. **Discipline:** edit Workspaces in code, never via Desk on the dev site.
+
+5. **`bench migrate` order matters across multiple sites on the same private bench.** If a fixture introduces a new Required field on a DocType that already has rows, migrate fails on the older site first. **Mitigation:** every new Required field gets a default and a backfill patch that runs before the field becomes required.
+
+6. **Frappe Cloud's auto-deploy fires on every push to main.** A single PR merge deploys to all six venues simultaneously. **Mitigation:** Frappe Cloud release groups (separate benches per region) let you stagger.
+
+7. **No `bench rollback` for custom fixtures.** Once a Custom Field fixture deploys, removing it from hooks.py + main does NOT remove the field from the DB. **Mitigation:** every field deletion is a paired commit (remove from fixtures + add a `delete_field.py` patch).
+
+**The thing nobody documents: the second-venue test plan.** Hamilton's test suite all runs against `hamilton-unit-test.localhost`. **Gap:** add a CI job that creates a fresh `philadelphia-unit-test.localhost` site, installs hamilton_erp, runs the venue_config installer with `philadelphia.yaml`, and asserts the site is in the expected state.
+
+#### 7. The actual venue rollout sequence
+
+**Phase 0 — Pre-purchase (manual, ~1 day)**
+- Confirm region; venue ID slug; write `docs/venue_config/<venue>.yaml` and PR-merge BEFORE provisioning; decide bench grouping.
+
+**Phase A — Frappe Cloud provisioning (manual, ~10 min)**
+- Buy subscription; create site via dashboard; install apps frappe → erpnext → hamilton_erp; verify load.
+
+**Phase B — Initial site config (automatable, ~5 min)**
+- `bench set-config anvil_venue_id <venue>`, `anvil_currency`, `anvil_tax_mode`, `venue_features`.
+
+**Phase C — Apply venue config (automatable, ~2 min) — NEW**
+- `bench --site <site> migrate` (loads fixtures)
+- `bench --site <site> execute hamilton_erp.patches.v0_2.apply_venue_config.execute`
+- Verify with `frappe.get_doc("Venue Settings").venue_id == "<venue>"`.
+
+**Phase D — Operator setup (manual, ~30 min)**
+- Create operator User accounts; assign Roles; first-login flow.
+
+**Phase E — Pre-launch testing (automatable, ~15 min)**
+- Smoke-test API; manual browser smoke test on tablet; verify Redis lock cleanup; verify scheduler active.
+
+**Phase F — Go-live (manual, ~10 min)**
+- First real session lifecycle; verify Error Log clean; verify cash drop modal blind mode; backup snapshot.
+
+**Phase G — Post-launch ops (NEW section)**
+- Document tablet IDs, operator names, escalation contacts; first-week monitoring; first-month retro.
+
+**Total time, current vs proposed:**
+- Current Hamilton playbook: ~4–8 hours
+- Proposed (with `apply_venue_config.py` + per-venue YAML): ~1.5–2 hours
+
+The 50% goal is achievable. Leverage is in #5 (declarative installer), not in #3 (git is correct) or #4 (flags are roughly correct, just need documenting).
+
+#### Summary of recommended actions, prioritized
+
+1. Build `docs/venue_config/<venue>.yaml` + `apply_venue_config.py` patch — biggest single time-saver.
+2. Write `docs/venue_config_schema.md`.
+3. Add topic + venue tags to decisions_log.md, lessons_learned.md, claude_memory.md plus topic indexes.
+4. Rename `Hamilton Settings` SingleType to `Venue Settings` — before any second site exists.
+5. Add a fresh-site CI job.
+6. Document the feature-flag decision rule in CLAUDE.md.
+7. Split `claude_memory.md` — move pre-2026-04-15 entries to retrospectives.
+
+**Sources:** Frappe v16 docs, Frappe Cloud docs, ERPNext community forum threads (cited inline above).
+
+---
+
+### Pre-Handoff Research — Prompt 5 (Professional handoff audit)
+
+**Research date:** 2026-04-29. **Repo audited:** `csrnicek/hamilton_erp`.
+
+**Scope:** What a senior Frappe developer needs in their first 30 minutes to productively own this codebase, and what they will silently bill extra hours to discover if it's missing.
+
+#### Prioritized Handoff Checklist (Top 15 by ROI)
+
+| # | Item | Effort | Why |
+|---|---|---|---|
+| 1 | **Rewrite `README.md`** from 5 lines to a real handoff doc | 1-2 hrs | Today is 5 lines + two CI badges. First-impressions doc gives them nothing. |
+| 2 | **Create `CONTRIBUTING.md`** with bench setup, test commands, lint rules, branch/PR conventions | 1-2 hrs | All of this lives in CLAUDE.md (AI-targeted) — senior dev shouldn't read AI instructions to find `bench install-app`. |
+| 3 | **Add `docs/HANDOFF.md`** — single-page "if you read nothing else, read this" | 2-3 hrs | The 70%-of-the-value doc that doesn't exist. `current_state.md` and `claude_memory.md` are session diaries, not architecture docs. |
+| 4 | **Add `docs/ARCHITECTURE.md`** — state machine diagram, three-layer locking diagram, doctype ER diagram | 3-4 hrs | The lifecycle FSM exists in code and prose but is not drawn anywhere. Senior dev expects this. |
+| 5 | **Conformance test for fresh install** — `bench install-app hamilton_erp` lands in known-good state, asserted by `test_environment_health` | 4-6 hrs | First install reveals undocumented assumptions. Catching in conformance test means loud failures with fix-message. |
+| 6 | **Stub-task purge** — `tasks.py:check_overtime_sessions` is a `pass`. Either delete from `hooks.py scheduler_events` or implement | 30 min | Senior dev spots in 60 seconds and immediately distrusts cron config. |
+| 7 | **`utils.py` audit** — move test-only helpers to `test_helpers.py` or delete | 1 hr | Reviewer signal: "this codebase doesn't know what it ships." |
+| 8 | **`hooks.py` comment audit** — trim by 30%, especially the `app_include_css` block | 30 min | Comment-bloat is a known AI-code tell. |
+| 9 | **`docs/SECURITY.md`** — list every `@frappe.whitelist()`, role gates, mutation surface | 1-2 hrs | No single place answers "what does my POS operator role permission to do via HTTP?" |
+| 10 | **DocType field-type and index audit** — document non-obvious choices in JSON `description` field | 2-3 hrs | Intent of schema choices in `decisions_log.md` but not in doctype JSON. |
+| 11 | **Permission matrix doc** (`docs/permissions_matrix.md`) — rows = roles, columns = doctypes + actions | 2 hrs | Needed for client signoff. |
+| 12 | **`docs/RUNBOOK.md`** — Redis down, tests failing, `is_setup_complete` flips, stuck Active session | 2-3 hrs | Today is tribal knowledge. |
+| 13 | **CHANGELOG.md** — extract from git log | 1 hr | ERPNext partner devs expect. |
+| 14 | **`docs/api_reference.md`** — generated or hand-written for the 9 whitelisted endpoints | 3-4 hrs | Today `test_api_phase1.py` is the de-facto reference. Tests are not docs. |
+| 15 | **Production deploy doc** — verify `HAMILTON_LAUNCH_PLAYBOOK.md` covers Frappe Cloud bench config, env vars, payments install, redis namespace, backup/restore, rollback | 1-2 hrs | Task 25 is the deploy. |
+
+**Total prep effort to top-of-class handoff:** ~28-40 hours. Skipping items 1-5 will easily cost the senior dev that much in the first week.
+
+#### What Hamilton ERP already gets right (do not regress)
+
+1. ADRs (`decisions_log.md` DEC-001..DEC-066) — gold-standard decision tracking
+2. Locking I/O hygiene (`coding_standards.md` §13) — better than 90% of production ERPNext apps
+3. Test breadth (28 files, 467 tests, every expected category covered)
+4. v16-correct patterns (`extend_doctype_class`, no `db.commit()` in controllers, `IntegrationTestCase`, fixture filtering)
+5. `install.py` setup-wizard heal — real fix for a real Frappe footgun, well-documented
+6. CI (tests.yml, lint.yml, claude-review.yml) already green
+7. design/V9_CANONICAL_MOCKUP.html with manifest — unusually rigorous
+
+#### Top concerns to fix before handoff (ranked)
+
+1. README is 5 lines — they will form a bad first impression
+2. No CONTRIBUTING.md — they will dig through CLAUDE.md and find AI boilerplate
+3. `tasks.py` is a no-op stub firing every 15 minutes — they will not trust the cron config
+4. No conformance test on `bench install-app` — first install will reveal undocumented assumptions
+5. `app_email = "chris@hamilton.example.com"` — placeholder
+6. **Realtime room scoping — the C2 payload may leak to non-Hamilton users** (security gap; see §6 below)
+7. No rate limiting on POST endpoints
+
+#### Production-ready test suite (industry consensus + Hamilton state)
+
+| Module category | Expected | Hamilton ERP today | Status |
+|---|---|---|---|
+| Lifecycle | yes | `test_lifecycle.py` | Present |
+| Locks | yes | `test_locks.py` | Present |
+| API | yes | `test_api_phase1.py` | Present |
+| E2E | yes | `test_e2e_phase1.py` | Present |
+| Stress | yes | `test_stress_simulation.py`, `test_load_10k.py` | Present |
+| Seed/install | yes | `test_seed_patch.py` | Present |
+| Security | yes | `test_security_audit.py` | Present |
+| Asset board rendering | yes | `test_asset_board_rendering.py` | Present |
+| Hypothesis property | yes | `test_hypothesis.py` | Present |
+| Database advanced | nice | `test_database_advanced.py` | Present |
+| Adversarial / edge | nice | `test_adversarial.py` etc. | Present |
+| Environment health | yes | `test_environment_health.py` | Present |
+| Governance | unique | `test_canonical_mockup_governance.py` etc. | Present |
+| Bulk ops | yes | `test_bulk_clean.py` | Present |
+
+**Gap:** No documented coverage floor. **Action:** add to CI: `pytest --cov=hamilton_erp --cov-fail-under=85`.
+
+#### Common AI-code anti-patterns (industry literature) vs Hamilton state
+
+1. **Redundant abstraction** — Hamilton: not detected. utils.py 2 functions, locks.py one entry point, realtime.py 2 publishers. Already gets right.
+2. **Missing error handling at framework boundaries** — Hamilton: realtime.py explicitly handles "row deleted between lifecycle and publish." Good. Action: sample audit api.py + lifecycle.py.
+3. **Vocabulary inconsistency** — Hamilton: minor `_change` vs `_changed` mix in publishers. Action: small naming pass.
+4. **Incomplete DocType definitions** — Hamilton: 4 indexed fields on venue_asset.json. Likely correct but a senior dev will second-guess. Action: 1-line justification in JSON `description`.
+5. **Comment-bloat** — Hamilton: comments mostly load-bearing (lifecycle.py, install.py docstrings explain WHY). hooks.py slightly heavy. Action: trim 30%.
+6. **Production code calling test-mode short-circuits** — Hamilton: `_make_asset_status_log` short-circuits when `frappe.in_test`. **Documented and tested but worth flagging in handoff.**
+7. **Per-doctype controllers with 5-line bodies** — Hamilton: 9 doctype directories. Action: sample audit. Pure scaffolding is fine; logic-duplication is the bug.
+8. **Unused imports / dead code** — Hamilton: `tasks.py` no-op stub. Confirmed. Action: delete or implement.
+
+#### Security checklist — most-overlooked
+
+- [x] Whitelist verb gating — Hamilton uses `methods=["GET"]`/`["POST"]` correctly
+- [x] Role-based access — `frappe.has_permission(throw=True)` at top of every endpoint
+- [ ] **Realtime publish permissions — `publish_realtime` writes to "all" room by default. C2 payload includes `current_session`. Anyone with System User role can subscribe. Gap: is the asset-board event leaking session data to non-Hamilton users? Action: scope to room="hamilton_asset_board" with `can_subscribe` hook (~2-3 hrs).** This is the biggest security finding.
+- [ ] Field-level permissions on Cash Drop / Cash Reconciliation cash-amount fields — verify `permlevel` set, read-restricted to Manager+
+- [ ] Rate limiting on whitelisted endpoints — none have `@rate_limit`. For session-creation endpoint (`check_in`), real concern in multi-tenant deploy. Action: add `@rate_limit(limit=60, seconds=60)` on mutation endpoints.
+- [x] CSRF — Frappe handles for `/api/method/` automatically with SID cookies
+
+#### `hooks.py` red flags (consensus + Hamilton state)
+
+| Red flag | Hamilton |
+|---|---|
+| Wildcard `"*"` doc_events without justification | Not present (Sales Invoice only). Good. |
+| Try-except swallowing exceptions in hooks | Not present. Good. |
+| Local imports inside hook functions | Not present (refs by string path). Good. |
+| Schedulers firing every minute that do nothing | **Present.** `*/15 * * * *` calls `check_overtime_sessions` which is `pass`. **Gap.** |
+| Conflicting `extend_doctype_class` registrations | Not present. Good. |
+| `frappe.db.commit()` inside hooks | Present in `after_install` — documented as intentional. Add 1-line comment. |
+| `app_include_js`/css site-wide for one page | Present (`asset_board.css`). Comment correctly explains intentional. Good. |
+| `permission_query_conditions` on critical doctypes | Not declared. Action: verify if needed for Venue Session per-shift filtering. |
+| `app_email`/`app_logo_url` defaults | `app_email = "chris@hamilton.example.com"` placeholder. Action: real email or note. |
+| `before_install` missing — no version preconditions | Not present. Action: consider adding for MariaDB/Redis version checks. |
+
+#### Bottom line for the senior developer
+
+Hamilton ERP is significantly above industry baseline for an AI-built custom Frappe app. The strengths (ADRs, locking hygiene, test breadth, v16-correct patterns) outweigh the weaknesses (thin top-level docs, no-op stub, realtime room scoping). Estimated prep: ~28-40 hours for top-of-class handoff. ~8 hours for "competent" handoff (items 1, 2, 6 from the checklist + the no-op stub purge + room scoping).
+
+**Sources:** ERPNext code security guidelines (frappe/erpnext wiki); Frappe Hooks Reference; Migrating to v16 wiki; AI code review literature (CodeRabbit 2026 report; Addy Osmani's "Code Review in the Age of AI"); Mintlify Frappe docs; multiple discuss.frappe.io threads (cited inline).
+
+---
+
+### Combined: Top actions across all three pre-handoff prompts
+
+**Critical (blocks clean handoff):**
+1. Rewrite README.md (1-2 hrs)
+2. Create CONTRIBUTING.md (1-2 hrs)
+3. Add docs/HANDOFF.md (2-3 hrs)
+4. Conformance test for fresh install (4-6 hrs)
+5. Realtime room scoping audit + fix (2-3 hrs) — **security gap**
+
+**High-value polish:**
+6. Stub-task purge (`tasks.py:check_overtime_sessions`) (30 min)
+7. `app_email` placeholder fix (5 min)
+8. `docs/SECURITY.md` (1-2 hrs)
+9. `docs/permissions_matrix.md` (2 hrs)
+10. `docs/RUNBOOK.md` (2-3 hrs)
+11. CHANGELOG.md (1 hr)
+12. `docs/api_reference.md` (3-4 hrs)
+
+**Multi-venue prep (do before Philadelphia):**
+13. `docs/venue_config/<venue>.yaml` + `apply_venue_config.py` patch (4-8 hrs) — **biggest time-saver for venue #2**
+14. Rename `Hamilton Settings` → `Venue Settings` (2-3 hrs) — must do before any second site exists
+15. Topic + venue tagging in decisions_log/lessons_learned (2 hrs)
+16. Document feature-flag decision rule in CLAUDE.md (30 min)
+17. Fresh-site CI job (3 hrs)
+
+**Production hardening (before Frappe Cloud go-live):**
+18. Sentry integration via `ParsimonyGit/frappe-sentry` (2-4 hrs) — production monitoring is currently absent
+19. `track_changes` on the 6 Hamilton DocTypes (1 hr)
+20. Field masking on Cash Drop / Comp Admission Log (1-2 hrs)
+21. Rate limiting on POST endpoints (1 hr)
+22. `scripts/init.sh` for fresh dev bench (2-3 hrs)
