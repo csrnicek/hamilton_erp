@@ -1,7 +1,7 @@
 # Hamilton ERP — Permissions Matrix
 
 **Generated from:** `hamilton_erp/hamilton_erp/doctype/*/*.json` (the `permissions` array on each DocType).
-**Last updated:** 2026-04-29 (Task 25 permissions checklist item 6).
+**Last updated:** 2026-04-30 (Task 25 permissions checklist item 6 + PIPEDA Venue Session PII cross-link added in PR #52).
 
 This file is the human-readable view of every Hamilton DocType's role-based access control. It is generated from the doctype JSON files; the source of truth is each DocType's own `permissions` array. The committed fixture set in `hamilton_erp/fixtures/role.json` declares the three Hamilton roles; per-doctype permission rows live with the doctype itself.
 
