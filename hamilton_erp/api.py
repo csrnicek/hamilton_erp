@@ -1,5 +1,8 @@
+import json
+
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +335,120 @@ def return_asset_from_oos(asset_name: str, reason: str) -> dict:
 
 	return_asset_to_service(asset_name, operator=frappe.session.user, reason=reason)
 	return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Retail cart — Sales Invoice creation (V9.1 Phase 2)
+# ---------------------------------------------------------------------------
+
+
+HAMILTON_POS_PROFILE = "Hamilton Front Desk"
+
+
+@frappe.whitelist(methods=["POST"])
+def submit_retail_sale(items, cash_received) -> dict:
+	"""Create + submit a POS Sales Invoice from the cart drawer.
+
+	Called by ``_open_cash_payment_modal`` in asset_board.js when the
+	operator confirms a cash payment. Creates a POS Sales Invoice with
+	``is_pos=1, update_stock=1`` so submitting auto-creates the Stock
+	Ledger Entry that decrements warehouse stock.
+
+	Arguments:
+	  items: list of {item_code, qty, unit_price}. JSON-encoded by
+	         frappe.xcall when sent from the client; accepts list or str.
+	  cash_received: numeric (Currency). Must be >= grand_total. Change
+	         is computed and returned.
+
+	Returns:
+	  {sales_invoice: str, change: float, grand_total: float}
+
+	Raises:
+	  - PermissionError if caller lacks Sales Invoice create perm.
+	  - ValidationError if cart empty, cash_received < grand_total, or
+	    POS Profile / Walk-in customer missing.
+	"""
+	frappe.has_permission("Sales Invoice", "create", throw=True)
+
+	# frappe.xcall serializes lists to JSON over the wire. Accept both.
+	if isinstance(items, str):
+		items = json.loads(items)
+	if not items or not isinstance(items, list):
+		frappe.throw(_("Cart is empty"))
+	cash_received = flt(cash_received)
+	if cash_received < 0:
+		frappe.throw(_("Cash received cannot be negative"))
+
+	if not frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE):
+		frappe.throw(_(
+			"POS Profile {0} is not configured. Run `bench migrate` to seed."
+		).format(HAMILTON_POS_PROFILE))
+	if not frappe.db.exists("Customer", "Walk-in"):
+		frappe.throw(_(
+			"Walk-in customer not seeded. Run `bench migrate` to populate."
+		))
+
+	pos_profile = frappe.get_cached_doc("POS Profile", HAMILTON_POS_PROFILE)
+
+	si = frappe.new_doc("Sales Invoice")
+	si.update({
+		"company": pos_profile.company,
+		"customer": "Walk-in",
+		"is_pos": 1,
+		"update_stock": 1,
+		"pos_profile": HAMILTON_POS_PROFILE,
+		"currency": pos_profile.currency,
+		"selling_price_list": pos_profile.selling_price_list or "Standard Selling",
+	})
+	if pos_profile.taxes_and_charges:
+		si.taxes_and_charges = pos_profile.taxes_and_charges
+
+	for line in items:
+		item_code = line.get("item_code")
+		qty = flt(line.get("qty"))
+		unit_price = flt(line.get("unit_price"))
+		if not item_code or qty <= 0:
+			frappe.throw(_("Invalid cart line: {0}").format(line))
+		if not frappe.db.exists("Item", item_code):
+			frappe.throw(_("Item {0} does not exist").format(item_code))
+		si.append("items", {
+			"item_code": item_code,
+			"qty": qty,
+			"rate": unit_price,
+			"warehouse": pos_profile.warehouse,
+			"cost_center": pos_profile.cost_center,
+		})
+
+	# Pull tax rows from the template before computing totals. ERPNext's
+	# ``set_taxes()`` is the canonical method on AccountsController.
+	if si.taxes_and_charges:
+		si.set_taxes_and_charges()
+
+	si.set_missing_values()
+	si.calculate_taxes_and_totals()
+	grand_total = flt(si.grand_total)
+
+	if cash_received < grand_total:
+		frappe.throw(_(
+			"Cash received {0} is less than grand total {1}"
+		).format(cash_received, grand_total))
+
+	change = flt(cash_received - grand_total)
+	si.append("payments", {
+		"mode_of_payment": "Cash",
+		"amount": grand_total,  # collected in cash, change handled separately
+	})
+	si.change_amount = change
+	si.base_change_amount = change
+	si.paid_amount = grand_total
+	si.base_paid_amount = grand_total
+
+	si.flags.ignore_permissions = True
+	si.insert(ignore_permissions=True)
+	si.submit()
+
+	return {
+		"sales_invoice": si.name,
+		"change": change,
+		"grand_total": grand_total,
+	}

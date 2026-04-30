@@ -477,6 +477,30 @@ The Return-to-Service modal's "Set:" context row now formats as `"by NAME at HH:
 
 ---
 
+## Amendment 2026-04-30 (b) — Hamilton accounting names locked from QBO mirror
+
+After the V9.1 Phase 2 cart UX shipped as PR #49 (UX-only stub), Chris's accountant decided the accounting prerequisites should mirror Hamilton's existing QBO chart-of-accounts naming. The follow-up PR (also 2026-04-30) seeds these as part of `_ensure_hamilton_accounting` in `hamilton_erp/setup/install.py`:
+
+- **HST account:** `GST/HST Payable` (account_type=Tax, root_type=Liability, tax_rate=13)
+- **Income — beverages:** `4260 Beverage` (Water, Sports Drinks, future drink SKUs)
+- **Income — food:** `4210 Food` (Protein Bar, Energy Bar, future food SKUs)
+- **Warehouse:** `Hamilton`
+- **Cost Center:** `Hamilton`
+- **POS Profile:** `Hamilton Front Desk` — operator-invisible, named target of `submit_retail_sale`
+- **Sales Taxes Template:** `Ontario HST 13%` referencing the GST/HST Payable account
+
+Per ERPNext convention, account/warehouse/cost center names are appended with the company abbreviation suffix (e.g. `4260 Beverage - CH` for company `Club Hamilton` abbr `CH`).
+
+**Why mirror QBO:** Hamilton's books have run on QBO since opening. Mirroring the names exactly means QBO sync (Phase 3) and any cross-system reporting can match by name without a translation table. The accountant signed off; locking them prevents drift.
+
+**Production pinning:** Sites that already have a non-`Club Hamilton` company configured can pin it via `bench --site SITE set-config hamilton_company "<existing name>"`. The seed augments the pinned company with Hamilton-specific accounts rather than creating a sibling Club Hamilton.
+
+**Reverses:** the placeholders proposed in V9.1-D12 of the UX-stub PR (e.g. `HST Payable - WP`, `Sales - WP`, the "Retail Sales" suggestion). Those were exploratory and were never written to code.
+
+**Related:** Phase 2 hardware + integration backlog (Epson TM-T20III receipt printer, merchant abstraction with `merchant_transaction_id` capture per Card sale, tap-to-pay treated as "Card" not separate) is documented in `docs/inbox.md` under 2026-04-30. That work follows this PR.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:

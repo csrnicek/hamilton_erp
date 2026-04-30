@@ -1261,17 +1261,13 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 			self.assertIn(cls, src,
 				f"asset_board.css missing {cls!r}.")
 
-	def test_js_payment_modal_is_stub_with_pending_message(self):
-		with open(self._js_path()) as f:
-			src = f.read()
-		self.assertIn("_open_cash_payment_modal", src)
-		self.assertIn(
-			"Sales Invoice creation pending accounting setup", src,
-			"Cash payment confirm doesn't surface 'pending accounting setup' — "
-			"V9.1-D12 stub contract broken.",
-		)
+	def test_js_payment_modal_calls_submit_retail_sale(self):
+		"""V9.1-D12 (revised 2026-04-30): Confirm calls submit_retail_sale.
 
-	def test_js_payment_modal_does_not_call_frappe_db_or_xcall(self):
+		Replaces the prior stub contract that asserted ``frappe.xcall`` was
+		NOT called. With accounting prereqs seeded, the cart Confirm now
+		creates a real Sales Invoice via the backend API.
+		"""
 		import re
 		with open(self._js_path()) as f:
 			src = f.read()
@@ -1282,14 +1278,46 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 		self.assertIsNotNone(match,
 			"Could not locate _open_cash_payment_modal body for inspection.")
 		body = match.group(1)
-		self.assertNotIn(
+		self.assertIn(
 			"frappe.xcall", body,
-			"_open_cash_payment_modal contains frappe.xcall — stub contract broken.",
+			"_open_cash_payment_modal must call frappe.xcall to submit_retail_sale.",
 		)
-		self.assertNotIn(
-			"frappe.db.insert", body,
-			"_open_cash_payment_modal contains frappe.db.insert — stub contract broken.",
+		self.assertIn(
+			"hamilton_erp.api.submit_retail_sale", body,
+			"_open_cash_payment_modal must invoke submit_retail_sale endpoint.",
 		)
+
+	def test_js_payment_modal_clears_cart_on_success(self):
+		"""On successful Sales Invoice creation, cart must clear and board refresh."""
+		import re
+		with open(self._js_path()) as f:
+			src = f.read()
+		match = re.search(
+			r"_open_cash_payment_modal\(\)\s*\{(.+?)\n\t\}\s*\n",
+			src, re.DOTALL,
+		)
+		body = match.group(1)
+		self.assertIn(
+			"_cart_clear()", body,
+			"Cart must clear on successful sale.",
+		)
+		self.assertIn(
+			"fetch_board()", body,
+			"Board must refresh after sale to update stock counts.",
+		)
+
+	def test_js_payment_modal_keeps_cart_on_error(self):
+		"""On API error, cart must remain populated so operator can retry."""
+		import re
+		with open(self._js_path()) as f:
+			src = f.read()
+		match = re.search(
+			r"_open_cash_payment_modal\(\)\s*\{(.+?)\n\t\}\s*\n",
+			src, re.DOTALL,
+		)
+		body = match.group(1)
+		self.assertIn(".catch(", body,
+			"Confirm handler must catch errors and leave cart intact.")
 
 
 def tearDownModule():

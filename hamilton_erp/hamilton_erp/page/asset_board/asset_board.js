@@ -629,12 +629,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			});
 	}
 
-	// ── V9.1 Phase 2 — Cash payment modal (stub) ───────────
-	// V9.1-D12: cash-only single tender. The Confirm button is a STUB —
-	// Sales Invoice creation lands once accounting prereqs are configured
-	// (HST tax account, item defaults, warehouse, cost center). Operator
-	// gets a clear "pending accounting setup" toast so browser testing
-	// surfaces design issues without touching ERPNext accounting yet.
+	// ── V9.1 Phase 2 — Cash payment modal ──────────────────
+	// V9.1-D12 (revised 2026-04-30): cash-only single tender, real Sales
+	// Invoice creation. Confirm calls submit_retail_sale on the backend,
+	// which builds + submits a POS Sales Invoice (is_pos=1, update_stock=1)
+	// against the "Hamilton Front Desk" POS Profile. Stock decrements
+	// automatically via the Stock Ledger Entry that submission generates.
 	_open_cash_payment_modal() {
 		this._close_modals();
 		const total = this._cart_total().toFixed(2);
@@ -656,10 +656,6 @@ hamilton_erp.AssetBoard = class AssetBoard {
 							<span class="hamilton-modal-key">${__("Change")}:</span>
 							<span class="hamilton-modal-val hamilton-cash-change">$0.00</span>
 						</div>
-					</div>
-					<div class="hamilton-modal-audit">
-						${__("Sales Invoice creation pending accounting setup")} —
-						${__("see PR description for prerequisites.")}
 					</div>
 					<div class="hamilton-modal-actions">
 						<button class="hamilton-modal-btn hamilton-modal-btn-cancel">${__("Cancel")}</button>
@@ -689,18 +685,38 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		$modal.on("click", (e) => { if (e.target === $modal[0]) this._close_modals(); });
 		$modal.find(".hamilton-modal-btn-cancel").on("click", () => this._close_modals());
 		$modal.find(".hamilton-modal-btn-confirm").on("click", () => {
-			// V9.1-D12 STUB: payment confirmation is intentionally a no-op
-			// pending accounting setup. Browser testing can validate the
-			// cart UX flow up to this point; the Sales Invoice creation
-			// arrives in a follow-up PR once HST account, warehouse, etc.
-			// are seeded.
-			this._close_modals();
-			frappe.show_alert({
-				message: __("Sales Invoice creation pending accounting setup."),
-				indicator: "orange",
-			}, 7);
-			// Cart intentionally NOT cleared — operator can retry once
-			// accounting prereqs ship; clearing would lose work.
+			const cash_received = Number($received.val()) || 0;
+			// Snapshot cart before clearing — needed for the API payload
+			// and to restore on error so the operator doesn't lose work.
+			const cart_snapshot = this.cart.map((c) => ({
+				item_code: c.item_code,
+				qty: c.qty,
+				unit_price: c.unit_price,
+			}));
+			$confirm.prop("disabled", true).text(__("Processing..."));
+			frappe.xcall("hamilton_erp.api.submit_retail_sale", {
+				items: cart_snapshot,
+				cash_received: cash_received,
+			}).then((result) => {
+				this._close_modals();
+				this._cart_clear();
+				this._render_cart_drawer();
+				const change_str = (result.change || 0).toFixed(2);
+				frappe.show_alert({
+					message: __("Sale {0} — change ${1}", [result.sales_invoice, change_str]),
+					indicator: "green",
+				}, 5);
+				// Refresh board so retail tile stock counts update.
+				this.fetch_board();
+			}).catch((err) => {
+				$confirm.prop("disabled", false).text(__("Confirm"));
+				const msg = (err && err.message) ? err.message : String(err);
+				frappe.show_alert({
+					message: __("Sale failed: {0}", [msg]),
+					indicator: "red",
+				}, 7);
+				// Cart intentionally NOT cleared — operator can retry.
+			});
 		});
 	}
 

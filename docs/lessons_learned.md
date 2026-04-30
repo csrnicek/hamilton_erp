@@ -54,6 +54,7 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-026 | Operational | S2 | `property_setter.json` must exist even if empty |
 | LL-027 | Operational | S2 | Bench symlink defeats `git worktree` isolation |
 | LL-028 | Operational | S3 | mutmut v3 incompatible with Frappe bench environment |
+| LL-034 | Operational | S2 | Concurrent Claude Code agents on the same repo race on `git checkout` and nuke uncommitted work |
 | LL-029 | Production Safety | S0 | Never modify Frappe / ERPNext core |
 | LL-030 | Production Safety | S0 | Production recovery — rollback before live debugging |
 | LL-031 | Production Safety | S0 | Agents may diagnose broadly but execute narrowly |
@@ -518,6 +519,21 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Prevention for next venue:** Per-action allowlist in agent harness. Forbidden actions require an explicit approval flow.
 - **References:** Future Night Watch system design.
 
+### LL-034 — Concurrent Claude Code agents on the same repo race on `git checkout` and nuke uncommitted work
+
+- **Category:** Operational
+- **Severity:** S2
+- **Applies to:** Any session where more than one Claude Code agent (interactive sessions, Ralph-loop, scheduled `/loop`, autonomous agents) is operating on the same checkout. The single physical worktree at `/Users/chrissrnicek/hamilton_erp` is shared by every bench-installed app (see LL-027), so this hits any multi-agent setup without explicit coordination.
+- **What happened:** During the field-masking-audit gap-#1 ship (2026-04-30), an interactive session made three working-tree edits (`shift_record.json`, `test_security_audit.py`, `risk_register.md`), staged them, ran tests green, and was about to commit. Between the test run and the commit, another agent on the same worktree did `git checkout` to a different feature branch — silently discarding the staged-but-uncommitted changes. The reflog showed `feat/v91-retail-cart-ux-stub → feat/v91-cart-sales-invoice → main → feat/security-shift-record-card-permlevel → feat/v91-cart-sales-invoice` happening in rapid succession across what looked like a single session's tool calls. The session had to redo all three edits on the dedicated branch and commit-push immediately to lock them in.
+- **Time cost:** ~15 minutes of redo work plus the diagnostic time to figure out *why* the working tree kept going clean. First-pass hypothesis ("the harness is auto-resetting me") was wrong; the actual cause was a separate concurrent agent. The reflog made it obvious in retrospect.
+- **Root cause:** Git stages + working tree are checkout-scoped, not session-scoped. Two agents that both call `git checkout` on the same `.git` race each other: whichever runs second discards the first's uncommitted work without warning. There is no per-session lock around the working tree, and `bench`'s symlink (LL-027) means multiple bench installs that share an app folder share the same git state.
+- **The fix:** Two patterns, pick one:
+  1. **One agent per worktree.** If a second concurrent run is needed, give it a separate `git worktree add` (and accept that LL-027 means it can't run `bench run-tests` against the second worktree's checkout — the second agent has to stay code-only). For interactive + scheduled-loop combinations, this is the cleanest split.
+  2. **Commit-push-immediately pattern.** When two agents share the worktree, never leave changes uncommitted across tool calls. Edit → test → stage → commit → push as one tight sequence; treat anything in the working tree as ephemeral. Don't run long-form analysis between an edit and its commit. This is the workaround that shipped gap #1 once the race was identified.
+- **Detection:** `git reflog` after a "wait, my changes are gone" moment shows back-to-back `checkout: moving from X to Y` entries the current session never issued. If those checkouts came from another agent, this lesson applies.
+- **Prevention for next venue:** Document the active-agent expectation per-repo in `CLAUDE.md` ("only one Claude Code session may have uncommitted changes at a time") and have scheduled loops do their work in a separate worktree. For multi-venue rollout where Night Watch agents (LL-031) might run alongside interactive work, the agent harness must hold a worktree-scoped lock or operate on its own checkout.
+- **References:** This session's reflog, 2026-04-30. Related: LL-027 (bench symlink defeats `git worktree`), R-004 in `docs/risk_register.md`. Discovered while shipping field-masking gap #1 (`feat/security-shift-record-card-permlevel`, commit `a2c9803`).
+
 ---
 
 ## Maintenance
@@ -647,4 +663,43 @@ Cart UX is iterative — drawer placement, qty button shape, HST display, paymen
 When a PR ships a stub, the next PR's author may not read the design doc and may think the stub is "incomplete code that needs filling in." Without an explicit guard, they'll wire `frappe.xcall("hamilton_erp.api.submit_retail_sale", ...)` into the confirm button and break the deferred-accounting contract.
 
 **Pattern:** add a regression test that asserts the stub method body does NOT contain `frappe.xcall`, `frappe.db.insert`, or other side-effect call patterns. The test fails CI when the stub is "completed" without first wiring the accounting prereqs. See `test_v91_payment_modal_does_not_call_frappe_db_or_xcall` in `test_asset_board_rendering.py` for the implementation.
+
+> **Update 2026-04-30 (b):** the inverse stub-contract test was replaced when the follow-up PR wired Sales Invoice creation. New test (`test_js_payment_modal_calls_submit_retail_sale`) asserts the positive contract — `frappe.xcall` IS called and points at `hamilton_erp.api.submit_retail_sale`. Lesson stands: stub contracts are valuable for the period when the stub exists; flipping them to positive contracts at completion is the natural lifecycle.
+
+---
+
+## 2026-04-30 (b) — Sales Invoice wiring + accounting seed (follow-up to cart UX stub)
+
+The follow-up PR landed the accounting prereqs (QBO-mirrored names locked by Chris's accountant: `GST/HST Payable`, `4260 Beverage`, `4210 Food`, warehouse + cost center "Hamilton", POS Profile "Hamilton Front Desk") and replaced the cart Confirm stub with a real `submit_retail_sale` API. Four lessons surfaced.
+
+### "WP" was a Frappe demo fixture, not Hamilton's company
+
+When investigating accounting state, an early query returned `default_income_account = "Sales - WP"` and led to a working assumption that "WP" was Hamilton's company abbreviation. Five minutes later, querying `tabCompany` directly showed: WP = "Wind Power LLC", a Frappe demo fixture with USD currency and country=United States. Hamilton had no real company on the dev site at all — the `Sales - WP` account was a side effect of the demo fixture's CoA scaffold.
+
+**Generalizes:** Frappe ships demo data (customers, items, companies) as part of the test fixture loader. Any query that returns "expected-shaped" data on a non-greenfield site should be cross-checked against `tabCompany` / `tabCustomer` etc. directly before treating the result as production state. The shape lies; the row count tells the truth.
+
+### Standard CoA template auto-runs when a Company is inserted
+
+ERPNext's Company doctype has a controller that, on insert, calls `create_chart_of_accounts` if `chart_of_accounts="Standard"` and `create_chart_of_accounts_based_on="Standard Template"` are set. This populates ~70 accounts (Income, Direct/Indirect Income, Assets, Liabilities, Duties and Taxes, Cost of Goods Sold, Cash, Bank, etc.) plus the root warehouse and root cost center.
+
+**Pattern:** for fresh-install seeds, creating the Company is the cheapest way to get a usable CoA scaffold. Layer venue-specific accounts on top — don't try to build the CoA from scratch.
+
+**Caveat:** the parent group names are slightly variable across CoA templates ("Indirect Income" vs. "Sales", "Duties and Taxes" vs. "Tax Accounts"). The seed uses a `_find_account_parent(company, root_type, preferred_names)` helper that searches by `root_type` and prefers named matches. This is more robust than hard-coding `"Indirect Income - {abbr}"`.
+
+### Mode of Payment Account is per-(company, mode); idempotency must check by company
+
+`Mode of Payment` is a global doctype with a child table `accounts` of `Mode of Payment Account` rows. Each row is keyed by `company` and points to a `default_account`. A POS Sales Invoice's payment posting needs the row for the invoice's company; without it, submit fails with `Account not specified for Cash`.
+
+**Pattern:** when seeding a company, append a Mode of Payment Account row for each mode the company will use. Idempotency check is `existing = next((a for a in mop.accounts if a.company == company), None)` — by-company, not by-account. Otherwise re-runs append duplicate rows.
+
+### POS Sales Invoice payment math: `payments[0].amount` is collected, not tendered
+
+ERPNext records `payments[i].amount` as the amount collected in that method (i.e. minus change), not the cash tendered. Change is captured separately via `change_amount`. For a $11.30 sale where the customer hands over $20:
+- `payments[0].mode_of_payment = "Cash"`
+- `payments[0].amount = 11.30` (collected)
+- `change_amount = 8.70` (returned)
+- `paid_amount = 11.30` (sum of payments.amount)
+- `outstanding_amount = 0`
+
+If you mistakenly set `payments[0].amount = 20` (cash tendered) and `change_amount = 8.70`, ERPNext's validator computes `paid_amount = 20`, then `outstanding = grand_total - paid_amount = -8.70`, and either errors or posts a phantom GL line. The correct pattern is `amount = grand_total` and `change_amount = cash_received - grand_total`, which is what `submit_retail_sale` does.
 

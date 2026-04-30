@@ -1384,3 +1384,91 @@ Not picked up this run, available for next overnight:
 - Pre-flight checks save time: track_changes Stack #2 was discovered already-implemented; Stack #3 was caught as a STOP condition before any code was written.
 - The `git stash` baseline trick is the cleanest way to attribute test failures (mine vs pre-existing).
 - Chris's `wording-fix` label + no-auto-merge instruction worked perfectly for PR #55.
+
+## 2026-04-30 — Phase 2 hardware + integration backlog (post-cart-UX)
+
+V9.1 Phase 2 retail cart shipped with cash-only single-tender (PR #49). The follow-up wires real Sales Invoice creation. After that, the next Phase 2 work is hardware integration and a card-payment merchant abstraction. Captured here so it doesn't get lost between cart-UX shipping and store-opening.
+
+### Receipt printing — Epson TM-T20III
+
+**Hardware:** Epson TM-T20III thermal receipt printer. Ethernet + WiFi capable. Same integration pattern as the Brother label printer (DEC-011) — IP address configured per-venue in Hamilton Settings, not hard-coded.
+
+**Behavior:** Print every transaction automatically after payment confirms. The receipt content includes:
+- Sale line items + totals (HST broken out)
+- Asset assignment (room number / locker number) when the sale is part of a check-in flow
+- Sales Invoice ID and timestamp
+- Cash given / change due (or last-4 of card pan if Card)
+
+**Operational pattern — receipt as physical control token.** The paper receipt printed at point-of-sale doubles as the asset-board control token. The operator hangs the receipt on the assigned key hook. Receipt-on-hook = room/locker is occupied. This keeps the physical state visible without the operator having to look at a screen, and survives system outages — if the asset board is down, the hooks still tell you what's free.
+
+**Design implications:**
+- Receipt printer config lives in Hamilton Settings: `receipt_printer_ip` (string), `receipt_printer_enabled` (check). Mirror Brother label printer fields.
+- Print job is a side-effect, not part of the Sales Invoice transaction. If the printer is offline, the sale must still complete; queue the print job to retry, surface a "printer offline" indicator on the board.
+- Test path: a `print_receipt(sales_invoice_name)` whitelisted endpoint that takes a Sales Invoice and renders to ESC/POS. Backend does the formatting; client just triggers.
+
+### Digital receipt option
+
+Offer "Email or SMS receipt" in addition to the paper print. Operator types the customer's email or phone, system sends a digital copy. Paper still prints by default (control-token role); digital is additive, not a replacement.
+
+**Implementation note:** Digital receipt is a Sales Invoice email/SMS via Frappe's standard notification machinery — not a custom integration. Per-venue email-from address comes from Hamilton Settings (already exists per `app_email`).
+
+### Tap-to-pay treated as Card method
+
+**Decision:** Tap-to-pay does NOT get its own Mode of Payment row. It IS "Card." The merchant terminal handles the chip/swipe/tap distinction internally. The Sales Invoice records `mode_of_payment="Card"` regardless of how the customer presented their card.
+
+This avoids the trap of having "Tap", "Chip", "Swipe", "Apple Pay" as four separate Mode of Payment values that the operator has to choose between — none of which are knowable in advance because the terminal decides based on what the customer does.
+
+### Merchant abstraction (CRITICAL for adult-classified businesses)
+
+**Why this matters:** Bathhouses are adult-classified. Merchant accounts get terminated periodically with little warning. The system MUST support swapping merchants without code changes, ideally with multiple active merchants for redundancy.
+
+**Design:**
+- Per-venue merchant config lives in `site_config.json` (or Hamilton Settings, leaning toward site_config because credentials shouldn't be in DB).
+- Each venue can have **1 or N** active merchants. The default merchant is selected by name; alternates are available as a fallback if the default declines or times out.
+- Adding a new merchant must be a config change, not a code change. The codebase ships with adapter classes for the common processors (Stripe, Square, Moneris in Canada, Helcim in Canada-adult-friendly, Stripe US) and `merchant_type` selects which adapter to use.
+
+**Sales Invoice integration:**
+- Every `mode_of_payment="Card"` payment captures a `merchant_transaction_id` (custom field on Sales Invoice or Mode of Payment Account row, decision pending).
+- Capture the merchant name too (`merchant_name`), since with multiple active merchants the txn ID alone doesn't identify which merchant settled it.
+- Both fields searchable on Sales Invoice — refunds, disputes, and reconciliation all need to look up by merchant_transaction_id.
+
+**Field schema (proposal):**
+```
+Sales Invoice custom fields:
+  hamilton_merchant_name        Data       (e.g. "Helcim", "Stripe-Hamilton-Backup")
+  hamilton_merchant_txn_id      Data       (returned by terminal/processor)
+  hamilton_card_last_4          Data       (last 4 of pan, for receipt)
+  hamilton_card_brand           Data       (Visa / MC / Amex / Interac)
+```
+
+**Per-venue config shape (proposal, in site_config.json):**
+```json
+{
+  "hamilton_merchants": {
+    "default": "helcim",
+    "available": {
+      "helcim": {"adapter": "helcim_v2", "api_key_path": "secrets/helcim.key", "terminal_id": "..."},
+      "stripe_backup": {"adapter": "stripe", "api_key_path": "secrets/stripe.key"}
+    }
+  }
+}
+```
+
+**Failover behavior:** If the default merchant's terminal times out or returns DECLINED-COMMS-ERROR (not DECLINED-INSUFFICIENT-FUNDS — those are real declines, don't retry), the operator gets a one-tap "Try backup processor" button on the cart drawer. This is operator-driven not automatic — automatic failover risks double-charging the customer if the first processor actually settled but the response was lost.
+
+### Sequencing
+
+This work happens AFTER the cart Confirm is wired to Sales Invoice creation (current PR). Order:
+
+1. Receipt printer integration — Epson TM-T20III + ESC/POS receipt rendering + Hamilton Settings config + retry queue. Probably 2-4 days.
+2. Card payment Mode of Payment + merchant adapter scaffolding — basic Helcim integration, capture merchant_transaction_id, add custom fields to Sales Invoice. Probably 3-5 days.
+3. Multi-merchant config + manual failover button. Probably 2-3 days.
+4. Digital receipt (email/SMS). Probably half-day on top of receipt printer work since the templating is mostly shared.
+
+Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
+
+### Open questions for tomorrow-Chris
+
+- Which processors are realistic for adult-classified Canadian bathhouse? Helcim is one option; need a backup. Research before committing to the adapter list.
+- Hardware: confirm TM-T20III can be sourced in Canada and supports both ethernet and WiFi (some sub-models are ethernet-only). Verify the ESC/POS command set is the standard one that python-escpos supports out of the box.
+- Receipt tape: brand + cost per roll + how many transactions per roll? Need this for the operations runbook.

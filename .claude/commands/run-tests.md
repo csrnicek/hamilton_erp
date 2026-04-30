@@ -16,6 +16,7 @@
 # (test_bulk_clean added 2026-04-14 — +2 bulk clean exception handling tests.)
 # (test_hypothesis added 2026-04-14 — +8 property-based tests: session number, state machine, cash math.)
 # (test_e2e_phase1 added 2026-04-28 (Tasks 22-24) — H10 Vacate/Turnover, H11 OOS, H12 Occupied-rejection E2E with real Asset Status Log audit trail.)
+# (test_retail_sales_invoice added 2026-04-30 — V9.1 Phase 2 cart → POS Sales Invoice flow + accounting seed verification.)
 # For autonomous fixing of failures use /fix-and-test instead.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
@@ -35,4 +36,5 @@ cd ~/frappe-bench-hamilton && source env/bin/activate && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_utils && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_bulk_clean && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_hypothesis && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_e2e_phase1
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_e2e_phase1 && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_retail_sales_invoice
