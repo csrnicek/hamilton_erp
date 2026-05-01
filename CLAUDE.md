@@ -182,6 +182,24 @@ When the next venue rolls out:
 
 The seed must accept a per-venue tax template name via `frappe.conf` (analogous to `hamilton_company` and `hamilton_walkin_customer`) before the second venue ships.
 
+### Phase 1 vs Phase 2 payment surface (current scope — explicit)
+
+What's live at Hamilton today vs what's queued for Phase 2 / Phase 3. Read this before answering any "is X live now?" question about cash, card, refund, or settlement.
+
+| Surface | Phase 1 (live now) | Phase 2 / Phase 3 (queued) |
+|---|---|---|
+| **Cash POS Sales Invoice** | ✅ LIVE via PR #51 (`submit_retail_sale` API + cart UX, ships QBO-mirrored CoA + Hamilton accounting seed). The cart Confirm creates a real POS Sales Invoice that decrements stock and posts to GL. | — |
+| **Card POS — standalone terminal** | ⚠️ STANDALONE Fiserv terminal (Clover Flex C405). Operator types the cart amount on the terminal manually; ERPNext records the Sales Invoice with payment_method = "Card" but does NOT integrate with the terminal. R-009 (MATCH list 1% chargeback threshold) is latent. | — |
+| **Card POS — integrated** | ❌ NOT live | Phase 2 — Clover Connect API integration so ERPNext pushes the cart amount to the terminal and the operator cannot mistype. See `docs/design/cash_reconciliation_phase3.md` §5. |
+| **Refunds** | ❌ NOT live (cash-side stub only via Sales Invoice cancel/amend, manager-only) | Phase 1 BLOCKER — cash-side via Task 31; full design Phase 2. See `docs/design/refunds_phase2.md` (review-pending). |
+| **Voids (mid-shift)** | ❌ NOT live | Phase 1 BLOCKER — Task 33. |
+| **Comps** | ✅ LIVE via Comp Admission Log + zero-value Sales Invoice flow | Phase 1 BLOCKER — manager-PIN gate via Task 32. |
+| **Membership** | ❌ NOT live (Hamilton is anonymous walk-in only — `anvil_membership_enabled = 0`) | DC priority — Task TBD; see `docs/design/manager_override_phase2.md` for context. |
+| **Settlement reconciliation** | ❌ NOT live | Phase 2 audit layer — see `docs/design/cash_reconciliation_phase3.md` §5. |
+| **Tip pull from till** | ❌ schema NOT present | Phase 1 BLOCKER (schema only) via Task 34; full UX Phase 2. See `docs/design/tip_pull_phase2.md`. |
+
+For a beginner reading this for the first time: Phase 1 ships with **cash sales fully integrated** (real Sales Invoice + GL + sales tax + receipt) and **card sales handled by the standalone terminal** (no software integration; operator types amount on the terminal, customer taps card, terminal prints its own receipt). Phase 2 adds the integrated card path, the refund flow, and the void flow. Phase 3 adds the variance system + portable reconciliation + tip math. The ledger of which Phase 1 BLOCKERs must close before Hamilton launches is in `.taskmaster/tasks/tasks.json` (Tasks 30, 31-37).
+
 ### Card payments require SAQ-A validation before going live (Audit Issue I)
 
 When the Phase 2 next iteration adds Card payments (merchant abstraction, terminal integration), the merchant adapter must keep card data outside Hamilton's network — terminal handles all card data, the SI stores only references (last 4, brand, auth code, merchant_transaction_id). This is the SAQ-A integration model.
@@ -305,7 +323,7 @@ Full plan: `docs/superpowers/plans/2026-04-10-phase1-asset-board-and-session-lif
 
 ## Workflow rules
 
-1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`, `docs/lessons_learned.md`, `docs/venue_rollout_playbook.md`, `docs/design/asset_board_ui.md`
+1. **Always read these docs at session start:** `docs/current_state.md`, `docs/decisions_log.md`, `docs/coding_standards.md`, `docs/build_phases.md`, `docs/lessons_learned.md`, `docs/venue_rollout_playbook.md`, `docs/design/V10_CANONICAL_MOCKUP.html` (asset board UI gospel — see V10 Canonical Mockup section above), `docs/design/asset_board_ui.md` (legacy spec — V10 mockup wins on conflict)
 2. **Use Subagent-Driven Development** for all Phase 1 tasks — dispatch implementer → spec reviewer → code quality reviewer → fix → re-review
 3. **Push to GitHub after every task** — every commit goes to `origin/main`
 4. **Never use browser automation** — always give Chris manual instructions instead
@@ -464,10 +482,18 @@ When compacting, always preserve: modified file list, failing test names, and Re
 
 These rules apply to every session, every task, forever.
 
-### Rule 1 — Inbox first
-Before starting any task, read docs/inbox.md.
-If it has content, merge it into claude_memory.md and relevant docs, then clear inbox.md.
-Never skip this step even if inbox.md appears empty — always open and check it.
+### Rule 1 — Inbox first (read every session; inbox is a working queue)
+Before starting any task, read `docs/inbox.md`.
+
+**Inbox is a working queue, not a transient handoff.** It accumulates active operational items that intentionally survive across sessions: open queued tasks, multi-PR series notes, hardware procurement reminders, pending Chris-decisions, and other items that haven't yet earned a canonical home in `claude_memory.md`, `decisions_log.md`, `lessons_learned.md`, `risk_register.md`, or a design doc. **Do NOT auto-clear inbox.md at session start.**
+
+What to do at session start:
+1. **Read inbox.md in full.** Surface anything time-sensitive or session-relevant.
+2. **Promote where appropriate** — if an inbox item has matured into a canonical artifact (DEC-NNN, R-NNN, LL-NNN, design doc), MOVE it into the canonical home and remove from inbox. Promotion is a one-way ratchet; once promoted, the inbox loses the item.
+3. **Add new items as you go** — when you queue something for "later," add it to inbox.md with a date stamp. The queue rule from CLAUDE.md "Same-day-write rules — broader" applies: if an item belongs in `task_25_checklist.md` / `decisions_log.md` / `lessons_learned.md` / `risk_register.md`, write it there directly; only use inbox for items that don't yet have a canonical home.
+4. **Sweep when it grows past readability** — when inbox.md exceeds ~2000 lines, do a one-time triage pass to archive completed items (move to `docs/inbox/archive/YYYY-MM.md`) and promote stragglers to canonical files. The sweep is opportunistic, not session-mandatory.
+
+The earlier "merge into claude_memory.md and clear" wording was the original 2026-04 design when inbox was a thin claude.ai → Claude Code handoff. Reality drifted: the inbox is now a session-spanning queue. **This rule reflects current reality (2026-05-01).** If a future workflow simplification can collapse inbox back to a transient handoff, restore the auto-clear behavior — but don't auto-clear today.
 
 ### Rule 2 — Design spec before any frontend code
 Before writing any code for any frontend task (JS, CSS, HTML, page templates):
@@ -480,9 +506,10 @@ Read all of these at the start of every Claude Code session, in this order:
 1. docs/claude_memory.md
 2. CLAUDE.md
 3. docs/inbox.md
-4. docs/design/asset_board_ui.md
-5. docs/decisions_log.md (LOCKED asset-board design decisions — consult BEFORE changing any asset board behaviour)
-6. docs/phase1_design.md §5.6 (frontend sessions only)
+4. docs/design/V10_CANONICAL_MOCKUP.html (asset board UI gospel — supersedes asset_board_ui.md on any conflict; see "V10 Canonical Mockup — Gospel Reference" section earlier in this file for the full rule set)
+5. docs/design/asset_board_ui.md (legacy spec, kept for reference only — V10 mockup wins on conflict)
+6. docs/decisions_log.md (LOCKED asset-board design decisions — consult BEFORE changing any asset board behaviour)
+7. docs/phase1_design.md §5.6 (frontend sessions only — note that file is now banner-marked HISTORICAL; consult only the §5.6 frontend popover spec, NOT the file's overall design claims, which have diverged from production)
 
 ### Rule 4 — End of session commit
 At the end of every session, before stopping:
