@@ -1,5 +1,20 @@
 # Inbox
 
+## 2026-05-01 — ERPNext / Frappe community hardware field reports
+
+**Action:** Review the Frappe and ERPNext community forums (`discuss.frappe.io`, `github.com/frappe/erpnext/issues`, `github.com/frappe/frappe/issues`, Reddit `r/erpnext`) for real-world reports on POS hardware integration. Focus on: receipt printers, label printers, cash drawers, ID/barcode scanners, card readers, and tablets.
+
+**What to extract:** what works easily, what works with caveats, what people regret. Cite sources for every claim — issue / forum link with date.
+
+**Output:** `docs/research/erpnext_hardware_field_reports.md` with three lists:
+- **Green list** — works well, multiple confirmed reports, straightforward integration
+- **Yellow list** — works with caveats (specific quirks, version constraints, known bugs that require workarounds)
+- **Red list** — avoid (broken integrations, abandoned by vendor, doesn't survive Frappe upgrades, recurring data-loss reports)
+
+**Feeds into:** `docs/design/pos_hardware_spec.md` (the consolidated hardware spec), `docs/design/pos_scanner_spec.md` (the ID scanner research), and `docs/research/merchant_processor_comparison.md` (the merchant processor research). All three queued items above benefit from this field-reports research as a sanity check on whatever the vendor docs claim.
+
+**Deliverable order:** Outline first — section skeleton with empty green/yellow/red bullet lists — wait for Chris approval before populating.
+
 ## 2026-05-01 — Merchant processor comparison for ERPNext v16 + iPad
 
 **Action:** Research and rank the top-tier merchant processors in Canada and the US by ease of integration with ERPNext / Frappe v16 for in-person card-present payments on iPad. Multi-venue context: Hamilton (CAD), Philadelphia (USD), DC (USD), Dallas (USD) — solution must support both currencies natively or via well-supported per-venue config.
