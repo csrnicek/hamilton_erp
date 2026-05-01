@@ -97,6 +97,36 @@ This file is **not** a lessons-learned log. The lessons file (`docs/lessons_lear
   - Phase 3 returns/refunds design must explicitly account for these two issues OR depend on upstream fixes shipping first.
   - The general ~10/month fix pace means Hamilton's monthly upgrade window WILL touch a doctype Hamilton uses; the staging-then-production promotion process (per CLAUDE.md) is the structural defense.
 
+## R-011 — Cash Reconciliation variance system non-functional at Phase 1 (false-alarm risk)
+
+- **Source:** Phase 1 controller audit on 2026-05-01; cross-referenced in Phase 3 design intent doc (`docs/design/cash_reconciliation_phase3.md`, PR #108).
+- **Description:** `hamilton_erp/hamilton_erp/doctype/cash_reconciliation/cash_reconciliation.py::_calculate_system_expected` is a placeholder that hardcodes `self.system_expected = flt(0)` and is marked "Phase 3 implementation." Until Phase 3 wires up the real "sum of cash payment lines on submitted Sales Invoices for the shift period" calculation, every real reconciliation runs the three-way variance against `system = 0`. Concrete consequence: any drop with non-zero cash will trigger `variance_flag = "Possible Theft or Error"` (when manager ≈ operator but system differs) or `"Operator Mis-declared"` (when manager ≈ system = 0 but operator declared real cash). The flag will fire on EVERY reconciliation because operator and manager will both report real cash > 0 and system_expected = 0 will always disagree.
+- **Mitigation in place:** Manager training. Until Phase 3 ships, managers must ignore the `variance_flag` value entirely and treat the count as Clean if A (operator-declared) ≈ C (manager-counted) and the printed envelope label matches the operator declaration. The flag is noise, not signal, while system_expected is stubbed.
+- **Why deferred:** Wiring up the real `system_expected` calculator is non-trivial — it has to query Sales Invoices for the shift period, sum cash payment lines, subtract tip pulls, and apply the venue-specific reconciliation profile (`docs/design/cash_reconciliation_phase3.md` §3). Doing it half-right is worse than not doing it at all (drives downstream variance flags wrong). Phase 3 ships the full design, not a partial.
+- **Severity:** **MEDIUM.** No data corruption; false-positive flag pattern only. Risk is operational: a manager who doesn't know to ignore the flag will investigate phantom theft on every drop, eroding trust in the system over time. Mitigation depends entirely on training discipline, not code.
+- **Watch points:**
+  - Hamilton manager onboarding must explicitly state "ignore variance flag until Phase 3" and reference this risk entry.
+  - Phase 3 implementation kickoff (Task 25 successor or new task) MUST include the real `system_expected` calculator as the first deliverable, before any other Phase 3 cash recon work.
+  - If manager attrition replaces the trained-to-ignore manager with a new manager unaware of the workaround, the false-alarm pattern reactivates; this is a process risk, not a code risk.
+- **Linked work:** Phase 3 redesign captured in `docs/design/cash_reconciliation_phase3.md` (PR #108). Gap #4 Cash Reconciliation field masking (deferred to Phase 3 alongside variance redesign per 2026-05-01 directive — Item 7 ships as 4 of 5 gaps complete).
+
+## R-012 — Cash Drop envelope label print pipeline unbuilt (PRE-GO-LIVE BLOCKER)
+
+- **Source:** Cash Drop envelope label investigation on 2026-05-01; cross-referenced in Phase 3 design intent doc (`docs/design/cash_reconciliation_phase3.md`, PR #108).
+- **Description:** `docs/hamilton_erp_build_specification.md` §7.4 step 4 specifies that the system "prints a label on the label printer containing: Venue name, Date, Operator name, Shift identifier, Drop type, Drop number, Declared amount, Timestamp" when an operator submits a Cash Drop. This pipeline is **unbuilt today**. The Cash Drop submit hook does not invoke any print routine. `Hamilton Settings.printer_label_template_name` is a name field with nothing on the other end — no `Label Template` DocType exists, no print_format renders it, no print endpoint dispatches to the Brother QL-820NWB. The operator submits a Cash Drop, the record is saved, no label is printed, no envelope is labeled.
+- **Why this is a BLOCKER (not deferable):** The blind cash drop anti-theft design (DEC-005, DEC-021, captured in `docs/design/cash_reconciliation_phase3.md` §1) depends on the operator NEVER writing a number on the envelope by hand. Handwritten numbers can be doctored; pre-printed labels with the system's record cannot. Without the print pipeline, operators must either (a) write the declared amount on the envelope by hand — which breaks the anti-tampering invariant — or (b) drop unlabeled envelopes that the manager identifies later by Frappe UI listing — which makes manager-side reconciliation a forensics exercise instead of a physical-envelope-to-system-record match. **Either fallback defeats the design.** Hamilton cannot launch Phase 1 with this gap; the print pipeline must ship before go-live.
+- **Mitigation in place:** None. The risk is OPEN.
+- **Status:** OPEN — Phase 1 BLOCKER. Must be closed before Hamilton go-live, NOT deferred to Phase 2 / Phase 3.
+- **Severity:** **HIGH (BLOCKER).** Defeats DEC-005 blind cash drop invariant operationally; without it, blind drop is theatre. The design intent doc (PR #108) explicitly calls this out: "today the print pipeline is unbuilt... until that pipeline lands, the blind-write discipline degrades to a procedural rule (operator writes nothing manually, manager identifies envelopes by Cash Drop record listed in Frappe)" — that procedural rule is not durable under operator turnover or shift fatigue.
+- **Linked work:** Taskmaster Task 30 — "Cash Drop envelope label print pipeline (Phase 1 BLOCKER)." See `.taskmaster/tasks/tasks.json`.
+- **What ships in Task 30:**
+  - `Label Template` DocType (or first-cut equivalent) holding the cash drop envelope template
+  - Cash Drop `on_submit` hook that renders the template with the 8 spec fields and dispatches to the printer at `Hamilton Settings.printer_ip_address`
+  - Brother QL-820NWB printer integration (P-touch Template engine per `docs/research/label_printer_evaluation_2026_05.md`, OR raster fallback for first-cut)
+  - Hamilton Settings entry for the cash drop template name
+  - Tests confirming label content matches the 8 spec fields and prints reliably under simulated submit conditions
+  - Operator-side error handling: if print fails, surface a clear blocker on the Cash Drop submit (operator cannot drop an unlabeled envelope into the safe).
+
 ---
 
 ## Maintenance
