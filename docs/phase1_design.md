@@ -1,7 +1,36 @@
 # Hamilton ERP — Phase 1 Design: Asset Board and Session Lifecycle
 
+> ⚠️ **HISTORICAL DOCUMENT — DO NOT TREAT AS CURRENT SPEC.**
+>
+> This file is the **2026-04-10 Phase 1 design draft**. It captures the build plan as-of project kickoff. Phase 1 has shipped 23+ tasks since this draft was written, and several specifics in this document have **deliberately diverged** from what was eventually built and shipped to production. Reading this as the current spec will produce bugs.
+>
+> **For the canonical current state, read instead:**
+>
+> | Topic | Canonical source |
+> |---|---|
+> | Final design decisions (locked) | `docs/decisions_log.md` |
+> | Asset board UI gospel | `docs/design/V10_CANONICAL_MOCKUP.html` (+ `docs/design/V9.1_RETAIL_AMENDMENT.md`) |
+> | Workflow rules + environment + production version pins | `CLAUDE.md` |
+> | Locking convention (Redis key, MariaDB FOR UPDATE, version field) | `CLAUDE.md` §"Key decisions" + `docs/coding_standards.md` §13 + `hamilton_erp/locks.py` |
+> | Runtime requirements | `CLAUDE.md` §"Technical environment" (Python 3.14, Node 24, MariaDB 12.2.2) |
+> | Phase 3 cash reconciliation design intent | `docs/design/cash_reconciliation_phase3.md` |
+> | Phase 1 BLOCKER status + Taskmaster tasks | `.taskmaster/tasks/tasks.json` (Tasks 25, 30, 31-37) |
+> | Active risks | `docs/risk_register.md` |
+>
+> **Specific known divergences in this draft (do not implement):**
+>
+> - **Overtime two-stage / 30-second interval (line 21, line 441):** REJECTED. The final spec is single-stage overtime with a 15-second live tick — see `docs/decisions_log.md` §3.2 "Single overtime state — no warning/overtime two-stage."
+> - **Lock key with `:operation` suffix (line 184):** REJECTED. The shipped lock key is asset-only: `hamilton:asset_lock:{asset_name}` — see `CLAUDE.md` §"Key decisions" and `hamilton_erp/locks.py:67`. This is the documented convention to prevent operation-collision bugs in concurrent state changes.
+> - **Python 3.11 / Node 20 (line 74-75):** SUPERSEDED. Frappe v16 hard-requires Python 3.14 and Node 24 — see `CLAUDE.md` §"Technical environment" for the version-pin rationale.
+> - **`mark_all_clean_*` API endpoints (line 40, line 490-501, line 690):** REMOVED. DEC-054 was reversed in PR #67 — see `docs/decisions_log.md` "A29-1 Bulk 'Mark All Clean' feature REMOVED."
+> - **Status: "Draft — awaiting review" + "no feature branch yet" + "local bench setup paused":** all stale; Phase 1 has shipped extensively. See `.taskmaster/tasks/tasks.json` for current status.
+>
+> Treat the rest of this file as **historical context** for understanding the original Phase 1 thinking. Verify any specific claim against the canonical sources above before using it.
+
+---
+
 **Date:** 2026-04-10
-**Status:** Draft — awaiting review
+**Status:** Historical draft (preserved for reference only — see banner above)
 **Phase:** 1 (builds on Phase 0, which is complete and live on hamilton-erp.v.frappe.cloud)
 **Target branch:** `main` (single-developer project, no feature branch yet)
 **Test environment:** local Frappe v16 bench at `~/frappe-bench` (setup in progress — paused pending `.zshrc` approval)
