@@ -313,9 +313,9 @@
         "id": "20",
         "title": "Asset Board \u2014 realtime listeners (cross-tab sync)",
         "description": "Subscribe to realtime events from realtime.py and update tiles live across multiple operator tablets.",
-        "details": "Plan section: Task 20 (lines 3135-3229). Modifies asset_board.js.",
+        "details": "Plan section: Task 20 (lines 3135-3229). Modifies asset_board.js.\n\nVerified complete 2026-05-01: `asset_board.js:1380-1411` implements `listen_realtime()` with subscriptions to `hamilton_asset_status_changed` and `hamilton_asset_board_refresh` events. `realtime.py:28` defines `publish_status_change()` called from every lifecycle function. Cross-tab sync works via these realtime channels. `teardown()` properly unsubscribes on page-destroyed.",
         "testStrategy": "Manual multi-tab test \u2014 change triggered in one tab reflects in another within 1-2s.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "19"
         ],
@@ -326,9 +326,9 @@
         "id": "21",
         "title": "Asset Board \u2014 bulk Mark All Clean confirmation dialog",
         "description": "Upgrade bulk 'Mark All Clean' to use a proper Frappe dialog for confirmation (replaces any placeholder confirm).",
-        "details": "Plan section: Task 21 (lines 3230-3320). Modifies asset_board.js. 3-AI review checkpoint after this task.",
+        "details": "Plan section: Task 21 (lines 3230-3320). Modifies asset_board.js. 3-AI review checkpoint after this task.\n\nResolved 2026-05-01 via DEC-054 reversal (Amendment A29-1, 2026-04-29). The bulk Mark All Clean feature was REMOVED entirely: no footer button, no `mark_all_clean_*` endpoints, no `_mark_all_clean` helper, no `bulk_reason` parameter on `mark_asset_clean`. See `docs/decisions_log.md` lines 438-444 and `hamilton_erp/api.py:277` for the removal comment. The original confirmation dialog scope no longer applies \u2014 there is no bulk action to dialog about. Cleaning is per-tile.",
         "testStrategy": "Manual QA \u2014 confirm dialog fires, cancellation works, accept triggers bulk API.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [
           "20"
         ],
@@ -645,9 +645,9 @@
         "id": "26",
         "title": "Fix test_stress_simulation.py stale imports against renamed lifecycle API",
         "description": "Replace `from hamilton_erp.lifecycle import assign_asset` references with the actual current public API per lifecycle.py. The asset_board.js api_map at line 386 confirms the live API is `start_walk_in_session`, not `assign_asset`. Caused 34 ImportErrors in the 2026-04-27 Phase 1 V9 alignment test run; predates that work \u2014 likely became broken when commit 71f050b refactored lifecycle.py to use named constants.",
-        "details": "Files: hamilton_erp/test_stress_simulation.py. Greps to start with: `grep -n \"from hamilton_erp.lifecycle import\" hamilton_erp/test_stress_simulation.py` and cross-reference against the actual exported names in `hamilton_erp/lifecycle.py`. Estimated 15 minutes. After fix, run `bench --site hamilton-unit-test.localhost run-tests --module hamilton_erp.test_stress_simulation` to confirm clean.",
+        "details": "Files: hamilton_erp/test_stress_simulation.py. Greps to start with: `grep -n \"from hamilton_erp.lifecycle import\" hamilton_erp/test_stress_simulation.py` and cross-reference against the actual exported names in `hamilton_erp/lifecycle.py`. Estimated 15 minutes. After fix, run `bench --site hamilton-unit-test.localhost run-tests --module hamilton_erp.test_stress_simulation` to confirm clean.\n\nResolved 2026-05-01: `test_stress_simulation.py` was REPLACED via PR #29 (`chore/replace-stress-simulation`) on 2026-04-29. The current file uses the renamed lifecycle API (`start_session_for_asset`, `vacate_session`, `set_asset_out_of_service`, etc.) and is no longer skipped. Five test classes are active: TestStressConcurrentAssign, TestStressLockBehavior, TestStressSessionNumberSequence, TestStressBulkTurnoverCycles, TestStressCrossAssetIsolation. Imports are current. The stale-imports task is moot.",
         "testStrategy": "All 34 currently-erroring tests in test_stress_simulation.py must run (pass or fail on actual logic, not on import). Run the single module in isolation first.",
-        "status": "pending",
+        "status": "done",
         "dependencies": [],
         "priority": "medium",
         "subtasks": [],
