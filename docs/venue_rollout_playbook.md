@@ -24,6 +24,52 @@ Specific enough that Claude Code can follow it autonomously.
 
 ---
 
+## Phase 0 — Per-venue site survey + procurement (before Phase A)
+
+These are physical-site and merchant-relationship decisions made BEFORE the Frappe Cloud site goes up. Each new venue (Philadelphia, DC, Dallas, future) runs through the full sequence at rollout time. Hamilton skipped this phase historically; future venues do not.
+
+### Step 0.1 — Site survey for connectivity
+
+- [ ] **Ethernet drop at front desk.** Check whether the venue's front-desk location has a wired ethernet drop available within cable reach. If yes, plan wired LAN for the receipt printer, label printer, and cash drawer. If no, plan WiFi for all networked hardware and confirm WiFi signal strength at the front-desk location is reliable enough for the receipt-print latency budget.
+- [ ] **Power outlets.** Confirm enough outlets near the front desk to support the iPad charger, scanner (if specced), card terminal, receipt printer, label printer, and cash drawer — plus a UPS / surge protector. A typical station needs 4-6 outlets.
+- [ ] **Cellular signal** (backup connectivity). Some card terminals (Clover Flex with cellular) can run on cell when WiFi/LAN is down. Confirm cell signal at the venue if specifying a cellular-capable terminal.
+
+### Step 0.2 — Pick primary processor + backup processor (DEC-063 + DEC-064)
+
+- [ ] **Choose primary processor.** Per DEC-063, each venue picks based on local availability, iPad/ERPNext SDK fit, hardware fit, fees, and risk policy. See `docs/research/merchant_processor_comparison.md` for the ranked table. Default for new USD venues is **Stripe Terminal** (CA + USD support, native ERPNext SDK, BBPOS WisePOS E hardware), but the venue's local ISO offers + cost negotiation can override. Hamilton stays on existing Fiserv MID 1131224.
+- [ ] **Choose backup processor.** Per DEC-064, every venue must have a backup processor pre-approved + integration-tested. Helcim is the natural Canadian backup (adult-friendly TOS); Stripe is the natural US backup if Stripe isn't already primary. The backup must be a different processor than the primary AND must support the same operations (charge, refund, void, capture, settle).
+- [ ] **Open both merchant accounts.** Even if the backup is "dormant," the application + underwriting + KYC happens upfront. A "backup" that takes 4 weeks to onboard at the moment of need is not a backup.
+
+### Step 0.3 — Integration-test both processors
+
+- [ ] **Process a $1 live test transaction through each.** Confirm the iPad → terminal → processor → settlement flow works end-to-end on BOTH primary and backup. A backup that's "approved but never tested" is also not a backup.
+- [ ] **Verify webhooks / callbacks.** Both processors must successfully deliver post-transaction webhooks to the venue's site (success, failure, refund, dispute notifications). Set up the webhook URLs in both portals during this step.
+- [ ] **Verify swap mechanism.** Confirm the per-venue config flip (`bench set-config primary_processor backup_processor_name`) followed by a worker restart correctly switches subsequent transactions to the backup. Document the exact command in `docs/RUNBOOK.md`.
+
+### Step 0.4 — Order hardware including spares
+
+- [ ] **Per-venue hardware list,** based on `docs/design/pos_hardware_spec.md`:
+  - iPad (10th gen, USB-C) — quantity = number of stations at this venue
+  - ID scanner (Honeywell Voyager 1602g + Apple USB-C-to-USB Adapter) — quantity = stations + 1 spare per venue (deferred for Hamilton until Phase 2; required for venues with loyalty / DL-verification flows)
+  - Card terminal (model per Step 0.2 primary processor) — quantity = stations
+  - Receipt printer (Epson TM-T20III dual LAN/WiFi) — quantity = stations
+  - Label printer (Brother QL-820NWB) — quantity = 1 per venue (shared) OR 1 per station (high-volume)
+  - Cash drawer (RJ-11 to receipt printer) — quantity = stations
+  - Cables (USB-C charger, ethernet patch if wired, USB-C-to-USB-A adapter for scanner) — verify lengths against site-survey measurements
+- [ ] **Spares budget.** Multi-station venues (DC's 3 stations) carry: 1 spare scanner, 1 spare card-terminal cable / dock, 1 case of receipt paper, 1 case of label DK rolls. Decide spares quantity at order time, not after the first failure.
+
+### Step 0.5 — Compatibility check before deployment
+
+- [ ] **Scanner ↔ iPad.** USB-C native or USB-C-to-USB-A adapter confirmed; HID keyboard wedge mode tested.
+- [ ] **Card terminal ↔ iPad.** SDK pair tested; one $1 transaction completed end-to-end.
+- [ ] **Receipt printer ↔ network.** Pings from iPad's WiFi / LAN to printer IP succeed.
+- [ ] **Label printer ↔ network.** Pings + AirPrint discovery from iPad succeed.
+- [ ] **Cash drawer ↔ receipt printer.** RJ-11 cable plugged; ESC/POS kick command pops the drawer on test transaction.
+
+**Note on scanner / spare counts and per-station hardware distribution:** these are operational decisions made at venue rollout time, NOT in `docs/design/pos_hardware_spec.md`. The hardware spec lists what's available and integration-tested; the rollout playbook decides what each venue actually orders based on station count, traffic forecast, layout, and budget.
+
+---
+
 ## Phase A — Frappe Cloud Site Creation
 
 1. Log in to Frappe Cloud dashboard

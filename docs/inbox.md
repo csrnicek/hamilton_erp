@@ -6,8 +6,6 @@ Fix two CI failures — commit to existing PR branches, do not open new PRs:
 1. **PR #122**: `tip_pull_currency` returns "CAD" instead of reading `frappe.conf.anvil_currency` — find where it gets set and wire it through. Run failing test to confirm.
 2. **PR #123**: `_ensure_test_item()` in `test_zero_value_invoice.py` missing `stock_uom` on Item fixture — add `stock_uom = "Nos"` before insert. Run failing tests to confirm.
 
-<<<<<<< HEAD
-=======
 ## Cleanup follow-up — `_ensure_audit_trail_enabled` dead hook
 
 Per **LL-038** (lessons_learned.md, 2026-05-03). `hamilton_erp/setup/install.py:46-69` targets `System Settings.enable_audit_trail`, a field that does not exist on Frappe v16.14.0. The hook silently no-ops on every install. The v16 audit mechanism is per-DocType `track_changes: 1`, regression-pinned by PR #161.
@@ -27,7 +25,6 @@ Three observations surfaced during the read-only review of the audit-synthesis P
 - **f-string + implicit-concat + `.format()` mixing in `assign_asset_to_session` warning log (PR #166)** — the deprecation-warning line mixes f-string substitution, implicit string concatenation, and a trailing `.format()`. Functionally OK for the current arg shapes (all strings), but fragile: if any arg becomes `None` or a non-`str`, the implicit concat path silently produces ambiguous output. Fix: collapse to a single f-string. Trivial.
 
 - **`get_doc_before_save() is None` defensive bypass in Cash Drop guards (PR #168)** — both `_validate_immutable_after_first_save` and `_validate_immutable_after_reconciliation` start with `if get_doc_before_save() is None: return`. The intent is "skip during initial insert when no prior version exists." Risk: if a future Frappe minor changes the semantics of `get_doc_before_save` (e.g. returns an empty Document instead of None on insert), the guards silently no-op and the immutability invariant breaks. Fix: pin the bypass to an explicit `if self.is_new(): return` instead, which uses the documented public API. Schedule with the Phase 3 bench-migrate window.
->>>>>>> 6727e34 (feat(DEC-066): admin-correction endpoint + Cash Recon on_cancel handler)
 
 ## 2026-05-01 — Phase 2 hardware research delivered
 
@@ -39,6 +36,44 @@ The five hardware-research entries that lived here are no longer needed in the i
 - `docs/research/erpnext_hardware_field_reports.md` — community-reports framework (needs WebSearch session to populate) — PR #90
 
 Open questions still pending Chris's input live in each PR's body, not here.
+
+## 2026-05-01 — Open tasks following DEC-062 / DEC-063 / DEC-064
+
+These are operational follow-ups to today's classification + processor-architecture DECs. Pick up in a future session; none blocks anything currently shipping.
+
+### Hamilton backup processor selection (DEC-064 compliance)
+
+Hamilton's primary processor is Fiserv (MID 1131224, standard-classified). Per DEC-064, Hamilton must ALSO have a backup processor, pre-approved + integration-tested, swappable in hours. **Backup is NOT YET selected.** Helcim was the prior suggestion (Canadian flagship, adult-friendly TOS for the perception-driven termination scenario); reassess against current options before committing. Open the application + underwriting + KYC for the chosen backup before Phase 2 card-payment work begins — a "backup that takes 4 weeks to onboard at the moment of need" is not a backup.
+
+**Action items:**
+1. Compare Helcim, Stripe Terminal CA, and Moneris against the DEC-064 criteria (different processor than primary, supports same operations, integration-testable in hours after approval).
+2. Open the chosen backup's merchant account; let it sit dormant.
+3. Process a $1 test transaction through the backup once approved (per `docs/venue_rollout_playbook.md` Phase 0.3).
+4. Document the swap procedure in `docs/RUNBOOK.md`.
+
+### Hamilton scanner deferred to Phase 2
+
+Per DEC-062 + the 2026-05-01 hardware spec update, **Hamilton does NOT order an ID scanner at launch.** Phase 2 trigger: when (a) a loyalty program ships and front-desk needs DL parsing for membership lookup, OR (b) rentable asset key barcode scanning lands. Until then, Hamilton's anonymous walk-in check-in flow has no scanner dependency. Note: this defers the SCANNER, not ID acceptance — operators still verify ID visually for any age-gated workflow per existing manual practice. See `docs/design/pos_scanner_spec.md` requirement #1 for the broader ID-acceptance scope (DL via scanner, passport / age-of-majority / other gov photo ID via manual entry).
+
+### Fiserv terminal model lookup (Hamilton's existing rented unit)
+
+Hamilton has a physical, rented, standalone Fiserv terminal at the front desk. **Model is currently TBD.** When Chris provides the model number, queue this research:
+
+1. Does the specific model have an iPad-integrated SDK (Clover Connect API support? PAX SDK? other)?
+2. If YES → design the iPad integration; document the API path in `docs/research/merchant_processor_comparison.md`.
+3. If NO → recommend swapping the terminal at next lease renewal to a Clover Flex or equivalent (per `docs/research/merchant_processor_comparison.md` "Fiserv / Clover terminal hardware" section). Do not attempt iPad integration with a non-supported model.
+
+### Card-payment processor abstraction (Phase 2 architecture)
+
+Per DEC-064, the processor-abstraction layer (already on the Phase 2 inbox under "Merchant abstraction (multi-merchant resilience)" further down this file) MUST support **both primary AND backup** per venue, not just primary. The architectural shape:
+
+- Per-venue `site_config.json` lists primary + backup adapter names (e.g. `fiserv_clover`, `helcim`).
+- Each adapter implements the same interface: `charge(amount, currency, terminal_id) → txn_id`, `refund(txn_id, amount) → refund_id`, `void(txn_id)`, `capture(txn_id, amount)`, `settle()`.
+- Hamilton's `submit_retail_sale` endpoint (existing) calls the abstraction; the abstraction routes to primary by default, backup on operator-triggered swap.
+- Swap mechanism: `bench set-config primary_processor backup_processor_name` + `bench restart`. Documented in `docs/RUNBOOK.md`.
+- Adapter parity is mandatory — adding a new venue with a processor that has no adapter triggers adapter development AS PART OF rollout, not after.
+
+This work is Phase 2; the inbox entry below ("### Merchant abstraction (multi-merchant resilience)") has the full design. This task confirms the design must support primary + backup, not just primary.
 
 ## 2026-04-30 (afternoon) — PR #51 ready for human review
 
