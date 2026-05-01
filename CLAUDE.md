@@ -17,6 +17,44 @@ pattern.
 
 When in doubt, the answer is "let me check first."
 
+## Plugin Data Freshness — Single Source of Truth
+
+Project artifacts have ONE canonical location, which is always a version-controlled file in this repo. Plugin state (Taskmaster, Claude-Mem, auto-memory) is a *mirror* — never canonical. When plugin state contradicts the file, trust the file and update the plugin.
+
+### Same-day-write rule for Task 25 sub-items
+
+Any new Task 25 sub-item identified during planning must be added to Taskmaster (`.taskmaster/tasks/tasks.json`) AND to `docs/task_25_checklist.md` the same day it's identified. Never let a sub-item live only in `inbox.md`, memory, or chat history. Single source of truth for Task 25 sub-items: Taskmaster + the checklist file.
+
+### Same-day-write rules — broader
+
+The same principle applies to every artifact type that has a canonical home:
+
+| Artifact | Canonical file (must update same day) | Plugin mirror |
+|---|---|---|
+| Task 25 sub-item | `docs/task_25_checklist.md` | Taskmaster Task 25 subtasks |
+| Top-level task | Taskmaster `.taskmaster/tasks/tasks.json` | none — Taskmaster is canonical |
+| Decision (DEC-NNN) | `docs/decisions_log.md` | none — file is canonical |
+| Lesson (LL-NNN) | `docs/lessons_learned.md` | none — file is canonical |
+| Risk (R-NNN) | `docs/risk_register.md` | none — file is canonical |
+| Inbox handoff item | `docs/inbox.md` | none — file is canonical (cleared on `/start`) |
+
+If a session identifies one of these and only writes it to chat or to a plugin (Claude-Mem observation, auto-memory entry), the next session can't see it. The artifact effectively didn't happen.
+
+### Stale-plugin-data discipline
+
+Plugins persist across sessions. Their state can drift from the current file state when:
+- A file is updated but the plugin observation isn't
+- A plugin observation is created from a hypothesis that turned out wrong
+- A bug is fixed but the memory entry that flagged it isn't cleared
+
+**Concrete example to learn from (2026-05-01):** Claude-Mem observation 1063 said "hooks.py Line 69 Uses `override_doctype_class` — Known Bug to Fix." A 2026-05-01 verification showed `hooks.py:69` already correctly uses `extend_doctype_class`. The bug was fixed; the memory observation was never updated. Acting on the stale memory would have wasted a PR cycle "fixing" code that was already correct.
+
+**The rule:** before acting on plugin data that names a specific file/function/flag, verify against the current file state. If the plugin contradicts the file, the plugin is stale — clear or update it, then act on the file's reality.
+
+### When canonical files contradict each other
+
+The pre-existing rule still applies: design specs (`docs/design/V10_CANONICAL_MOCKUP.html`) and decisions (`docs/decisions_log.md`) win over scattered references in inbox / memory / chat. If two canonical files disagree, surface it as a decision needing Chris's call rather than picking one silently.
+
 ## V10 Canonical Mockup — Gospel Reference
 
 The file `docs/design/V10_CANONICAL_MOCKUP.html` is INTENDED to be the canonical
