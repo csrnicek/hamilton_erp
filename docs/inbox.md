@@ -1,5 +1,74 @@
 # Inbox
 
+## 2026-05-01 — ERPNext / Frappe community hardware field reports
+
+**Action:** Review the Frappe and ERPNext community forums (`discuss.frappe.io`, `github.com/frappe/erpnext/issues`, `github.com/frappe/frappe/issues`, Reddit `r/erpnext`) for real-world reports on POS hardware integration. Focus on: receipt printers, label printers, cash drawers, ID/barcode scanners, card readers, and tablets.
+
+**What to extract:** what works easily, what works with caveats, what people regret. Cite sources for every claim — issue / forum link with date.
+
+**Output:** `docs/research/erpnext_hardware_field_reports.md` with three lists:
+- **Green list** — works well, multiple confirmed reports, straightforward integration
+- **Yellow list** — works with caveats (specific quirks, version constraints, known bugs that require workarounds)
+- **Red list** — avoid (broken integrations, abandoned by vendor, doesn't survive Frappe upgrades, recurring data-loss reports)
+
+**Feeds into:** `docs/design/pos_hardware_spec.md` (the consolidated hardware spec), `docs/design/pos_scanner_spec.md` (the ID scanner research), and `docs/research/merchant_processor_comparison.md` (the merchant processor research). All three queued items above benefit from this field-reports research as a sanity check on whatever the vendor docs claim.
+
+**Deliverable order:** Outline first — section skeleton with empty green/yellow/red bullet lists — wait for Chris approval before populating.
+
+## 2026-05-01 — Merchant processor comparison for ERPNext v16 + iPad
+
+**Action:** Research and rank the top-tier merchant processors in Canada and the US by ease of integration with ERPNext / Frappe v16 for in-person card-present payments on iPad. Multi-venue context: Hamilton (CAD), Philadelphia (USD), DC (USD), Dallas (USD) — solution must support both currencies natively or via well-supported per-venue config.
+
+**Cross-checks against truth docs:**
+- `docs/risk_register.md` R-008 (Single-acquirer SPOF, downgraded for Hamilton's standard Fiserv classification) and R-009 (MATCH list 1% chargeback threshold)
+- `docs/inbox.md` 2026-04-30 Phase 2 hardware backlog (Helcim, Stripe Terminal, Moneris adapter pattern)
+- `CLAUDE.md` Frappe v16 hard rules (no `db.commit()` in controllers — relevant when wiring webhooks)
+- ERPNext v16 native integrations (Stripe is bundled; what about Square, Helcim, Moneris, Adyen?)
+
+**Deliverable:** `docs/research/merchant_processor_comparison.md` with a ranked table (rows = processors, columns = CA/US support, ERPNext native vs custom adapter, terminal hardware, fees, adult-classification policy, integration effort) and a recommendation backed by a "why this and not the next-ranked option" paragraph.
+
+**Deliverable order:** Outline first — section skeleton only — wait for Chris approval before filling in the comparison table.
+
+## 2026-05-01 — Hardware spec consolidation (multi-venue rollout)
+
+**Action:** Build `docs/design/pos_hardware_spec.md` covering the Hamilton front-desk station and the rollout to Philadelphia, DC, and Dallas. Cross-check every recommendation against truth docs and Frappe/ERPNext v16 compatibility.
+
+**Scope:**
+- **ID scanner** — separate research already queued; link to `docs/design/pos_scanner_spec.md` rather than re-spec here
+- **Retail barcode scanner** — decide if needed based on whether Hamilton actually sells SKU'd products (lube, towels, merch). Research the venue's actual retail mix before recommending hardware
+- **Card reader** — prefer First Data / Fiserv if the hardware integration story is straightforward; fall back to Stripe Terminal (works in CA + US, important for the cross-border rollout)
+- **Tablet** — standard iPad (not Air, not Pro, not 13"). Confirm against the existing tablet design spec already in the repo (search `docs/design/` first)
+- **Receipt printer** — confirm what's already specced (Epson TM-T20III in inbox.md as of 2026-04-30) and whether it's still the right call for all four venues
+- **Label printer** — confirm if specced anywhere; recommend if not. Brother label printer is referenced in DEC-011 — verify that's still current
+- **Cash drawer** — RJ-11 to receipt printer, ESC/POS kick on transaction end (driven by the receipt-print event)
+- **Receipt paper** — Canadian supplier; defer the supplier choice until printers are locked
+
+**Cross-checks:** `CLAUDE.md` Frappe v16 conventions, `docs/decisions_log.md` (DEC-011 Brother label printer, any DEC about receipt printer), `docs/research/pipeda_venue_session_pii.md` (scanner_data field), `docs/api_reference.md`.
+
+**Deliverable order:** Outline first — `docs/design/pos_hardware_spec.md` skeleton with section headings only — wait for Chris approval before populating each section.
+
+## 2026-05-01 — Front-desk ID scanner research
+
+**Action:** Research and rank front-desk ID scanners with the longest support track record for Hamilton's use case. Requirements: parses Canadian/US driver's-licence PDF417 barcodes (DOB, name, expiry), USB connection (HID keyboard or vendor-specific driver), durable hardware that survives years of front-desk abuse. Vendor-agnostic — pick on track record and parts-availability, not brand loyalty.
+
+**Compatibility check:** confirm against `docs/api_reference.md`, the existing Frappe v16 / ERPNext v16 truth docs in CLAUDE.md, and the Venue Session PII fields described in `docs/research/pipeda_venue_session_pii.md` (especially the `scanner_data` field that captures DL parse output for Philadelphia rollout).
+
+**Deliverable order:**
+1. Outline first — `docs/design/pos_scanner_spec.md` skeleton with section headings only. Wait for Chris approval before populating.
+2. Full doc after approval — populate with vendor table, recommended models, integration touchpoints, parts-availability notes, and the truth-doc cross-references.
+
+**Why now:** Philadelphia rollout will be the first venue to populate Venue Session PII fields (full_name, date_of_birth, scanner_data). The scanner choice is upstream of the field-masking work in Task 25 item 7 — pick the scanner before locking the schema.
+
+## 2026-05-01 — NEXT: Hardware audit for Hamilton POS
+
+**Action:** Audit what hardware is currently specced for the Hamilton front-desk POS station vs what's missing. Cover at minimum the cash drawer, barcode scanner, and card reader. Note model numbers, connection type, vendor, and price where each is already chosen; flag the gaps where nothing is specced yet.
+
+**Deliverable order:**
+1. Outline first — `docs/design/pos_hardware_spec.md` skeleton with section headings only. Land that for Chris approval before filling in.
+2. Full doc after approval — populate each section with the audit findings, recommended models, and the integration touchpoints in `hamilton_erp` code (e.g. receipt printer = Hamilton Settings field; cash drawer = kicked open by ESC/POS receipt print; scanner = HID keyboard input handled by cart UI).
+
+**Why this is next:** Phase 2 hardware backlog already lists the Epson TM-T20III receipt printer (see this file, "2026-04-30 — Phase 2 hardware + integration backlog (post-cart-UX)"). The receipt printer is one piece — Hamilton's full front-desk station is several pieces, none of which are written down in one place. This audit is the prerequisite to ordering hardware for the launch fit-out.
+
 ## 2026-04-30 (afternoon) — PR #51 ready for human review
 
 Follow-up to PR #49 (cart UX stub). Ships the QBO-mirrored accounting seed and replaces the cart Confirm stub with real POS Sales Invoice creation. PR: https://github.com/csrnicek/hamilton_erp/pull/51 — auto-merge enabled (squash + delete branch).
