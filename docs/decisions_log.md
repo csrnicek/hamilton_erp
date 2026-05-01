@@ -3,7 +3,7 @@
 **Status:** LOCKED. Decisions on this page are FINAL and must not be re-opened without an explicit discussion and documented reversal.
 
 **Last updated:** 2026-05-01 (DEC-062 standard-merchant classification + DEC-063 per-venue processor choice + DEC-064 primary+backup processor architecture)
-**Source-of-truth mockup:** `docs/design/V9_CANONICAL_MOCKUP.html`
+**Source-of-truth mockup:** `docs/design/V10_CANONICAL_MOCKUP.html` (V10 body is byte-identical to V9; the bump bookkeeps the V9.1 retail amendment. V9 archived at `docs/design/archive/V9_CANONICAL_MOCKUP.html`.)
 **PR:** #8 on branch `feature/asset-board-ui-rebuild`
 **Mockup interactive tests:** 59 automated tests, all passing (pulse visibility, tile sizing, state transitions, modal flows, tab configuration, countdown behaviour)
 
@@ -425,7 +425,7 @@ The full V9.1 retail decisions (V9.1-D1 through V9.1-D7) are documented in the a
 - **V9.1-D4:** Per-venue `site_config.json` key `retail_tabs` lists Item Groups.
 - **V9.1-D5:** Tab framework data-driven; combined config + data rule extends.
 - **V9.1-D6:** Retail tile shape — code + stock badge + name + price; stock state palette reuses asset palette (green ≥4, amber 1–3, red 0).
-- **V9.1-D7:** Retail tile click is a no-op in V9.1 (cart UX is round 2).
+- **V9.1-D7:** Retail tile click is a no-op in V9.1 (cart UX is round 2). **SUPERSEDED 2026-04-30 by V9.1-D9** (tap retail tile = add 1 to cart; cart UX shipped in PR #49).
 
 Round 2 deferred work (NOT in V9.1, will land after browser test): cart UX, add-to-cart, payment flow, refunds/voids, operator price overrides, multi-warehouse selection, low-stock alerts.
 
