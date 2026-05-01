@@ -664,6 +664,19 @@
         "priority": "low",
         "subtasks": [],
         "updatedAt": "2026-04-27T18:43:59.000Z"
+      },
+      {
+        "id": "28",
+        "title": "Phase 2: Stale OOS duration visibility on asset board",
+        "description": "Add prominent at-a-glance day-count + staleness color coding on Out-of-Service tiles so a manager can spot stale OOS items from across the board without tapping each tile.",
+        "details": "Replaces the dead-code OOS day-counter removed in Finding #2(b) of the AI bloat audit (PR shipping 2026-05-01).\n\nRequired behavior:\n1. Day-count badge on every OOS tile in the compact board view, rendered at 12-14px font (vs the dead code's 9px), full opacity (vs 0.75), so it's spottable at glance distance from across the room.\n2. Color-coded by staleness: yellow for >7 days OOS, red for >14 days. Bonus: subtle pulse animation on red-tier tiles.\n3. OOS section header includes a stale summary, e.g. \"OUT OF SERVICE (3 \u2014 1 stale >2wk)\" so managers see the stale-count without scanning tiles.\n\nData source: `asset.hamilton_last_status_change` (already in API response \u2014 the same field _format_oos_days_ago uses for the expanded-overlay 'N days ago' text). No backend change required; client-side time math + render is sufficient.\n\nTouchpoints:\n- hamilton_erp/hamilton_erp/page/asset_board/asset_board.js \u2014 _render_tile() for per-tile badge; _render_oos_content() for section-header summary\n- hamilton_erp/hamilton_erp/public/css/asset_board.css \u2014 new .hamilton-oos-stale-warn / .hamilton-oos-stale-danger classes; .hamilton-section-stale-summary for the header\n- Tests: extend test_asset_board_rendering.py to assert the stale-count appears on the section header when at least one tile exceeds the threshold\n\nTrigger: post-Hamilton-launch UX feedback OR confirmed need at Philadelphia/DC/Dallas rollout where higher OOS volume makes the manual scan painful. Not a launch blocker for Hamilton.\n\nReference: docs/audits/ai_bloat_audit_2026-04-29.md Finding #2 discussion on 2026-05-01 (Chris reviewed the rendering and approved option (b) DELETE for the dead code, while filing this as the proper UX follow-up).",
+        "testStrategy": "Unit: assert the stale-count text appears in the section header when at least one OOS tile is >7 days old; assert no count when all OOS tiles are recent. Browser: visually verify the badge sizes and colors at typical front-desk viewing distance.",
+        "status": "pending",
+        "priority": "medium",
+        "dependencies": [
+          "25"
+        ],
+        "subtasks": []
       }
     ],
     "metadata": {

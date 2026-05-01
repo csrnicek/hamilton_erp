@@ -393,14 +393,6 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			corner_badge = `<span class="hamilton-tile-corner-badge hamilton-corner-ot">OT</span>`;
 		}
 
-		// OOS day counter (bottom-right) — V8 addition. Conditional on
-		// asset.oos_days being supplied by the API. If backend doesn't
-		// enrich, no counter renders (graceful degrade).
-		let oos_days_html = "";
-		if (asset.status === "Out of Service" && asset.oos_days != null) {
-			oos_days_html = `<span class="hamilton-oos-days">${frappe.utils.escape_html(String(asset.oos_days))}d</span>`;
-		}
-
 		// Time text on tile — V9 Decision 3.3 wording:
 		//   countdown → "Xm left" (red)
 		//   overtime  → "Xm late" / "Xh Xm late" (red)
@@ -431,7 +423,6 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				${corner_badge}
 				<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>
 				${time_html}
-				${oos_days_html}
 			</div>
 		`;
 	}
