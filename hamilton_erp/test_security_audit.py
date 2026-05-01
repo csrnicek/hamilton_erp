@@ -575,6 +575,138 @@ class TestShiftRecordBlindRevealGuardrail(IntegrationTestCase):
 		)
 
 
+# ---------------------------------------------------------------------------
+# Field masking audit — gap #2 (Task 25 item 7 / Comp Admission Log.comp_value)
+# ---------------------------------------------------------------------------
+
+
+_COMP_ADMISSION_LOG_JSON = (
+	PACKAGE_ROOT
+	/ "hamilton_erp"
+	/ "doctype"
+	/ "comp_admission_log"
+	/ "comp_admission_log.json"
+)
+
+
+class TestCompAdmissionLogValueMasking(IntegrationTestCase):
+	"""Field masking audit gap #2 — comp_value must be hidden from
+	Hamilton Operator at the API layer.
+
+	Why this exists: ``Comp Admission Log.comp_value`` is the notional
+	revenue cost of a comp ("if I gave this away, what was it worth?").
+	Per ``docs/permissions_matrix.md`` "Sensitive fields" section, this
+	field is Hamilton Manager+ only — exposing it to Operators creates
+	a margin-leak signal (peers can see what each comp cost) AND a
+	self-justification path for inflated comps (operator sees value,
+	knows what to write to look reasonable).
+
+	Same shape as ``TestShiftRecordBlindRevealGuardrail`` (gap #1):
+	two coupled JSON edits (``permlevel: 1`` on the field + Manager/
+	Admin permlevel-1 read rows in the perm grid) must move together.
+	Either edit alone is broken; this test asserts both are present
+	and consistent.
+
+	Phase 2 wiring contract (also documented in the field's
+	``description``): code creating Comp Admission Log records must
+	run with permlevel:1 write access (e.g. ``ignore_permissions=True``
+	under Administrator elevation), or ``comp_value`` silently lands
+	as ``None`` because the Operator-role context can't write the
+	masked field. The cart's ``submit_retail_sale`` is the reference
+	pattern.
+
+	Static JSON parse — same philosophy as
+	``TestShiftRecordBlindRevealGuardrail``. We read the committed
+	schema rather than spinning up a DB; a runtime test would only
+	catch regressions on a specific read path. The static check
+	catches the *class* of misconfig.
+	"""
+
+	MASKED_FIELD = "comp_value"
+	REQUIRED_PERMLEVEL = 1
+	# Operator must NOT have permlevel-1 read. Manager and Admin must.
+	MUST_HAVE_PERMLEVEL_READ = ("Hamilton Manager", "Hamilton Admin")
+	MUST_NOT_HAVE_PERMLEVEL_READ = ("Hamilton Operator",)
+
+	def setUp(self):
+		self.schema = _json.loads(_COMP_ADMISSION_LOG_JSON.read_text())
+		self.field = next(
+			(f for f in self.schema.get("fields", [])
+				if f.get("fieldname") == self.MASKED_FIELD),
+			None,
+		)
+		self.assertIsNotNone(
+			self.field,
+			f"Field {self.MASKED_FIELD!r} no longer exists on "
+			"Comp Admission Log — either it was renamed (update this "
+			"test) or removed (revisit the field-masking audit first).",
+		)
+
+	def test_field_has_permlevel_1(self):
+		"""The schema half: the field itself must declare permlevel: 1."""
+		self.assertEqual(
+			self.field.get("permlevel"), self.REQUIRED_PERMLEVEL,
+			f"Comp Admission Log.{self.MASKED_FIELD} is missing "
+			f"permlevel: {self.REQUIRED_PERMLEVEL}. Without permlevel, "
+			"every Hamilton Operator with row-level read sees the "
+			"comp's notional revenue cost — margin leak + "
+			"self-justification path for inflated comps.",
+		)
+
+	def test_managers_have_permlevel_1_read(self):
+		"""The permissions half: Manager and Admin must hold a
+		permlevel-1 read row.
+
+		Without this, the field is invisible to *everyone* — including
+		the roles authorized to review it. The schema half (permlevel
+		on the field) and the permissions half (permlevel rows in the
+		perms array) move together; testing one without the other lets
+		a half-fix slip in.
+		"""
+		permlevel_reads = {
+			p.get("role")
+			for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+		}
+		missing = [r for r in self.MUST_HAVE_PERMLEVEL_READ
+			if r not in permlevel_reads]
+		self.assertEqual(
+			missing, [],
+			f"Comp Admission Log permission grid is missing "
+			f"permlevel-{self.REQUIRED_PERMLEVEL} read rows for "
+			f"{missing}. Without these, comp_value is invisible to "
+			"the very roles authorized to review it. Add a permission "
+			'row {"permlevel": '
+			f'{self.REQUIRED_PERMLEVEL}, "read": 1, "role": '
+			'<role>} for each missing role.',
+		)
+
+	def test_operator_does_not_have_permlevel_1_read(self):
+		"""The negative case: Hamilton Operator must NOT have
+		permlevel-1 read.
+
+		This is the actual security invariant — the field-masking
+		audit gap #2's whole point. A future fixture that adds Operator
+		at level 1 (by accident or misunderstanding the design) is
+		caught here before merge.
+		"""
+		offenders = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+			and p.get("role") in self.MUST_NOT_HAVE_PERMLEVEL_READ
+		]
+		self.assertEqual(
+			offenders, [],
+			f"Comp Admission Log grants permlevel-"
+			f"{self.REQUIRED_PERMLEVEL} read to a role that must not "
+			f"have it: {[p.get('role') for p in offenders]}. "
+			f"comp_value is the field-masking audit gap #2 — Manager+ "
+			"only. Remove the offending permlevel row.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
