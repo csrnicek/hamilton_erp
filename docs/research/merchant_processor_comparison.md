@@ -81,7 +81,97 @@ The above mostly covers card-not-present (e-commerce). For Hamilton's Phase 2, c
 - Terminal SDK that integrates with ERPNext's payment flow
 - Compliance with EMV / PCI standards (the terminal handles this; Hamilton inherits compliance via the processor)
 
-**Stripe Terminal** is the strongest card-present story because Stripe sells the terminal hardware (BBPOS WisePOS E, Stripe S700) and the SDK directly supports the iPad use case via the Stripe Terminal SDK for iOS / JavaScript. **Fiserv** card-present integration depends on which Clover terminal model and which API path.
+**Stripe Terminal** is the strongest card-present story because Stripe sells the terminal hardware (BBPOS WisePOS E, Stripe S700) and the SDK directly supports the iPad use case via the Stripe Terminal SDK for iOS / JavaScript. **Fiserv** card-present integration depends on which Clover terminal model and which API path — see next section.
+
+---
+
+## Fiserv / Clover terminal hardware — iPad integration paths
+
+Hamilton's existing Fiserv MID 1131224 routes through the Clover product line (post First Data merger). The Clover terminals fall into two integration patterns for an iPad-based POS:
+
+- **Cloud-routed (Clover Connect API):** iPad app sends a transaction request via REST → Clover Connect dispatches to the paired terminal → terminal completes locally → result returns via webhook. The iPad and terminal don't talk directly. Works over any network they both reach. The standard semi-integrated pattern for ERPNext-style apps.
+- **Direct Bluetooth pair (Clover Go SDK):** iPad app uses the Clover SDK for iOS to pair a small reader directly. Lighter integration, but Bluetooth pairing has known reliability issues and the reader is feature-limited (no display, no PIN entry without prompts on the iPad screen).
+
+Below: ranked by iPad-integration quality at Hamilton's expected volume / use case (counter check-in, single payment per transaction, occasional retail SKU sale).
+
+⚠️ **Pricing, lease terms, and SDK availability MUST be verified against current Fiserv / Clover quotes before commitment.** Specs below are from training data; the hardware market moves quarterly.
+
+### Tier 1 — Best fit for Hamilton
+
+#### Clover Flex (model C401U or successor)
+
+- **Form factor:** Handheld, ~7-inch touchscreen, EMV chip + magstripe + tap (NFC/Apple Pay/Google Pay), built-in receipt printer, cellular optional.
+- **iPad integration:** **Clover Connect API** (cloud-routed REST). iPad submits transaction; Flex displays prompts, reads card, returns result via webhook. Hamilton's submit_retail_sale endpoint becomes the iPad's launching point.
+- **Hardware estimate (verify):** ~$500-700 per unit purchased; ~$50-80 / month leased through Fiserv (lease bundles maintenance + replacement). Volume / multi-venue lease terms negotiable.
+- **Availability:** Widely stocked through Fiserv direct, Clover-authorized resellers, and partner ISOs. No supply-chain issues reported in training data.
+- **Pros:** Most popular semi-integrated terminal in the Clover line. Mature SDK. Mobile (handheld) so the customer doesn't have to reach across the counter — operator brings the device to the customer for tap/dip. Tip prompts, receipt print, signature capture all on-device.
+- **Cons:** Per-unit cost. The iPad isn't strictly necessary at Hamilton's volume — you could run the Clover Flex standalone — but the iPad gives the unified asset-board + cart experience the rest of Hamilton's flow expects.
+
+**Recommended for Hamilton's primary check-in station + DC's 3 stations.**
+
+#### Clover Mini (model C500 or successor)
+
+- **Form factor:** Countertop terminal with 8-inch screen, customer-facing display, EMV/tap, built-in receipt printer.
+- **iPad integration:** Same Clover Connect API as Flex. Cloud-routed.
+- **Hardware estimate (verify):** ~$700-900 purchased; ~$60-100 / month leased.
+- **Availability:** Widely stocked.
+- **Pros:** Customer-facing display gives clearer "tap here" affordance than handheld. Stable counter mount removes drop risk.
+- **Cons:** Customer must reach across counter (slower than handheld for line-up scenarios). More expensive than Flex.
+
+**Backup recommendation if Flex is unavailable or if a venue's layout favors counter-mount over handheld.**
+
+### Tier 2 — Lighter integration
+
+#### Clover Go (Bluetooth card reader)
+
+- **Form factor:** Small (~3-inch) Bluetooth reader, EMV/tap only, no screen, no built-in printer.
+- **iPad integration:** **Clover SDK for iOS** — direct Bluetooth pair. iPad app drives the entire UX (prompts, tip selection, receipt routing). Reader just reads the card.
+- **Hardware estimate (verify):** ~$50-100 purchased; usually no lease (it's a accessory tier).
+- **Availability:** Widely stocked. Often bundled into Fiserv/Clover starter kits.
+- **Pros:** Cheapest entry point. Custom iPad UX gives full design control over the payment flow.
+- **Cons:** Bluetooth pairing reliability is a recurring complaint in community forums. No PIN pad → PIN-required transactions (Canadian Interac chip) may not be supported in all configurations. No customer-facing display.
+
+**Useful as a low-cost backup or for retail-side counter where the operator/customer have shared sightline. Probably not the front-desk primary.**
+
+### Tier 3 — Possible but not recommended
+
+#### PAX A920 / A77 via Clover Connect
+
+- **Form factor:** Android-based handheld (PAX A920) or countertop (A77). EMV/tap/printer.
+- **iPad integration:** PAX hardware can be routed through Fiserv's Clover Connect gateway, but the SDK / docs are PAX-side, not Clover-side. Two SDKs to manage: PAX for the terminal, Clover Connect for the gateway hop.
+- **Hardware estimate (verify):** ~$400-600 purchased.
+- **Availability:** Through PAX-authorized resellers; bundled with Fiserv MIDs in some channels but not the default path.
+- **Pros:** Hardware is robust, used widely in non-Clover ISO channels.
+- **Cons:** Two-SDK integration complexity; PAX is not Fiserv's first-party hardware. Documentation is harder to find than Clover-native models. Recommend only if the Clover Flex is unavailable and PAX is what the local Fiserv ISO offers.
+
+#### First Data FD150 / FD130 (legacy)
+
+- **Form factor:** Older countertop EMV terminals, dial-up / Ethernet only.
+- **iPad integration:** None native. Would require a custom gateway middleware.
+- **Status:** **Skip.** Older First Data hardware predates the Clover-iPad integration story. If Hamilton's existing physical terminal IS one of these, it should be replaced — not extended — when the iPad cart goes live.
+
+---
+
+### Lease vs. buy
+
+| Path | Pros | Cons |
+|---|---|---|
+| **Lease through Fiserv** (~$50-100/mo per Flex/Mini) | Maintenance + replacement included; no upfront capital; easy to swap models if needs change; lease cost is opex not capex (cleaner accounting) | Total cost over 3-4 years exceeds purchase price; locked into Fiserv as the primary processor for the lease term |
+| **Buy outright** (~$500-900 per unit) | Lower lifetime cost if held 3+ years; no processor-lock; resale value if migrating away | Upfront capital; you handle replacement when terminal fails or model is EOL'd |
+
+**Recommendation for Hamilton:** **lease the first 1-2 units** to validate the iPad integration end-to-end (test SDK, test merchant settlement, test refund/void flow) before committing to bulk purchase. After 6 months of clean operation, decide buy-vs-continue-lease for the multi-venue rollout. Leasing covers the early-iteration risk window.
+
+### Where to buy / lease (verify before contacting)
+
+- **Fiserv direct sales** — best for existing MID holders. Hamilton's MID 1131224 should already have a sales contact at Fiserv.
+- **Clover-authorized resellers** (Banking ISOs, Heartland, Worldpay's Clover line, Square partners) — competitive pricing, varied bundle deals.
+- **Costco for Business / Sam's Club** — sometimes carry Clover Flex / Mini in standard retail channels at flat pricing. Worth checking for a quick reference price even if not the eventual purchase channel.
+
+### Open questions for Chris before ordering
+
+1. Does Hamilton's existing Fiserv MID currently have a physical terminal already? If yes, what model — Clover or older First Data?
+2. Lease vs. buy preference for Hamilton's first station? My recommendation is lease the first 1-2 units; happy to defer to your call.
+3. Any objection to Clover Flex as the primary recommendation, or do you want me to research alternatives first (Stripe Terminal as researched earlier, Helcim Smart Terminal, etc.)?
 
 ---
 
