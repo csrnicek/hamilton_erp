@@ -78,10 +78,11 @@ def asset_status_lock(asset_name: str, operation: str) -> Iterator[dict]:
 			_("Asset lock service temporarily unavailable. Please try again.")
 		)
 	if not acquired:
-		# TODO(phase-2): distinguish transient contention from stuck-lock recovery.
+		# TODO(phase-2, gh-71): distinguish transient contention from stuck-lock recovery.
 		# Currently both cases return the same message; operators mashing the button
 		# during TTL recovery get confused. Add an attempt counter + "system recovering,
 		# please wait 15s" variant once production logs show the pattern.
+		# Tracked: https://github.com/csrnicek/hamilton_erp/issues/71
 		raise LockContentionError(
 			_(
 				"Asset {0} is being processed by another operator. "
