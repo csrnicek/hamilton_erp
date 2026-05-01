@@ -140,6 +140,7 @@
   {
    "create": 1,
    "delete": 0,
+   "if_owner": 1,
    "read": 1,
    "report": 1,
    "role": "Hamilton Operator",
