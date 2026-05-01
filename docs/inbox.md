@@ -1,5 +1,19 @@
 # Inbox
 
+## 2026-05-01 — Merchant processor comparison for ERPNext v16 + iPad
+
+**Action:** Research and rank the top-tier merchant processors in Canada and the US by ease of integration with ERPNext / Frappe v16 for in-person card-present payments on iPad. Multi-venue context: Hamilton (CAD), Philadelphia (USD), DC (USD), Dallas (USD) — solution must support both currencies natively or via well-supported per-venue config.
+
+**Cross-checks against truth docs:**
+- `docs/risk_register.md` R-008 (Single-acquirer SPOF, downgraded for Hamilton's standard Fiserv classification) and R-009 (MATCH list 1% chargeback threshold)
+- `docs/inbox.md` 2026-04-30 Phase 2 hardware backlog (Helcim, Stripe Terminal, Moneris adapter pattern)
+- `CLAUDE.md` Frappe v16 hard rules (no `db.commit()` in controllers — relevant when wiring webhooks)
+- ERPNext v16 native integrations (Stripe is bundled; what about Square, Helcim, Moneris, Adyen?)
+
+**Deliverable:** `docs/research/merchant_processor_comparison.md` with a ranked table (rows = processors, columns = CA/US support, ERPNext native vs custom adapter, terminal hardware, fees, adult-classification policy, integration effort) and a recommendation backed by a "why this and not the next-ranked option" paragraph.
+
+**Deliverable order:** Outline first — section skeleton only — wait for Chris approval before filling in the comparison table.
+
 ## 2026-05-01 — Hardware spec consolidation (multi-venue rollout)
 
 **Action:** Build `docs/design/pos_hardware_spec.md` covering the Hamilton front-desk station and the rollout to Philadelphia, DC, and Dallas. Cross-check every recommendation against truth docs and Frappe/ERPNext v16 compatibility.
