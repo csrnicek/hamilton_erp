@@ -392,10 +392,10 @@
             "description": "Task 25 checklist item 1: Lock cancel/amend to manager+",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 1. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 2,
@@ -403,10 +403,10 @@
             "description": "Task 25 checklist item 2: Restrict System Manager role to Chris only",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 2. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 3,
@@ -414,10 +414,10 @@
             "description": "Task 25 checklist item 3: Document Versioning + Audit Trail",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 3. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 4,
@@ -425,10 +425,10 @@
             "description": "Task 25 checklist item 4: Workflow approvals",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 4. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 5,
@@ -436,10 +436,10 @@
             "description": "Task 25 checklist item 5: No front-desk self-escalation",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 5. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 6,
@@ -447,10 +447,10 @@
             "description": "Task 25 checklist item 6: Role matrix in handoff doc",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 6. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 7,
@@ -458,10 +458,10 @@
             "description": "Task 25 checklist item 7: Field masking (Cash Drop, Reconciliation, Comp Admission Log, Venue Session PII per PIPEDA)",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 7. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "blocked",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 8,
@@ -469,10 +469,10 @@
             "description": "Task 25 checklist item 8: Fixtures to Git",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 8. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 9,
@@ -480,10 +480,10 @@
             "description": "Task 25 checklist item 9: Patches",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 9. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 10,
@@ -491,10 +491,10 @@
             "description": "Task 25 checklist item 10: GitHub Actions CI/CD",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 10. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 11,
@@ -502,10 +502,10 @@
             "description": "Task 25 checklist item 11: hooks.py audit",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 11. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 12,
@@ -513,10 +513,10 @@
             "description": "Task 25 checklist item 12: Clear error log",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 12. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 13,
@@ -524,10 +524,10 @@
             "description": "Task 25 checklist item 13: Audit claude_memory.md",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 13. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 14,
@@ -535,10 +535,10 @@
             "description": "Task 25 checklist item 14: decisions_log.md",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 14. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 15,
@@ -546,10 +546,10 @@
             "description": "Task 25 checklist item 15: lessons_learned.md",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 15. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 16,
@@ -557,10 +557,10 @@
             "description": "Task 25 checklist item 16: venue_rollout_playbook.md",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 16. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 17,
@@ -568,10 +568,10 @@
             "description": "Task 25 checklist item 17: Update CLAUDE.md",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 17. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 18,
@@ -590,10 +590,10 @@
             "description": "Task 25 checklist item 19: AI bloat audit (report-first, approve, test, commit)",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 19. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "review",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 20,
@@ -612,10 +612,10 @@
             "description": "Task 25 checklist item 21: Replace 36x frappe.flags.in_test with frappe.in_test",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 21. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           },
           {
             "id": 22,
@@ -634,10 +634,10 @@
             "description": "Task 25 checklist item 23: Audit == \"1\" / == \"0\" string comparisons",
             "dependencies": [],
             "details": "See docs/task_25_checklist.md item 23. Source of truth for the 23-item Task 25 pre-go-live hardening checklist landed via PR #74 (2026-05-01).",
-            "status": "pending",
+            "status": "done",
             "testStrategy": "See item-specific test requirements in the work PR. Most items are docs/audit; items 21 and 23 are mechanical refactors verified by full test suite.",
             "parentId": "25",
-            "updatedAt": "2026-05-01T14:51:50.005Z"
+            "updatedAt": "2026-05-01T15:32:37.182Z"
           }
         ]
       },

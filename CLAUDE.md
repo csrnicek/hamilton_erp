@@ -23,7 +23,26 @@ Project artifacts have ONE canonical location, which is always a version-control
 
 ### Same-day-write rule for Task 25 sub-items
 
-Any new Task 25 sub-item identified during planning must be added to Taskmaster (`.taskmaster/tasks/tasks.json`) AND to `docs/task_25_checklist.md` the same day it's identified. Never let a sub-item live only in `inbox.md`, memory, or chat history. Single source of truth for Task 25 sub-items: Taskmaster + the checklist file.
+Any new Task 25 sub-item identified during planning must be added to `docs/task_25_checklist.md` the same day it's identified. Never let a sub-item live only in `inbox.md`, memory, or chat history.
+
+**Direction of truth:** `docs/task_25_checklist.md` is canonical. `.taskmaster/tasks/tasks.json` Task 25 subtasks are derived from it.
+
+**Auto-sync mechanism (`.github/workflows/sync-taskmaster.yml`):**
+
+- **Pre-merge guard** — every PR that touches the checklist or Taskmaster JSON runs `python3 .github/scripts/sync_taskmaster_from_checklist.py --check`. CI fails if the two files disagree, forcing the author to update both.
+- **Post-merge auto-sync** — when a push to main modifies `docs/task_25_checklist.md`, the workflow re-derives Taskmaster from the checklist and opens a follow-up PR with the JSON update (auto-merge enabled).
+
+**Status markers in the checklist** (machine-parseable):
+
+| Marker | Taskmaster status |
+|---|---|
+| `✅ DONE` | `done` |
+| `🔒 BLOCKED` | `blocked` |
+| `🔍 REVIEW` | `review` |
+| `⏸ DEFERRED` | `deferred` |
+| (no marker) | `pending` |
+
+To update an item's status: edit the checklist line. The workflow handles the JSON.
 
 ### Same-day-write rules — broader
 
@@ -31,7 +50,7 @@ The same principle applies to every artifact type that has a canonical home:
 
 | Artifact | Canonical file (must update same day) | Plugin mirror |
 |---|---|---|
-| Task 25 sub-item | `docs/task_25_checklist.md` | Taskmaster Task 25 subtasks |
+| Task 25 sub-item | `docs/task_25_checklist.md` (CANONICAL) | Taskmaster Task 25 subtasks (auto-derived; see auto-sync workflow above) |
 | Top-level task | Taskmaster `.taskmaster/tasks/tasks.json` | none — Taskmaster is canonical |
 | Decision (DEC-NNN) | `docs/decisions_log.md` | none — file is canonical |
 | Lesson (LL-NNN) | `docs/lessons_learned.md` | none — file is canonical |
