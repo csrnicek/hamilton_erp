@@ -25,7 +25,7 @@
 
 ---
 
-## 1. ID + Retail Barcode Scanner — Honeywell Voyager 1602g
+## 1. ID + Retail Barcode Scanner — Honeywell Voyager 1602g (with caveats)
 
 **See `docs/design/pos_scanner_spec.md` for the full vendor analysis.**
 
@@ -33,9 +33,17 @@ Key insight: **one scanner covers both use cases.** The Voyager 1602g reads:
 - PDF417 (driver's licenses) → DOB + name parsing for age verification / customer matching
 - 1D barcodes (UPC, EAN, Code 128) → retail SKU scanning at checkout
 
-No need to spec a separate retail-only barcode scanner. A second Voyager unit per station is an option for DC's 3-tablet setup if cashier and front-desk are physically separated.
+**iPad cable requirement (NEW 2026-05-01):** The chosen scanner MUST connect to the iPad via **USB-C native cable**. USB-A + Apple USB-C-to-USB-A adapter is acceptable as a **fallback only** — adapters add a failure point and a part to lose. Native USB-C is preferred wherever a model exists in the same product class.
+
+**Honeywell Voyager 1602g status:** ships USB-A natively. No USB-C variant currently exists in the 1602g family per training-data research; the industrial 2D scanner market is heavily USB-A-cabled. Two paths:
+1. **Use Voyager 1602g + Apple USB-C-to-USB Adapter (~$20).** Acceptable as fallback per the rule above. Buy one adapter per scanner + one spare per venue.
+2. **Open follow-up research** for a USB-C-native industrial 2D scanner (Datalogic, Code, or Symbol/Zebra latest) that matches the Voyager's PDF417 + AAMVA support, durability, and price. **Recommend treating this as Phase 2 follow-up** — the adapter path is operationally fine; switching scanner vendors over a cable is over-engineering. Re-evaluate if Hamilton's deployment proves the adapter unreliable (drops, fails to enumerate, etc.).
 
 **Hamilton retail mix (for context):** From `docs/inbox.md` 2026-04-30 V9.1 Phase 2 retail cart UX entry, Hamilton sells towels, lube, condoms, and similar low-SKU-count consumables. SKU count is small (estimated <50 SKUs), so a barcode scanner is a nice-to-have rather than a must-have. Manual SKU search in the cart UI works for small inventories. **Recommend scanning at counter over manual entry once SKU count exceeds ~20** for ergonomic / speed reasons.
+
+**Hamilton scanner deferred to Phase 2 (NEW 2026-05-01):** Don't order a scanner for Hamilton at launch. Phase 2 ships when (a) a loyalty program lands and front-desk needs DL parsing for membership, OR (b) rentable asset key barcode scanning lands. Until then, Hamilton's check-in flow is anonymous walk-in with no scanner dependency. New venues (Philadelphia / DC / Dallas) decide at rollout based on local needs.
+
+**Per-station scanner counts** (1 per station, 1 per spare, etc.) are operational decisions made at venue rollout time, not in this hardware spec. See `docs/venue_rollout_playbook.md` for the per-venue ordering process.
 
 ---
 
@@ -43,18 +51,27 @@ No need to spec a separate retail-only barcode scanner. A second Voyager unit pe
 
 **Defer the full vendor analysis to `docs/research/merchant_processor_comparison.md`** (companion deliverable — also queued from inbox 2026-05-01). This section captures only the hardware decisions, not the processor comparison.
 
-**Existing setup (Hamilton):** Fiserv merchant ID 1131224, standard classification. Per `docs/risk_register.md` R-008, this is preferred over high-risk processors for adult-classified businesses because:
-- 30-day termination notice (vs zero-day for high-risk processors)
+**Existing setup (Hamilton):** Fiserv merchant ID 1131224, standard classification per DEC-062 (Hamilton operates as a standard commercial business, not adult-classified). Per `docs/risk_register.md` R-008, the standard MID is preferred over processors that perceive bathhouse-hospitality as adult-adjacent because:
+- 30-day termination notice (vs zero-day for processors with stricter perception)
 - Lower-risk MATCH-list exposure (R-009)
+
+**Hamilton's existing terminal status (NEW 2026-05-01):** Hamilton currently has a **rented, standalone Fiserv terminal** at the front desk. Specific model is **TBD — Chris will provide it later**. iPad-integration design for Hamilton is **deferred until the model is confirmed**. Once known, the next research step is whether that specific model has an iPad-integrated SDK (Clover Connect compatible? other?). If yes → design the integration. If no → recommend swap at lease renewal to a Clover Flex or equivalent (per `docs/research/merchant_processor_comparison.md` "Fiserv / Clover terminal hardware" section).
+
+**Card-present rule (NEW 2026-05-01):** Hamilton (and all ANVIL venues) accept **card-present transactions only** — physical card chip / tap / swipe OR digital wallets (Apple Pay, Google Pay, contactless). **No card-not-present (manual key-in) anywhere.** Every recommended terminal MUST support **NFC / contactless** as a hard requirement. This rules out older Fiserv FD150/FD130 and any terminal without NFC.
 
 **Hardware integration paths (in preference order):**
 
-1. **Fiserv-supplied terminal** — pole-mounted PIN pad, EMV chip + tap. Cleanest integration if Fiserv's API supports the required `merchant_transaction_id` capture for Hamilton's reconciliation flow. Verify before locking.
-2. **Stripe Terminal** (BBPOS WisePOS E or Stripe S700) — if Fiserv hardware integration is too painful, Stripe Terminal is the well-documented fallback. Works in CA + US, important for the multi-venue rollout (CAD at Hamilton, USD at Philadelphia / DC / Dallas). Native ERPNext Stripe integration exists.
-3. **Square Terminal** — third option. Less compelling for adult classification (Square's TOS is stricter than Fiserv).
-4. **Helcim** — Canadian-friendly for adult-hospitality, but USD support is via partner relationships rather than native — adds rollout complexity for the US venues.
+1. **Fiserv-supplied terminal** — physical pole-mounted or counter-mounted EMV+NFC pad. Cleanest integration if the model supports the iPad SDK path (Clover Connect API for Clover-line models). Currently TBD pending Hamilton's existing-model confirmation.
+2. **Clover Flex** (handheld via Clover Connect API) — recommended if Hamilton needs a fresh purchase / lease alongside the existing Fiserv MID. Per `merchant_processor_comparison.md` Fiserv / Clover terminal section.
+3. **Stripe Terminal** (BBPOS WisePOS E or Stripe S700) — well-documented fallback for new venues that don't inherit Hamilton's Fiserv MID. Works in CA + US.
+4. **Square Terminal** — skip per DEC-062 / DEC-063 rationale: Square's TOS is stricter on bathhouse-hospitality merchants (their internal stance, not Hamilton's classification — but it raises termination risk).
+5. **Helcim Smart Terminal** — Helcim is Canadian-flagship and explicit-friendly toward bathhouse-hospitality businesses. Useful as Hamilton's Phase 2 backup processor (per DEC-064) even though Hamilton itself is standard-classified.
 
-**Decision deferred to:** `docs/research/merchant_processor_comparison.md` (full ranked table + recommendation backed by integration-effort analysis).
+**Per-venue choice (DEC-063):** each venue picks its own primary processor at rollout based on local availability, iPad/ERPNext SDK fit, hardware fit, fees, and risk policy. There is no corporate-wide processor mandate.
+
+**Primary + backup (DEC-064):** every venue must have BOTH a primary AND a backup processor pre-approved + integration-tested; system supports config-driven swap in hours. Hamilton's primary is Fiserv; backup is **NOT YET selected** (open task in `docs/inbox.md` for backup processor selection).
+
+**Decision deferred to:** `docs/research/merchant_processor_comparison.md` (full ranked table + recommendation per venue, plus the Fiserv / Clover terminal hardware section).
 
 ---
 
@@ -85,21 +102,28 @@ DC's 3-tablet setup likely reflects a higher-traffic floor with multiple operato
 
 ---
 
-## 4. Receipt Printer — Epson TM-T20III
+## 4. Receipt Printer — Epson TM-T20III (dual LAN + WiFi)
 
-**Recommendation: Epson TM-T20III (Ethernet + USB models).**
+**Recommendation: Epson TM-T20III with BOTH wired Ethernet AND WiFi connectivity supported.**
 
 Per `docs/inbox.md` 2026-04-30 Phase 2 hardware backlog entry. Reaffirmed here as the right call:
 
 - Industry-standard 80mm thermal printer; widely supported in POS integrations (ESC/POS command set is the de-facto standard)
-- Ethernet + WiFi options for flexible station layout
-- Drives the cash drawer kick via the included DK port (RJ-11) — see #6 below
 - Long product runway (TM-T series has been continuously refreshed for 15+ years)
+- Drives the cash drawer kick via the included DK port (RJ-11) — see #6 below
 - ~$220-280 USD per unit
 
+**Connectivity requirement (NEW 2026-05-01):** The printer model selected for each venue MUST support **both wired Ethernet AND WiFi**. Per-venue connection method:
+
+- **Hamilton: wired LAN** (ethernet drop confirmed available at front desk). Wired is more reliable than WiFi for the receipt-print latency budget; pick this where the site supports it.
+- **Other venues: WiFi default unless ethernet is confirmed during site survey.** New venues do NOT assume ethernet is available — the rollout playbook (`docs/venue_rollout_playbook.md`) includes a site-survey step to check for ethernet drops at the front desk before ordering. If ethernet is confirmed, switch to wired; otherwise default WiFi.
+
+**Why both:** ordering printers without one or the other forces a re-buy when the site reality differs from plan. The TM-T20III line includes Ethernet+WiFi-capable variants — verify the SKU at order time supports both interfaces. Single-interface variants are cheaper but introduce a re-order risk that cancels the savings.
+
 **Configuration in Hamilton Settings (when integration ships):**
-- `receipt_printer_ip` (Data) — per-venue Ethernet IP
+- `receipt_printer_ip` (Data) — per-venue printer IP (LAN or WiFi DHCP-assigned)
 - `receipt_printer_enabled` (Check) — toggle for "this venue uses a printer"
+- `receipt_printer_connection` (Select: `wired` / `wifi`) — operational metadata; helps the runbook diagnose connection issues
 
 The integration pattern was scoped in `docs/inbox.md` 2026-04-30 — print receipt as a side-effect after Sales Invoice submit; the receipt is also the physical control token (operator hangs it on the assigned key hook).
 
@@ -107,25 +131,41 @@ The integration pattern was scoped in `docs/inbox.md` 2026-04-30 — print recei
 
 ---
 
-## 5. Label Printer — Brother QL-820NWB
+## 5. Label Printer — Brother QL-820NWB (extensible template registry)
 
-**Recommendation: Brother QL-820NWB.**
+**Recommendation: Brother QL-820NWB driven by an extensible template registry.**
 
-Use cases:
-- **Locker key tags** — printed as needed at check-in (locker number + truncated session ID)
-- **Asset stickers** — one-time print run during venue setup; not a recurring need
-- Optional: **Kitchen / vendor labels** if Hamilton ever expands food/drink service
+### Use cases (current 2026-05-01)
 
-Why Brother QL-820NWB:
-- Continuous-tape thermal label printer; fast (1.5 sec / label)
-- Ethernet + WiFi + USB connectivity options
-- Native AirPrint support for iPad workflow
-- Standard DK-1201 (29×90mm address labels) covers locker keys; DK-2205 continuous-length tape covers asset stickers
+| Template | Size | Trigger | Operator workflow |
+|---|---|---|---|
+| **Locker key tag** | DK-1201 29×90mm address label | Check-in flow assigns a locker | Auto-print on session create; operator attaches to physical key |
+| **Cash drop envelope** | DK-1209 62×100mm shipping label OR DK-2205 continuous tape (custom length) | Operator triggers from Cash Drop form | Print on Save of Cash Drop record |
+| **Retail SKU label** | DK-1201 29×90mm OR DK-1208 38×90mm | Inventory restock event | Batch print from Item list view |
+
+### Architectural requirement: template registry
+
+Today's three use cases are the starting set. The system MUST support **adding or removing label types without re-speccing the printer or rewriting integration code.** The shape this takes:
+
+- **Template definitions** live in a Hamilton ERP DocType (e.g. `Label Template`) with fields: `name`, `label_size` (Select: DK-1201 / DK-1208 / DK-1209 / DK-2205-continuous / etc.), `layout` (Long Text — the print template), `data_fields` (which Hamilton DocType + which fields populate the layout).
+- **Print endpoint** takes a `template_name` + a record reference. Renders the template with the record's data and dispatches to the printer.
+- **Operator UX requirement: fast template switching from the active iPad screen, no context switch.** The ERP UI exposes a "Print label" button on each relevant DocType form (Venue Session, Cash Drop, Item) with a dropdown of applicable templates. Operator picks template → label prints → no app switch, no separate print app, no menu dive.
+
+### Why Brother QL-820NWB handles all current sizes
+
+- **DK roll cassette swap:** each label size maps to a DK roll. Operator swaps the roll for the use case, or each station has a dedicated printer for high-volume sizes.
+- **Continuous tape (DK-2205):** prints custom-length labels in any width. Cash drop envelopes are typically larger than the standard DK-1209 — continuous tape gives the flexibility.
+- **Ethernet + WiFi + USB connectivity** matches the receipt printer dual-connectivity rule (#4 above): wired LAN at Hamilton, WiFi default for new venues unless site survey confirms ethernet.
+- **Native AirPrint support** simplifies iPad direct printing for the v1 integration; deeper integration (server-rendered templates) is Phase 2.
 - ~$220-280 USD
 
-**DEC-011 reference:** `docs/inbox.md` 2026-04-30 Phase 2 backlog entry references "the Brother label printer (DEC-011)." Verification: searching `docs/decisions_log.md` for "DEC-011" or "Brother" returns no matches. **DEC-011 may be aspirational from inbox notes; the canonical decision has not been entered into `decisions_log.md`.** Recommend either entering DEC-011 formally or removing the reference from inbox.md to close the drift.
+### Per-station vs per-venue printer count
 
-**Integration:** Same pattern as the receipt printer — IP-based, configured per-venue via Hamilton Settings. Brother QL printers support standard CUPS / ESC/POS-style commands; the iPad workflow uses the Brother iPrint&Label app or AirPrint.
+Operational decision at venue rollout (per `venue_rollout_playbook.md`). Hamilton's single-station setup needs one printer at the front desk. Multi-station venues (DC's 3 stations) decide whether each station gets its own printer or stations share one — usually depends on physical layout and DK roll size variance per station. **Not in scope for this hardware spec.**
+
+### DEC-011 reference
+
+`docs/inbox.md` 2026-04-30 Phase 2 backlog entry references "the Brother label printer (DEC-011)." Verification: searching `docs/decisions_log.md` for "DEC-011" or "Brother" returns no matches. **DEC-011 may be aspirational from inbox notes; the canonical decision has not been entered into `decisions_log.md`.** Open question for Chris: formalize DEC-011 in decisions_log.md, or remove the inbox reference?
 
 ---
 
