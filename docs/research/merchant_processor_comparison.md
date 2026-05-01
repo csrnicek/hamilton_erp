@@ -18,7 +18,7 @@ Reasoning:
    - Native ERPNext payment-gateway integration (least Hamilton custom code)
    - Both CAD and USD supported with one API
    - Well-documented `payment_intent` flow including `merchant_transaction_id` capture
-   - Adult-classification sensitivity at Stripe is real but manageable (see "Adult-classification policy by processor" section)
+   - Adult-adjacency sensitivity at Stripe (their internal stance toward bathhouse-hospitality merchants — Hamilton itself is standard-classified per DEC-062) is real but manageable; see "Adult-adjacency policy by processor" section
 3. **Helcim, Moneris, Square considered and ranked below.** Each has a real downside that puts it behind the recommendation.
 
 ---
@@ -38,9 +38,11 @@ Reasoning:
 
 ---
 
-## Adult-classification policy by processor (this matters)
+## Adult-adjacency policy by processor (this matters)
 
-Hamilton-style venues (men's bathhouse) are routinely classified as adult or hospitality-adjacent. Each processor handles this differently. The wrong choice means surprise account termination during a Saturday-night peak, exactly the scenario `docs/lessons_learned.md` would have to absorb if it happened.
+**Hamilton is not formally adult-classified** — Fiserv MID 1131224 is standard-classified, and DEC-062 (locked 2026-05-01) records that ANVIL Corp venues operate as standard commercial businesses. But individual processors apply their OWN risk models when underwriting bathhouse-hospitality businesses, and those models can differ from Hamilton's actual classification: a processor may flag the venue as adult-adjacent inside their internal categorization regardless of what the MID says. The table below describes each processor's *internal stance toward bathhouse-hospitality merchants*, not a claim about Hamilton's classification.
+
+The wrong choice means surprise account termination during a Saturday-night peak, exactly the scenario `docs/lessons_learned.md` would have to absorb if it happened. DEC-064 (primary + backup processor per venue) is the structural defense.
 
 | Processor | Hamilton-style classification | Notes |
 |---|---|---|
