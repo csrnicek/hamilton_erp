@@ -1,5 +1,23 @@
 # Inbox
 
+## 2026-05-01 — Hardware spec consolidation (multi-venue rollout)
+
+**Action:** Build `docs/design/pos_hardware_spec.md` covering the Hamilton front-desk station and the rollout to Philadelphia, DC, and Dallas. Cross-check every recommendation against truth docs and Frappe/ERPNext v16 compatibility.
+
+**Scope:**
+- **ID scanner** — separate research already queued; link to `docs/design/pos_scanner_spec.md` rather than re-spec here
+- **Retail barcode scanner** — decide if needed based on whether Hamilton actually sells SKU'd products (lube, towels, merch). Research the venue's actual retail mix before recommending hardware
+- **Card reader** — prefer First Data / Fiserv if the hardware integration story is straightforward; fall back to Stripe Terminal (works in CA + US, important for the cross-border rollout)
+- **Tablet** — standard iPad (not Air, not Pro, not 13"). Confirm against the existing tablet design spec already in the repo (search `docs/design/` first)
+- **Receipt printer** — confirm what's already specced (Epson TM-T20III in inbox.md as of 2026-04-30) and whether it's still the right call for all four venues
+- **Label printer** — confirm if specced anywhere; recommend if not. Brother label printer is referenced in DEC-011 — verify that's still current
+- **Cash drawer** — RJ-11 to receipt printer, ESC/POS kick on transaction end (driven by the receipt-print event)
+- **Receipt paper** — Canadian supplier; defer the supplier choice until printers are locked
+
+**Cross-checks:** `CLAUDE.md` Frappe v16 conventions, `docs/decisions_log.md` (DEC-011 Brother label printer, any DEC about receipt printer), `docs/research/pipeda_venue_session_pii.md` (scanner_data field), `docs/api_reference.md`.
+
+**Deliverable order:** Outline first — `docs/design/pos_hardware_spec.md` skeleton with section headings only — wait for Chris approval before populating each section.
+
 ## 2026-05-01 — Front-desk ID scanner research
 
 **Action:** Research and rank front-desk ID scanners with the longest support track record for Hamilton's use case. Requirements: parses Canadian/US driver's-licence PDF417 barcodes (DOB, name, expiry), USB connection (HID keyboard or vendor-specific driver), durable hardware that survives years of front-desk abuse. Vendor-agnostic — pick on track record and parts-availability, not brand loyalty.
