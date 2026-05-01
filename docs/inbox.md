@@ -1,5 +1,17 @@
 # Inbox
 
+## 2026-05-01 — Front-desk ID scanner research
+
+**Action:** Research and rank front-desk ID scanners with the longest support track record for Hamilton's use case. Requirements: parses Canadian/US driver's-licence PDF417 barcodes (DOB, name, expiry), USB connection (HID keyboard or vendor-specific driver), durable hardware that survives years of front-desk abuse. Vendor-agnostic — pick on track record and parts-availability, not brand loyalty.
+
+**Compatibility check:** confirm against `docs/api_reference.md`, the existing Frappe v16 / ERPNext v16 truth docs in CLAUDE.md, and the Venue Session PII fields described in `docs/research/pipeda_venue_session_pii.md` (especially the `scanner_data` field that captures DL parse output for Philadelphia rollout).
+
+**Deliverable order:**
+1. Outline first — `docs/design/pos_scanner_spec.md` skeleton with section headings only. Wait for Chris approval before populating.
+2. Full doc after approval — populate with vendor table, recommended models, integration touchpoints, parts-availability notes, and the truth-doc cross-references.
+
+**Why now:** Philadelphia rollout will be the first venue to populate Venue Session PII fields (full_name, date_of_birth, scanner_data). The scanner choice is upstream of the field-masking work in Task 25 item 7 — pick the scanner before locking the schema.
+
 ## 2026-05-01 — NEXT: Hardware audit for Hamilton POS
 
 **Action:** Audit what hardware is currently specced for the Hamilton front-desk POS station vs what's missing. Cover at minimum the cash drawer, barcode scanner, and card reader. Note model numbers, connection type, vendor, and price where each is already chosen; flag the gaps where nothing is specced yet.
