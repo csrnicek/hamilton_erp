@@ -9,7 +9,10 @@
 ## Requirements (ranked by priority)
 
 1. **Driver's-license PDF417 parsing.** Must reliably parse Canadian provincial DLs (Ontario, Quebec, BC, Alberta — expected at Hamilton) and US state DLs (anywhere — expected at Philadelphia / DC / Dallas). The parsed payload includes DOB, name, expiry, ID number per AAMVA spec.
-2. **USB connection — HID keyboard wedge.** Plug-and-play on iPad / desktop. No vendor-specific drivers required for the basic scan-into-focus flow. (Optional: USB HID POS or virtual COM port for richer integration.)
+2. **USB connection — HID keyboard wedge, USB-C native preferred.** Plug-and-play on iPad / desktop. No vendor-specific drivers required for the basic scan-into-focus flow. (Optional: USB HID POS or virtual COM port for richer integration.)
+   - **USB-C native cable preferred** to plug directly into the iPad without an adapter. Industrial 2D scanner market is heavily USB-A-cabled today; native USB-C variants are rare in the Honeywell Voyager / Zebra DS2208 / Datalogic QuickScan classes.
+   - **USB-A + Apple USB-C-to-USB Adapter (~$20) acceptable as fallback** when no USB-C-native option exists at the same price/durability tier. Buy one adapter per scanner + one spare per venue. Adapters add a failure point (loose connection, lost adapter); native USB-C would be cleaner.
+   - **Phase 2 follow-up:** if a venue's adapter-based deployment proves unreliable in operation (drops, fails to enumerate), open research for a USB-C-native industrial 2D scanner. Today's recommendation (Voyager 1602g + adapter) is operationally fine to start.
 3. **Durable hardware.** Front desk environment — daily handling, occasional drops onto counter, food/drink proximity. Look for IP-rated builds, drop-tested certification.
 4. **Long parts-availability runway.** Scanner choice should still be sourceable in 5+ years for new venue rollouts. Avoid models with rumored discontinuation. Honeywell and Zebra have the longest product lifecycles in this category.
 5. **Continued vendor support.** Firmware updates for new state DL formats (states periodically refresh PDF417 layouts); active vendor support contracts.
@@ -148,6 +151,8 @@ DC's tablet count is 3 per `docs/venue_rollout_playbook.md` Phase B reference ta
 
 - [ ] Confirm Honeywell Voyager 1602g (or whichever model is selected) currently advertises PDF417 + AAMVA DL parsing on the vendor product page
 - [ ] Confirm USB HID keyboard wedge mode is the default
+- [ ] **Check the vendor catalog for a USB-C-native variant** of the chosen model. If one exists at comparable price + durability, prefer it over USB-A + adapter. If not, accept USB-A + Apple USB-C-to-USB Adapter (~\$20) as the fallback per the requirements section.
+- [ ] If using the adapter fallback: buy one adapter per scanner + one spare per venue. Apple-genuine or Anker (verified compatible) — avoid no-name adapters.
 - [ ] Confirm a sample Ontario DL parses cleanly (vendor demo or local POS supplier)
 - [ ] Confirm 5-year-minimum parts-availability commitment from the supplier
 - [ ] Order 1 sample unit, integrate the AAMVA parser, run a check-in flow end-to-end before bulk ordering for all 4 venues
