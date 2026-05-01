@@ -138,53 +138,26 @@ def start_session_for_asset(asset_name: str, *, operator: str, customer: str = W
 def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 	"""Insert a Venue Session row for a freshly-assigned asset. Caller holds the asset lock.
 
-	NOTE (post Fix 10): session_number IS set here, explicitly, pinned to
-	the captured session_start date via `_next_session_number(for_date=
-	start_date)`. VenueSession.before_insert still contains fallback
-	generator logic (for callers that legitimately omit session_number),
-	but it detects our explicit value and leaves it alone. identity_method
-	defaults to 'not_applicable' via the controller's _set_defaults hook.
+	session_number is generated explicitly here (not via VenueSession.before_insert)
+	so retries can pass `for_date=` to `_next_session_number()` and get a fresh
+	sequence pinned to the original session_start date — closes the midnight-
+	boundary gap (DEC-056) where a retry across 00:00 at a 24h venue would emit
+	a number whose date prefix doesn't match session_start.
 
-	Retry contract (Task 11(c)): the DB has a UNIQUE constraint on
-	`session_number`. If a Redis hiccup or cold-start race ever produces a
-	duplicate, the INSERT raises UniqueValidationError (field-level unique
-	violation, raised by frappe.model.base_document.show_unique_validation_message).
-	We catch it, retry up to 3 times, generating a fresh session_number via
-	`_next_session_number(for_date=start_date)` per attempt so Redis INCR
-	yields a new sequence — but always pinned to the original start date.
-	On the 3rd failure we raise ValidationError with a user-friendly
-	message. The warning log is acceptable inside the lock body (stdlib
-	logging, no network I/O).
+	Retry contract: the DB has a UNIQUE constraint on `session_number`. On
+	UniqueValidationError (Redis hiccup / cold-start race) we snapshot+restore
+	`frappe.local.message_log` to discard the stale "must be unique" toast,
+	generate a fresh session_number via `_next_session_number(for_date=...)`,
+	and retry up to 3 times. Third failure raises ValidationError.
 
-	Exception-handling scope (Task 11 code review, I3): only
-	frappe.UniqueValidationError is caught — it is the sole real trigger
-	here because `venue_session.json` uses `"autoname": "hash"`, and
-	frappe.model.base_document._handle_hash_conflict retries `name` hash
-	collisions INTERNALLY. DuplicateEntryError was considered and rejected:
-	it cannot reach this call site under `autoname: hash`, so catching it
-	would be speculative error handling per coding_standards.md. Do not
-	re-add it without first changing autoname away from hash.
+	Exception scope: ONLY `frappe.UniqueValidationError` is caught. autoname is
+	"hash" — Frappe handles `name` collisions internally, so they never reach
+	here. DuplicateEntryError is deliberately NOT caught (cannot reach this
+	call site under autoname=hash; catching would be speculative per
+	coding_standards.md). Re-add only if autoname changes.
 
-	msgprint hygiene (Task 11 code review, I1): Frappe's
-	base_document.show_unique_validation_message appends a
-	`_("{0} must be unique")` toast to `frappe.local.message_log` BEFORE
-	raising UniqueValidationError. Without intervention, a successful
-	retry would still ship that stale toast to the client alongside the
-	success response — the operator would see a confusing
-	"Session Number must be unique" warning for an assignment that
-	actually succeeded. We snapshot `message_log` at the top of each
-	iteration and restore it on the caught exception so the failed
-	attempt's toast is discarded.
-
-	Midnight boundary (Fix 10, DEC-056): session_start and the
-	session_number's date prefix are both captured ONCE, outside the
-	retry loop. session_number is generated explicitly here (not via
-	VenueSession.before_insert) so the retry path passes `for_date=` to
-	`_next_session_number()` and gets a fresh sequence pinned to the
-	original start date. Without this, a retry that crosses midnight at
-	a 24h venue (Club Hamilton, overnight Fri/Sat) would emit a
-	session_number whose date prefix does not match session_start's
-	date — a real operational inconsistency, not theoretical.
+	Test coverage: test_lifecycle.py (including the midnight-boundary
+	regression that patches `hamilton_erp.lifecycle.now_datetime`).
 	"""
 	# Capture session_start ONCE so retries reuse the same timestamp.
 	# Deriving the prefix from session_start.date() (not a fresh nowdate())
@@ -424,12 +397,9 @@ def mark_asset_clean(asset_name: str, *, operator: str) -> None:
 	publish_status_change(asset_name, previous_status="Dirty")
 
 
-# Parallel to `_set_vacated_timestamp`. Not folded into `_set_asset_status`
-# to keep that function's kwargs bounded — two status-specific timestamp
-# helpers is cheaper than a 10-kwarg core mutator. Reused by
-# `mark_asset_clean` (Task 6) and `return_asset_to_service` (Task 8); the
-# helper pair plateaus at two because OOS entry itself (Task 7) touches no
-# `last_*_at` field. ChatGPT/Grok review 2026-04-10.
+# Twin of `_set_vacated_timestamp`; reused by `mark_asset_clean` and
+# `return_asset_to_service`. OOS entry sets neither field, so the helper
+# pair plateaus at two.
 def _set_cleaned_timestamp(asset_name: str) -> None:
 	frappe.db.set_value("Venue Asset", asset_name,
 	                    "last_cleaned_at", frappe.utils.now_datetime())
