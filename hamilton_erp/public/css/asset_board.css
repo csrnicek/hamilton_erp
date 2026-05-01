@@ -285,18 +285,14 @@
 	z-index: 5;
 }
 
-/* OOS day counter — bottom-right (V8 addition).
-   Per V9_CANONICAL_MOCKUP.html line 391. */
-.hamilton-oos-days {
-	position: absolute;
-	bottom: 3px;
-	right: 5px;
-	font-size: 9px;
-	font-weight: 600;
-	color: #818cf8;
-	opacity: 0.75;
-	line-height: 1;
-}
+/* OOS day counter — REMOVED 2026-05-01.
+   The .hamilton-oos-days class + the JS that populated it (`oos_days_html`
+   in _render_tile, `asset.oos_days` field) were dead code: the API never
+   enriched `asset.oos_days`, so the badge was never rendered. The expanded
+   overlay's "Set by X · N days ago" line uses a different field
+   (`asset.hamilton_last_status_change`) and continues to work.
+   Stale-OOS-visibility on the compact tile is queued as Phase 2 task 28
+   (color-coded badge + section-header summary, prominent at-a-glance). */
 
 /* ── Status colours — dark theme per V6 spec ── */
 .hamilton-status-available {
