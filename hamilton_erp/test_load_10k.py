@@ -118,18 +118,32 @@ class TestLoad10k(IntegrationTestCase):
 		  - Any failed cycles (should be zero)
 		"""
 		session_numbers = []
+		# Parallel to session_numbers — each entry is the session_start of
+		# the corresponding session. Used to derive the EXPECTED prefix
+		# per-session in the validation step below. Single global prefix
+		# capture (the prior approach) was incorrect: a 10k-cycle run takes
+		# ~20 minutes and can cross local midnight in CI (Asia/Kolkata
+		# tz crosses UTC 18:30), at which point production code correctly
+		# emits sessions whose prefix matches the NEW date — but the test
+		# would flag them as "wrong" against the now-stale start-of-test
+		# prefix. Production behavior is the DEC-056 / Fix 10 invariant:
+		# each session's prefix is pinned to its OWN session_start.date().
+		session_starts = []
 		failures = []
 		retries_detected = 0
 
+		# Capture at-test-start date for the informational log line. NOT
+		# used as the validation invariant — see session_starts.
 		today_prefix_parts = nowdate().split("-")
 		d = int(today_prefix_parts[2])
 		m = int(today_prefix_parts[1])
 		y = int(today_prefix_parts[0])
-		expected_prefix = f"{d}-{m}-{y}---"
+		start_of_test_prefix = f"{d}-{m}-{y}"
 
 		print(f"\n  Starting 10,000 check-in load test...")
 		print(f"  Assets: {NUM_ASSETS} | Cycles per asset: {CYCLES_PER_ASSET}")
-		print(f"  Expected session number prefix: {expected_prefix[:-3]}")
+		print(f"  Test start date prefix (most sessions): {start_of_test_prefix}")
+		print(f"  (Sessions after a midnight cross use their own date per DEC-056.)")
 
 		start_time = time.time()
 		completed = 0
@@ -141,10 +155,14 @@ class TestLoad10k(IntegrationTestCase):
 					session_name = start_session_for_asset(
 						asset_name, operator=OPERATOR)
 
-					# Read the session number
-					session_number = frappe.db.get_value(
-						"Venue Session", session_name, "session_number")
-					session_numbers.append(session_number)
+					# Read the session number AND its session_start date.
+					# session_start is needed to validate the per-session
+					# prefix below (see session_starts comment above).
+					session_data = frappe.db.get_value(
+						"Venue Session", session_name,
+						["session_number", "session_start"], as_dict=True)
+					session_numbers.append(session_data.session_number)
+					session_starts.append(session_data.session_start)
 
 					# VACATE
 					vacate_session(
@@ -197,11 +215,29 @@ class TestLoad10k(IntegrationTestCase):
 		duplicates = {k: v for k, v in counts.items() if v > 1}
 		print(f"  Duplicate session numbers : {len(duplicates)}")
 
-		# Prefix validation
-		wrong_prefix = [
-			sn for sn in session_numbers
-			if sn and not sn.startswith(expected_prefix[:-3])
-		]
+		# Prefix validation — per-session, against EACH session's own
+		# session_start.date(). The production invariant is DEC-056 /
+		# Fix 10: session_number's date prefix matches the date the
+		# session was started, NOT a single global "test start date".
+		# A 10k-cycle run that crosses midnight (UTC 18:30 in CI's
+		# Asia/Kolkata tz) correctly produces sessions with the NEW
+		# date prefix; the test must validate that, not flag it.
+		def _expected_prefix(session_start):
+			"""Date prefix matching ``_next_session_number(for_date=...)`` output."""
+			if session_start is None:
+				return None
+			dt = session_start.date() if hasattr(session_start, "date") else session_start
+			return f"{dt.day}-{dt.month}-{dt.year}---"
+
+		wrong_prefix = []
+		for sn, ss in zip(session_numbers, session_starts):
+			if not sn:
+				continue
+			expected = _expected_prefix(ss)
+			if expected is None:
+				continue
+			if not sn.startswith(expected):
+				wrong_prefix.append((sn, expected))
 		print(f"  Wrong date prefix         : {len(wrong_prefix)}")
 
 		# Null/empty session numbers
@@ -255,8 +291,10 @@ class TestLoad10k(IntegrationTestCase):
 		)
 		self.assertEqual(
 			len(wrong_prefix), 0,
-			f"{len(wrong_prefix)} session numbers have wrong date prefix — "
-			f"midnight boundary or date derivation bug",
+			f"{len(wrong_prefix)} session numbers have a date prefix "
+			"that does NOT match their own session_start.date() — this "
+			"is the DEC-056 / Fix 10 invariant. Sample (session_number, "
+			f"expected_prefix): {wrong_prefix[:3]}",
 		)
 
 	# ------------------------------------------------------------------
