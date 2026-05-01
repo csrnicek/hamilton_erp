@@ -779,3 +779,25 @@ ERPNext records `payments[i].amount` as the amount collected in that method (i.e
 
 If you mistakenly set `payments[0].amount = 20` (cash tendered) and `change_amount = 8.70`, ERPNext's validator computes `paid_amount = 20`, then `outstanding = grand_total - paid_amount = -8.70`, and either errors or posts a phantom GL line. The correct pattern is `amount = grand_total` and `change_amount = cash_received - grand_total`, which is what `submit_retail_sale` does.
 
+## 2026-05-01 — Brew-managed Redis on 6379 must NOT run alongside bench's Redis
+
+A separate `brew services redis` had been running on `127.0.0.1:6379` for months alongside bench's own Redis instances on `127.0.0.1:11000` (queue) and `127.0.0.1:13000` (cache + socketio).
+
+**The two are unrelated** — Frappe/bench reads the explicit `redis_cache` / `redis_queue` URLs from `sites/common_site_config.json` and never touches 6379. But the brew Redis being there caused two real problems:
+
+1. **False mental model.** Two visible `redis-server` processes made it look like there was a port fight. There wasn't — different ports — but the noise made `bench start` failures harder to diagnose. (When `bench start` actually DOES fail with "address in use," it's because a previous `bench start` left orphaned redis-server processes on 11000/13000, not because of the brew instance on 6379.)
+
+2. **Silent fallback hiding config bugs.** Any code path that calls `redis.Redis()` with no args defaults to `localhost:6379`. With brew Redis running, that call silently succeeds against an unrelated empty Redis with no Frappe data. With brew Redis stopped, the same call fails fast with `ConnectionRefusedError` — the bug surfaces immediately.
+
+**Fix applied:** `brew services stop redis` (and `brew services list` confirms `redis: none`). The launchd plist at `~/Library/LaunchAgents/homebrew.mxcl.redis.plist` has `KeepAlive=true`, so `stop` is a one-shot kill; if it ever re-appears at login, run `brew services stop redis` again or remove the plist entirely with `rm ~/Library/LaunchAgents/homebrew.mxcl.redis.plist`.
+
+**Rule for future Claude sessions:** never `brew services start redis` on this machine. Bench owns Redis. If a tool wants Redis on 6379, it's wrong — fix the tool to read bench's config or point it at 11000/13000 explicitly.
+
+**Verification after stopping brew Redis:**
+- `lsof -i :6379` returns empty
+- `lsof -i :11000 -i :13000` shows bench redis still bound
+- `curl -sI http://hamilton-test.localhost:8000/login` returns `200 OK`
+- `bench --site hamilton-unit-test.localhost migrate` runs clean
+
+If a project ever needs a separate Redis (different DB, isolated dev env), spin it up on a non-default port (e.g. 6380) and document it in that project's CLAUDE.md — never reclaim 6379.
+
