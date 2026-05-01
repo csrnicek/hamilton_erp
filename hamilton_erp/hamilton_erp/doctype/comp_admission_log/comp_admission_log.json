@@ -48,10 +48,12 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "What the comp was worth.",
+   "description": "What the comp was worth. permlevel 1 hides this from Hamilton Operator at the API layer (margin-leak / self-justification protection per docs/permissions_matrix.md \"Sensitive fields\"). Auto-populated programmatically by the Phase 2 comp flow from admission_item.standard_rate — operators don't enter this directly. PHASE 2 WIRING CONTRACT: code creating Comp Admission Log records must run with permlevel:1 write access (e.g. ignore_permissions=True under Administrator elevation), or comp_value silently lands as None. See TestCompAdmissionLogValueMasking.",
    "fieldname": "comp_value",
    "fieldtype": "Currency",
-   "label": "Comp Value"
+   "label": "Comp Value",
+   "permlevel": 1,
+   "read_only": 1
   },
   {
    "fieldname": "operator",
@@ -123,6 +125,16 @@
    "report": 1,
    "role": "Hamilton Admin",
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Manager"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Admin"
   }
  ],
  "sort_field": "timestamp",
