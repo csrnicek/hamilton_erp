@@ -1662,9 +1662,11 @@ Offer "Email or SMS receipt" in addition to the paper print. Operator types the 
 
 This avoids the trap of having "Tap", "Chip", "Swipe", "Apple Pay" as four separate Mode of Payment values that the operator has to choose between — none of which are knowable in advance because the terminal decides based on what the customer does.
 
-### Merchant abstraction (CRITICAL for adult-classified businesses)
+### Merchant abstraction (multi-merchant resilience)
 
-**Why this matters:** Bathhouses are adult-classified. Merchant accounts get terminated periodically with little warning. The system MUST support swapping merchants without code changes, ideally with multiple active merchants for redundancy.
+**Why this matters:** Hamilton operates as a standard commercial merchant (per DEC-062, locked 2026-05-01) — Fiserv MID 1131224 is standard-classified, not adult-classified. The merchant-abstraction work is still warranted, but for a different reason: any merchant relationship can end (chargeback ratio, classification change, processor business decision, M&A) and the system MUST support swapping merchants without code changes, ideally with multiple active merchants for redundancy.
+
+Some processors (notably Stripe and Square) may *perceive* bathhouse hospitality as adult-adjacent within their own internal risk models even when Hamilton is not formally adult-classified — that's the processors' policy stance, not Hamilton's classification. The abstraction work decouples Hamilton from any single processor's risk model so a perception-driven termination at one processor doesn't take Hamilton offline.
 
 **Design:**
 - Per-venue merchant config lives in `site_config.json` (or Hamilton Settings, leaning toward site_config because credentials shouldn't be in DB).
@@ -1776,7 +1778,7 @@ Add a unit test in `test_asset_board_rendering.py` (source-substring contract) a
 These are the questions Chris needs answered before Phase 2 next iteration (card payments) begins. Pre-confirming avoids re-architecting the integration mid-build when answers come back differently than assumed.
 
 - [ ] **MCC code on Fiserv MID 1131224.** Confirm the Merchant Category Code Fiserv has registered Hamilton under. MCC 7298 (health/beauty/spa) and 7299 (services not elsewhere classified) are the two likely candidates for a bathhouse. The MCC determines the card-network fee tier, the chargeback-ratio threshold, and whether Hamilton's transactions trigger any "high-risk" flagging in card-network systems. Hamilton processes as standard, but the MCC confirms which standard tier.
-- [ ] **Descriptor on cardholder statements.** Confirm the exact merchant descriptor that appears on Visa / Mastercard statements when a customer pays at Hamilton. The descriptor field on the SI (`hamilton_descriptor_used`) must match this exactly — friendly-fraud chargebacks ("I don't recognize this charge") happen when the descriptor is generic or unfamiliar. Best practice for adult hospitality: short non-flagging name like "CLUB HAMILTON" rather than "HAMILTON BATHHOUSE / SAUNA" which can trigger embarrassment-driven disputes.
+- [ ] **Descriptor on cardholder statements.** Confirm the exact merchant descriptor that appears on Visa / Mastercard statements when a customer pays at Hamilton. The descriptor field on the SI (`hamilton_descriptor_used`) must match this exactly — friendly-fraud chargebacks ("I don't recognize this charge") happen when the descriptor is generic or unfamiliar. Hamilton operates as a standard merchant (DEC-062), but customers may still find a bathhouse charge sensitive on a shared statement: a short, neutral name like "CLUB HAMILTON" reduces embarrassment-driven disputes vs. "HAMILTON BATHHOUSE / SAUNA". This is a customer-experience choice, not a classification claim.
 - [ ] **Chargeback notification process.** How does Fiserv notify Hamilton of an incoming chargeback? Email, portal, fax (still happens), API callback? What's the SLA — 7 days from cardholder dispute filing? 15 days? Hamilton's response window for compelling evidence depends on this; a portal-only notification with an unmonitored email = missed chargebacks = MATCH-list risk (R-009).
 - [ ] **Dispute portal credentials.** Get login credentials for Fiserv's dispute portal (Vantiv DisputeManager or similar) BEFORE the first chargeback. Operations runbook needs the portal URL, primary login, secondary login, escalation contact. Pre-Phase-2 ops task.
 - [ ] **Reserve schedule and held-funds release.** What reserve does Fiserv hold (% of monthly volume, fixed amount, rolling 90-day)? When does held cash release back to Hamilton's bank account? This affects cash-flow planning, not chargeback handling, but matters operationally.
@@ -1796,6 +1798,6 @@ Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
 
 ### Open questions for tomorrow-Chris
 
-- Which processors are realistic for adult-classified Canadian bathhouse? Helcim is one option; need a backup. Research before committing to the adapter list.
+- Which processors are realistic backups for the Hamilton standard MID? Per DEC-062 Hamilton is a standard merchant via Fiserv; the question is which processor's perception-of-bathhouse risk model is least likely to terminate (Helcim is friendly to bathhouse-hospitality in Canada). Research backup adapters before committing to the abstraction layer.
 - Hardware: confirm TM-T20III can be sourced in Canada and supports both ethernet and WiFi (some sub-models are ethernet-only). Verify the ESC/POS command set is the standard one that python-escpos supports out of the box.
 - Receipt tape: brand + cost per roll + how many transactions per roll? Need this for the operations runbook.

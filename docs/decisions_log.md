@@ -2,7 +2,7 @@
 
 **Status:** LOCKED. Decisions on this page are FINAL and must not be re-opened without an explicit discussion and documented reversal.
 
-**Last updated:** 2026-04-30 (DEC-061 + Amendment 2026-04-30 retail cart + Amendment 2026-04-30 scheduler stub purge)
+**Last updated:** 2026-05-01 (DEC-062 standard-merchant classification + DEC-063 per-venue processor choice + DEC-064 primary+backup processor architecture)
 **Source-of-truth mockup:** `docs/design/V9_CANONICAL_MOCKUP.html`
 **PR:** #8 on branch `feature/asset-board-ui-rebuild`
 **Mockup interactive tests:** 59 automated tests, all passing (pulse visibility, tile sizing, state transitions, modal flows, tab configuration, countdown behaviour)
@@ -528,6 +528,95 @@ This amendment locks the implementation:
 **Production note:** The Currency-level setting (`smallest_currency_fraction_value=0.05`) affects every CAD invoice on the site, not just cart sales. For Hamilton this is correct (retail-only, no B2B CAD invoices). When a future B2B flow lands and needs exact-cent CAD invoicing, that flow must explicitly set `disable_rounded_total=1` on its invoices.
 
 **Reference:** docs/inbox.md 2026-04-30 research report; Wikipedia "Cash rounding"; Frappe `round_based_on_smallest_currency_fraction` in `frappe/utils/data.py`; ERPNext `make_gle_for_rounding_adjustment` in `erpnext/accounts/doctype/sales_invoice/sales_invoice.py`.
+
+---
+
+## Amendment 2026-05-01 — DEC-062: Hamilton ERP / ANVIL Corp business classification
+
+**Decision:** Hamilton ERP and the ANVIL Corp venues (Hamilton Ontario, Philadelphia, DC, Dallas) operate as **standard commercial businesses**, NOT adult-classified businesses. This is the canonical position for all merchant relationships, regulatory framing, and processor research going forward.
+
+**Cited evidence:**
+- **Fiserv MID 1131224** is registered as a standard-classified merchant, NOT under high-risk classification. Confirmed in `docs/risk_register.md` R-008 (the original assumption of high-risk was deliberately downgraded after MID-level verification).
+- **PIPEDA**: Hamilton operates under PIPEDA as a standard commercial business with no industry-specific obligations layered on top. Per `docs/research/pipeda_venue_session_pii.md` §1.3 (line 51) and the explicit clarifying note at §8 (line 296): *"Hamilton is **not** classified as 'adult' by any government body, payment network, or regulator."*
+- **Card networks**: standard MCC categorization (likely 7298 health/beauty/spa or 7299 services-not-elsewhere-classified per inbox 2026-04-30 research note); not high-risk MCCs (5967 adult content, 7273 dating, etc.). Exact MCC pending Fiserv confirmation but does not affect the classification decision.
+
+**What this decision does NOT claim:**
+- Customers may still perceive their attendance as sensitive — that's a customer-privacy concern, addressed by PIPEDA's "real risk of significant harm" threshold (covered separately in `pipeda_venue_session_pii.md`). The customer-privacy posture and the business-classification posture are distinct.
+- Some payment processors (Stripe, Square) may *perceive* bathhouse-hospitality as adult-adjacent within their own risk models. The processor's risk classification is THEIR internal categorization, not Hamilton's actual legal/operational classification. `docs/research/merchant_processor_comparison.md` "Adult-classification policy by processor" section is defensibly framed as a description of each processor's stance toward perceived-adult-adjacent businesses, not as a claim about Hamilton.
+
+**Implication for multi-venue rollout:**
+Philadelphia, DC, and Dallas inherit the same standard-merchant baseline. Processor selection (per `merchant_processor_comparison.md`) follows the rationale that:
+- Fiserv at Hamilton works because Hamilton's MID is already standard.
+- Stripe Terminal at the new venues works because Stripe's TOS draws the line at "adult content" (porn, sex work), not "adult-adjacent hospitality" (bars, bathhouses) where the new venues fall.
+- Helcim, Square, etc. are evaluated on the same standard-merchant baseline.
+
+**Reverses (implicitly):** the older inbox.md framing at lines 1665-1799 ("Bathhouses are adult-classified", "CRITICAL for adult-classified businesses") that pre-dated the R-008 downgrade. PR #55 (merged 2026-05-01) removed this framing from the PIPEDA research doc; this DEC formalizes the position and is the canonical citation for the sweep landing in the same PR.
+
+**References:**
+- `docs/risk_register.md` R-008 — operational evidence (Fiserv standard classification confirmed)
+- `docs/research/pipeda_venue_session_pii.md` §51, §144, §296 — PIPEDA framing (standard commercial business)
+- PR #55 — "remove false 'adult' classification framing from PIPEDA doc" (precedent cleanup that motivated this DEC)
+- `docs/research/merchant_processor_comparison.md` — research that motivates this DEC
+
+**Deferred questions** (not blocked by this DEC):
+- Exact MCC code on Fiserv MID 1131224 — flagged in inbox.md launch-prep checklist; pending Fiserv confirmation. Decision stands regardless of which standard-tier MCC the MID uses.
+- Per-venue processor relationships in Philadelphia/DC/Dallas — those are operational selections, not classification decisions; this DEC sets the baseline they inherit. See DEC-063 below for the per-venue selection rule.
+
+---
+
+## Amendment 2026-05-01 — DEC-063: Per-venue primary processor choice
+
+**Decision:** Each ANVIL Corp venue picks its own primary card processor at rollout based on local availability, iPad / ERPNext integration quality, hardware fit, fees, and risk policy. There is **no single corporate-wide processor mandate.**
+
+**Why per-venue, not corporate-wide:**
+- **Currency:** Hamilton runs CAD; Philadelphia / DC / Dallas run USD. Cross-border processors that look attractive on paper (e.g. Stripe Terminal) introduce currency-conversion friction or per-venue MID overhead that makes single-processor mandates expensive.
+- **Local availability:** Helcim's Canadian rates are competitive but US support is partner-only. Fiserv's Canadian and US footprints are different ISO networks — pricing varies by venue.
+- **iPad / ERPNext SDK fit:** Some processors (Stripe Terminal, Clover Connect) have first-class iOS SDKs; others (Moneris) require custom adapters. Hamilton's existing Fiserv MID predates the iPad cart and may need a different terminal model than a greenfield venue would pick.
+- **Risk policy:** Even though all ANVIL venues operate as standard merchants per DEC-062, individual processors apply different *perceived* adult-adjacency stances. A processor that's fine at venue A may flag at venue B based on the local underwriter.
+
+**What this means in practice:**
+- Hamilton stays on Fiserv (MID 1131224, standard-classified, already running).
+- Philadelphia / DC / Dallas choose at rollout based on the per-venue criteria above. Stripe Terminal is the current default recommendation for the new venues per `merchant_processor_comparison.md`, but is not mandated — each venue's site survey can override.
+- Cross-venue reporting and reconciliation must work with multiple processors. The processor-abstraction layer (DEC-064 + Phase 2 spec) provides the substrate.
+
+**Override clause:** If a future ANVIL Corp policy requires a single processor across all venues (e.g. negotiated enterprise rates with Adyen at Phase 3 scale), DEC-063 is reversed by an explicit Amendment that names the new corporate-wide processor and the rationale. Until then, per-venue choice stands.
+
+**References:**
+- DEC-062 — standard-merchant baseline that DEC-063 inherits
+- DEC-064 — primary + backup architecture that DEC-063 plugs into
+- `docs/research/merchant_processor_comparison.md` — per-venue recommendation table
+- `docs/design/pos_hardware_spec.md` — terminal hardware varies per chosen processor
+
+---
+
+## Amendment 2026-05-01 — DEC-064: Every venue must have a primary AND backup processor
+
+**Decision:** Every ANVIL Corp venue must have **both** a primary AND a backup card processor pre-approved, integration-tested, and ready to swap to in hours — not days, not weeks. The processor-abstraction layer (Phase 2 work) must support this architecturally.
+
+**Why this matters:**
+- **Termination risk is real even at standard merchants** (DEC-062). Rate disputes, M&A churn, chargeback ratio drift past R-009 thresholds, AML flags, account-review holds — any of these can put a single-processor venue offline for days while a new MID is approved. ANVIL's Saturday-night peak doesn't survive a multi-day outage.
+- **Hours, not days.** "Backup that takes 4 weeks to onboard" is not a backup; it's a recovery plan. The backup must be onboarded BEFORE the incident, settle a $1 test transaction, and have a swap mechanism gated by config (not code).
+- **Architecture, not heroics.** The processor-abstraction layer (Phase 2) is what makes this work — without per-venue config that selects which processor handles a given transaction, "swap to backup" means an emergency code deploy at 2am Saturday. Unacceptable.
+
+**What this requires:**
+
+1. **Per-venue config, not per-app config.** Each venue's `site_config.json` (or equivalent) lists its primary AND backup processor with their respective adapter names. Switching is a config flip + bench restart, not a code change.
+2. **Both processors integration-tested at venue rollout.** A backup that's "approved but never tested" is also not a backup. Rollout playbook (PR C, item 11) includes the test step.
+3. **Adapter parity.** The processor-abstraction layer must support the same operations (charge, refund, void, capture, settle) across primary AND backup adapters. New venues that choose a processor without an existing adapter trigger adapter development as part of rollout, not after.
+4. **Operational runbook.** Operators / on-call must know how to invoke the swap. The runbook (`docs/RUNBOOK.md`) includes a "primary processor down" procedure with the exact `bench set-config` command and verification steps.
+
+**Open instances (status as of 2026-05-01):**
+- **Hamilton:** Primary = Fiserv (running). Backup = NOT YET SELECTED. New open task in `inbox.md` (PR C, item 13) to select + pre-approve a backup. Helcim was the prior suggestion; reassess against current options.
+- **Philadelphia / DC / Dallas:** Primary + backup pending per-venue rollout.
+
+**Override clause:** The "two processors per venue" rule may be relaxed only with an explicit Amendment naming the venue and the operational mitigation (e.g. very-low-volume venue where 24h offline is acceptable, or a venue using a multi-acquirer aggregator that itself has internal redundancy). Until then, two-processors-per-venue stands.
+
+**References:**
+- DEC-062 — standard-merchant baseline
+- DEC-063 — per-venue processor choice (DEC-064 sits on top)
+- `docs/risk_register.md` R-008 — Single-acquirer SPOF (downgraded but not eliminated)
+- `docs/risk_register.md` R-009 — MATCH list 1% chargeback threshold (one of the termination triggers DEC-064 defends against)
+- `docs/inbox.md` 2026-04-30 Phase 2 hardware backlog — original "Merchant abstraction" spec; DEC-064 confirms it must support primary + backup, not just primary
 
 ---
 
