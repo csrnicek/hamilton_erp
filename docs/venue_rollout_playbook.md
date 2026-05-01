@@ -5,6 +5,8 @@ Specific enough that Claude Code can follow it autonomously.
 
 **Audience:** Chris (system admin) or Claude Code (autonomous deploy)
 
+**Last updated:** 2026-05-01 (Task 25 item 16 refresh — added v16 pinning, init.sh, and Hamilton accounting conventions references).
+
 ---
 
 ## Prerequisites
@@ -17,6 +19,7 @@ Specific enough that Claude Code can follow it autonomously.
   frappe = ">=16.0.0-dev,<17.0.0-dev"
   ```
 - [ ] All patches listed in `patches.txt` with correct `[pre_model_sync]` / `[post_model_sync]` sections
+- [ ] **Local dev bench is working before deploying to Frappe Cloud.** Use `scripts/init.sh` for the fresh-bench bootstrap — it verifies version pins (Python 3.14, Node 24, MariaDB, Redis, frappe-bench), sets up a working bench, and installs frappe + erpnext + payments + hamilton_erp on a dev site. The script is idempotent. CI uses the same install path (`.github/workflows/tests.yml`), so a green local `init.sh` is the strongest signal that production deploy will succeed.
 
 ---
 
@@ -27,6 +30,9 @@ Specific enough that Claude Code can follow it autonomously.
    - **Site name:** `{venue_id}-erp.v.frappe.cloud` (e.g., `philadelphia-erp.v.frappe.cloud`)
    - **Region:** Choose closest to venue (Hamilton = N. Virginia, Philly = N. Virginia, Dallas = Dallas)
    - **Apps:** Frappe, ERPNext, hamilton_erp (from `csrnicek/hamilton_erp` repo, `main` branch)
+
+   **🔒 Production version pin — CRITICAL.** When configuring the apps for the new site, frappe and erpnext **MUST** be pinned to a specific tagged v16 minor release (e.g. `v16.3.4`), NOT to the `version-16` branch HEAD and NEVER to `develop`. The hamilton_erp custom app tracks `main`. Auto-upgrade on the production bench MUST be disabled — promote new minor releases manually after staging soak. See **CLAUDE.md → "Production version pinning — tagged v16 minor release, NEVER branch HEAD or develop"** for the full rule, the manual upgrade cadence (monthly review window + 48-hour staging soak), and the rationale (~10 fixes/month land in `version-16` HEAD; auto-pulling them invites production churn).
+
 3. Wait for site provisioning (typically 5-10 minutes)
 4. Verify site loads in browser
 
@@ -75,6 +81,19 @@ Specific enough that Claude Code can follow it autonomously.
    - 59 Venue Assets (26 rooms + 33 lockers) — or venue-specific count if customized
    - Walk-in Customer record
    - Hamilton Settings singleton with defaults
+
+   **Hamilton accounting conventions configured by the seed (see CLAUDE.md → "Hamilton accounting / multi-venue conventions"):**
+
+   The seed patches under `hamilton_erp/patches/v0_1/` (registered in `patches.txt`, applied automatically by step 6's `bench migrate`) install the full Hamilton accounting setup. Operators should know these were applied so they don't re-create or override them by hand:
+
+   - **CAD nickel rounding** — `Currency CAD.smallest_currency_fraction_value = 0.05`. Cash POS sales round to the nearest nickel per Canada's 2013 penny-elimination rule. **Site-global setting** — affects every CAD invoice on the site, not just POS. If a future Hamilton flow creates a CAD invoice for a non-cash workflow (B2B vendor invoice, membership invoice, intercompany invoice), it must explicitly set `disable_rounded_total=1` on that invoice or it will silently round to nickels. The cart's `submit_retail_sale` is the reference pattern: nickel rounding is gated by `payment_method` and disabled for Card payments.
+   - **Round Off Account + Cost Center** — linked to the Hamilton cost center (not the Standard CoA "Main" default). Round-off GL entries tie to venue-level reporting.
+   - **Mode of Payment "Cash"** — wired to the Hamilton Cash account.
+   - **POS Profile "Hamilton Front Desk"** — configured with `write_off_account`, `write_off_cost_center`, and `write_off_limit = 0`.
+   - **Price List "Hamilton Standard Selling"** — set as the Company default selling price list (renamed from "Standard Selling" to avoid collision with ERPNext test fixtures).
+   - **Fiscal Year covering today** — explicit creation; ERPNext's auto-fiscal-year doesn't cover all CI/install scenarios.
+
+   These conventions are CRA-aware (CAD nickel rule), QBO-mirrored (chart of accounts naming), and verified by the `test_retail_sales_invoice` test module (968 lines, 10 adversarial tests covering rounding gates, permission elevation, stock pre-checks).
 
 ---
 
