@@ -12,21 +12,16 @@ from frappe.utils import flt
 
 
 def on_sales_invoice_submit(doc, method):
-	"""After POS Sales Invoice is submitted, check for admission items.
+	"""After POS Sales Invoice submit: fire `show_asset_assignment` realtime
+	event when the cart contains an admission item; retail-only sales pass
+	through. Phase 0 stub — Phase 2 completes the assignment flow.
 
-	`doc` is a HamiltonSalesInvoice instance (registered via extend_doctype_class
-	in hooks.py), so the Hamilton-specific helper methods are available directly.
+	`doc` is a HamiltonSalesInvoice (extend_doctype_class registration in
+	hooks.py). No frappe.db.commit() — v16 doc_events forbid it
+	(coding_standards.md §2.8).
 
-	If the cart contains an admission item, the custom asset-assignment flow is
-	triggered via a realtime event so the operator can select a room or locker.
-	Retail-only sales pass through untouched.
-
-	NOTE: Do not call frappe.db.commit() here — v16 prohibits commits inside
-	doc_events hooks (coding_standards.md §2.8).
-
-	Realtime payload contract:
-	  event:    "show_asset_assignment"
-	  payload:  {"invoice": str, "category": "Room"|"Locker", "is_comp": bool}
+	Realtime payload contract — event: "show_asset_assignment", payload:
+	{"invoice": str, "category": "Room"|"Locker", "is_comp": bool}.
 	"""
 	if not doc.has_admission_item():
 		return
