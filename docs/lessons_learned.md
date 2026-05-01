@@ -54,9 +54,13 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-026 | Operational | S2 | `property_setter.json` must exist even if empty |
 | LL-027 | Operational | S2 | Bench symlink defeats `git worktree` isolation |
 | LL-028 | Operational | S3 | mutmut v3 incompatible with Frappe bench environment |
+| LL-034 | Operational | S2 | Concurrent Claude Code agents on the same repo race on `git checkout` and nuke uncommitted work |
 | LL-029 | Production Safety | S0 | Never modify Frappe / ERPNext core |
 | LL-030 | Production Safety | S0 | Production recovery — rollback before live debugging |
 | LL-031 | Production Safety | S0 | Agents may diagnose broadly but execute narrowly |
+| LL-035 | Production Safety | S1 | Whitelisted endpoints touching money / stock / permissions need adversarial tests in the **first** PR — hardening passes are 5x the cost |
+| LL-036 | UI / Asset Board | S2 | Paper receipt as occupancy token is a defensible-but-fragile control — digital state must remain canonical, paper is operator UX |
+| LL-037 | Operational | S2 | Frappe v16 caches `site_config` for 60 seconds — `bench set-config` changes don't take immediate effect on running workers |
 
 **Severity scale:** S0 — data corruption / financial integrity / production outage. S1 — release blocker. S2 — serious developer-time sink. S3 — annoyance / local workflow only.
 
@@ -518,6 +522,79 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Prevention for next venue:** Per-action allowlist in agent harness. Forbidden actions require an explicit approval flow.
 - **References:** Future Night Watch system design.
 
+### LL-034 — Concurrent Claude Code agents on the same repo race on `git checkout` and nuke uncommitted work
+
+- **Category:** Operational
+- **Severity:** S2
+- **Applies to:** Any session where more than one Claude Code agent (interactive sessions, Ralph-loop, scheduled `/loop`, autonomous agents) is operating on the same checkout. The single physical worktree at `/Users/chrissrnicek/hamilton_erp` is shared by every bench-installed app (see LL-027), so this hits any multi-agent setup without explicit coordination.
+- **What happened:** During the field-masking-audit gap-#1 ship (2026-04-30), an interactive session made three working-tree edits (`shift_record.json`, `test_security_audit.py`, `risk_register.md`), staged them, ran tests green, and was about to commit. Between the test run and the commit, another agent on the same worktree did `git checkout` to a different feature branch — silently discarding the staged-but-uncommitted changes. The reflog showed `feat/v91-retail-cart-ux-stub → feat/v91-cart-sales-invoice → main → feat/security-shift-record-card-permlevel → feat/v91-cart-sales-invoice` happening in rapid succession across what looked like a single session's tool calls. The session had to redo all three edits on the dedicated branch and commit-push immediately to lock them in.
+- **Time cost:** ~15 minutes of redo work plus the diagnostic time to figure out *why* the working tree kept going clean. First-pass hypothesis ("the harness is auto-resetting me") was wrong; the actual cause was a separate concurrent agent. The reflog made it obvious in retrospect.
+- **Root cause:** Git stages + working tree are checkout-scoped, not session-scoped. Two agents that both call `git checkout` on the same `.git` race each other: whichever runs second discards the first's uncommitted work without warning. There is no per-session lock around the working tree, and `bench`'s symlink (LL-027) means multiple bench installs that share an app folder share the same git state.
+- **The fix:** Two patterns, pick one:
+  1. **One agent per worktree.** If a second concurrent run is needed, give it a separate `git worktree add` (and accept that LL-027 means it can't run `bench run-tests` against the second worktree's checkout — the second agent has to stay code-only). For interactive + scheduled-loop combinations, this is the cleanest split.
+  2. **Commit-push-immediately pattern.** When two agents share the worktree, never leave changes uncommitted across tool calls. Edit → test → stage → commit → push as one tight sequence; treat anything in the working tree as ephemeral. Don't run long-form analysis between an edit and its commit. This is the workaround that shipped gap #1 once the race was identified.
+- **Detection:** `git reflog` after a "wait, my changes are gone" moment shows back-to-back `checkout: moving from X to Y` entries the current session never issued. If those checkouts came from another agent, this lesson applies.
+- **Prevention for next venue:** Document the active-agent expectation per-repo in `CLAUDE.md` ("only one Claude Code session may have uncommitted changes at a time") and have scheduled loops do their work in a separate worktree. For multi-venue rollout where Night Watch agents (LL-031) might run alongside interactive work, the agent harness must hold a worktree-scoped lock or operate on its own checkout.
+- **References:** This session's reflog, 2026-04-30. Related: LL-027 (bench symlink defeats `git worktree`), R-004 in `docs/risk_register.md`. Discovered while shipping field-masking gap #1 (`feat/security-shift-record-card-permlevel`, commit `a2c9803`).
+
+### LL-035 — Whitelisted endpoints touching money / stock / permissions need adversarial tests in the *first* PR
+
+- **Category:** Production Safety
+- **Severity:** S1
+- **Applies to:** Any new `@frappe.whitelist()` endpoint that creates / submits Sales Invoice, Purchase Invoice, Stock Entry, Payment Entry, or any DocType that mutates inventory, GL entries, or role/permission state. The threshold is "could a malicious or compromised client cause real-world harm by calling this with crafted arguments?" — if yes, this lesson applies.
+- **What happened:** PR #51 (V9.1 Phase 2 cart → POS Sales Invoice, 2026-04-30) shipped the initial implementation of `submit_retail_sale` with happy-path tests only — Sales Invoice creation, HST math, stock decrement, return values, validation rejections for empty cart and insufficient cash. Source-of-truth review one day later surfaced **five issues** that the happy-path tests had silently allowed:
+  1. Permission gate used `frappe.has_permission("Sales Invoice", "create")` which Hamilton Operator does not have — tests passed only because they ran as Administrator. Real operators would have hit a permission error on every cart Confirm.
+  2. Server trusted client-supplied `unit_price` as the Sales Invoice rate — a compromised browser could submit lower prices and the server would persist them.
+  3. No pre-submit stock check — concurrent sales of the last unit produced raw ERPNext stack-trace exceptions instead of clean operator errors.
+  4. `has_permission` gate paired with `ignore_permissions=True` was contradictory — neither effective authorization nor clean delegation.
+  5. Documented design contract (V9.1-D14 "Out of scope") contradicted the shipped implementation.
+- **Time cost:** Hardening pass took ~3 hours (10 new adversarial tests, 1 fix to existing tests, full-suite re-run, audit-trail-preserving Administrator elevation pattern, helper extraction for the rounding gate). The original happy-path tests took ~30 minutes. **Fixing after the fact was ~5x the cost** of writing the adversarial tests upfront — and that's before counting the source-of-truth review that surfaced the issues, the doc updates, and the cumulative branch churn.
+- **Root cause:** Two compounding pressures favor happy-path-only tests in a first PR. (a) Happy-path tests are easier to write because they don't require thinking adversarially — the developer designed the function and tests it the way they imagined operators would call it. (b) The first PR feels like "implementation"; adversarial tests feel like "polish" that can come later. Both are wrong for money/stock/permission endpoints because the adversarial cases ARE the design contract — what happens when client lies, what happens when stock is short, what happens when role is wrong.
+- **The fix:** For any new whitelisted endpoint that touches money, stock, or permissions, the **initial** PR must include tests for these adversarial categories before requesting review:
+  - **Auth gate:** at least one test per role that should be allowed AND at least one per role that should be rejected. Run as a non-Administrator user. If the function is meant to be operator-callable, test with a real operator-role user. If it's manager-only, test the rejection-when-operator path.
+  - **Server-side authority for any client-supplied numeric:** test that a tampered value is rejected (price, qty, discount, tax rate, anything that affects money). The server's authoritative source must be the one written to disk; the client value is informational at best.
+  - **Resource-availability pre-checks:** test that the function fails cleanly (operator-friendly message) when the resource isn't available — out-of-stock, account missing, customer missing, profile missing. Raw ERPNext stack traces in operator UIs are operationally hostile.
+  - **Permission-elevation contract:** if the function uses `ignore_permissions=True`, the role gate and the elevation must be a documented delegation pattern, not a contradiction. The test for the role gate must use a real non-Administrator user; the test for the delegation must verify audit trail (Sales Invoice `owner` reflects the actual operator, not the elevated session).
+  - **Doc-contract alignment:** if the implementation contradicts a "deferred to round 2" / "out of scope" line in a design doc, the test fails. Use a regression test that reads the design doc and the code and asserts the contract holds — same pattern as `test_canonical_mockup_governance.py` for the V10 mockup.
+- **Prevention for next venue:** Bake the checklist into the PR template for any commit that touches `hamilton_erp/api.py`, `hamilton_erp/lifecycle.py`, or any controller that overrides `validate` / `on_submit`. The reviewer should fail any new whitelisted money/stock/perm endpoint that doesn't include all five categories in the initial PR. The lesson here is that hardening-after-the-fact is not just "more work" — it's **PR churn, doc-revision churn, and cumulative review fatigue** that compounds across a multi-PR session.
+- **Detection:** When reviewing any PR that adds an `@frappe.whitelist()` decorator, scan the test additions in the same diff. If the test class only contains happy-path tests (returns success / asserts on the created doc) and no rejection-path tests for tampered input or missing role, flag it.
+- **Generalizes:** This applies to ANY codebase with money / stock / perm-touching endpoints, not just Frappe. The 5x ratio holds because adversarial tests are easier to write WHILE the implementation is fresh (the developer remembers what they trusted and what they validated); they're much harder to retrofit because retrofitting requires re-reasoning about the function's contract from scratch.
+- **References:** PR #51 (`feat/v91-cart-sales-invoice`), commits `95cccc3` (initial happy-path) → `afd875e` (hardening pass with 10 new adversarial tests). Related: LL-016 (stale PRs need re-test against main), LL-029 (never modify Frappe core), DEC-005 + DEC-021 (blind cash invariants — exactly the kind of contract that adversarial tests are designed to enforce). Source-of-truth review notes in this session's transcript, 2026-04-30.
+
+### LL-036 — Paper receipt as occupancy token: defensible-but-fragile control; digital state stays canonical
+
+- **Category:** UI / Asset Board
+- **Severity:** S2
+- **Applies to:** Hamilton's Phase 2 hardware backlog (Epson TM-T20III receipt printing) and any future operator UX where a physical artifact is meant to mirror digital state. Especially relevant for the "paper receipt on key hook = occupied" control pattern.
+- **What happened (research, not incident):** PR #51 deeper audit (2026-04-30) compared three receipt-as-control patterns used in the industry: (a) **wristband + RFID** — single token holds locker access AND running charges (SoJo Spa, King Spa); (b) **locker-number-as-folio** — all charges accumulate to the locker number, single consolidated receipt at exit (BRC Day Spa); (c) **paper-receipt-as-control-token** — every transaction prints, customer copy + key-hook copy. Hamilton's Phase 2 backlog assumes pattern (c). The pattern works, but the audit surfaced a sharp edge: a single mis-discarded hook receipt creates a phantom-vacant room in the physical view while the digital state still shows occupied. Operators who treat the paper as canonical will flip the digital state to match the (incorrect) paper, propagating the discrepancy.
+- **Time cost:** Research only — no incident, but the pattern is a known trap in retail/hospitality audits. The hotel-industry "night audit" exists precisely because physical state and PMS state drift.
+- **Root cause:** The mental model that "the paper IS the truth" is intuitive for operators but operationally wrong. The Sales Invoice is the audit record; the GL entry posts on submit; the printed paper is a projection of that record at one moment. Treating the projection as authoritative inverts the data flow.
+- **The fix (when Phase 2 hardware ships):** Document the canonicality rule in operator training and in the receipt printer integration code:
+  1. The Sales Invoice (`name` field, e.g. `ACC-SINV-2026-00012`) is canonical. The printed receipt is a copy.
+  2. Discrepancy resolution always favors the digital state — operator who finds an empty room with a hook receipt looks up the SI by the printed `name`, not the other way around.
+  3. The receipt itself MUST print the SI `name` prominently (top of receipt, not just at the bottom in small print) so any audit / dispute / chargeback investigation can pull the canonical record by reference.
+  4. A "no-sale" event (drawer opened without a transaction) is a separate audit-trail concern that ERPNext doesn't natively track. If Hamilton's drawer-open events become an audit need, it's a custom DocType + integration with the cash drawer hardware — Phase 3+ scope.
+- **Detection:** During Phase 2 browser-test of the receipt printer integration: deliberately tear up a hook receipt mid-shift, confirm the operator UI flow recovers (look up SI by guest/locker, NOT by re-creating a receipt). If the recovery flow requires re-printing or a new SI, the canonicality is wrong.
+- **Prevention for next venue:** The next venue (DC, Toronto, Philly) should evaluate switching to wristband+RFID (pattern a) which removes this trap entirely — the wristband IS the digital state's projection, and lost wristbands are a recoverable event. Hamilton retrofitting to wristband would be capital expense; new venues with greenfield hardware spec should consider it.
+- **Generalizes:** Any physical artifact that mirrors digital state (printed labels, hook receipts, paper-tag inventory, even hand-written sticky notes on workstations) creates a drift surface. The artifact is operator UX, not data. Whenever a process design depends on "the paper says X," there's a hidden assumption that the paper hasn't been mishandled — and at scale, paper always gets mishandled. Architecture must make digital state recoverable from the artifact, not the other way around.
+- **References:** PR #51 deeper audit Topic 1 (2026-04-30), Hotel night-audit pattern (RoomMaster, Prostay), SAM4POS dual-station printer / electronic journal pattern. Related: docs/inbox.md 2026-04-30 Phase 2 hardware backlog (Epson TM-T20III spec).
+
+### LL-037 — Frappe v16 caches `site_config` for 60 seconds — `bench set-config` is not immediate
+
+- **Category:** Operational
+- **Severity:** S2
+- **Applies to:** Any operational change that uses `bench set-config <key> <value>` against a running production site, especially Hamilton's per-venue config keys: `hamilton_company`, `hamilton_walkin_customer`, `retail_tabs`, future `hamilton_descriptor_used`, future merchant config in `hamilton_merchants`. Also relevant when toggling Hamilton's existing flags during incident response.
+- **What happened (research, not incident):** v16 production-readiness survey (2026-04-30) surfaced this from the v15→v16 migration wiki: "Site config and common site configs are cached for up to one minute" — a deliberate v16 perf optimization that means `set-config` writes propagate to running workers on a 60-second clock, not instantly. In v15 the cache was effectively per-request; v16 made it minute-scale to reduce DB chatter on a hot path.
+- **Time cost:** Research only — no incident. But the trap is obvious: an operator runs `bench set-config hamilton_walkin_customer "Anonymous"` to fix a misconfiguration during a Saturday-night incident, retries the failing request immediately, gets the same failure, and concludes the config change didn't work — when actually it did, but won't be visible for up to 60 seconds.
+- **Root cause:** v16's deliberate caching trade-off. `frappe.conf.get(key)` reads from a process-local cache that refreshes on a TTL, not from the file system on every call. Workers hold their cache independently; restarting one worker doesn't clear another's.
+- **The fix:** Two patterns, depending on urgency:
+  1. **Wait 60 seconds.** For routine config changes (planned tier upgrades, post-deploy verification), simply waiting is fine. Set the runbook expectation: "after `bench set-config`, allow up to 60 seconds for changes to take effect."
+  2. **Restart workers explicitly.** For incident-response config changes where the 60-second wait is too long, run `bench restart` (or `supervisorctl restart all` on Frappe Cloud private benches) immediately after `set-config`. This forces every worker to drop its cache and re-read from disk on the next request.
+- **Detection:** Symptom is "I changed the config but the behavior didn't change." If the behavior is still wrong after a `bench restart`, then the config change actually didn't apply or there's a different bug. If the behavior changes after a `bench restart` but not before, this lesson explains why.
+- **Prevention for next venue:** Document the 60-second TTL in `docs/venue_rollout_playbook.md` so each new venue's runbook includes the wait-or-restart guidance. Also: any Hamilton tooling that reads `frappe.conf.get` in a hot path (the cart's `submit_retail_sale` reads `hamilton_walkin_customer` per-call) should be aware that the value is cache-fresh-as-of-last-60s, not real-time. For most use cases this is fine; for security-critical flags (where stale-by-60s could be a problem), restart-after-change is the discipline.
+- **Generalizes:** Every cache has a TTL. v15's "every request reads disk" model was wasteful but had instant feedback; v16's "minute-scale cache" model is performant but feedback-delayed. Whenever an operational tool changes behavior between major versions, the operator runbook needs the delta documented — otherwise muscle-memory from the old version bites in the new one.
+- **References:** v15→v16 migration wiki (`https://github.com/frappe/frappe/wiki/Migrating-to-version-16`), 2026-04-30 v16 production-readiness research session. Related: LL-026 (`property_setter.json` caching), LL-029 (never modify Frappe core — including its caching behavior).
+
 ---
 
 ## Maintenance
@@ -647,4 +724,43 @@ Cart UX is iterative — drawer placement, qty button shape, HST display, paymen
 When a PR ships a stub, the next PR's author may not read the design doc and may think the stub is "incomplete code that needs filling in." Without an explicit guard, they'll wire `frappe.xcall("hamilton_erp.api.submit_retail_sale", ...)` into the confirm button and break the deferred-accounting contract.
 
 **Pattern:** add a regression test that asserts the stub method body does NOT contain `frappe.xcall`, `frappe.db.insert`, or other side-effect call patterns. The test fails CI when the stub is "completed" without first wiring the accounting prereqs. See `test_v91_payment_modal_does_not_call_frappe_db_or_xcall` in `test_asset_board_rendering.py` for the implementation.
+
+> **Update 2026-04-30 (b):** the inverse stub-contract test was replaced when the follow-up PR wired Sales Invoice creation. New test (`test_js_payment_modal_calls_submit_retail_sale`) asserts the positive contract — `frappe.xcall` IS called and points at `hamilton_erp.api.submit_retail_sale`. Lesson stands: stub contracts are valuable for the period when the stub exists; flipping them to positive contracts at completion is the natural lifecycle.
+
+---
+
+## 2026-04-30 (b) — Sales Invoice wiring + accounting seed (follow-up to cart UX stub)
+
+The follow-up PR landed the accounting prereqs (QBO-mirrored names locked by Chris's accountant: `GST/HST Payable`, `4260 Beverage`, `4210 Food`, warehouse + cost center "Hamilton", POS Profile "Hamilton Front Desk") and replaced the cart Confirm stub with a real `submit_retail_sale` API. Four lessons surfaced.
+
+### "WP" was a Frappe demo fixture, not Hamilton's company
+
+When investigating accounting state, an early query returned `default_income_account = "Sales - WP"` and led to a working assumption that "WP" was Hamilton's company abbreviation. Five minutes later, querying `tabCompany` directly showed: WP = "Wind Power LLC", a Frappe demo fixture with USD currency and country=United States. Hamilton had no real company on the dev site at all — the `Sales - WP` account was a side effect of the demo fixture's CoA scaffold.
+
+**Generalizes:** Frappe ships demo data (customers, items, companies) as part of the test fixture loader. Any query that returns "expected-shaped" data on a non-greenfield site should be cross-checked against `tabCompany` / `tabCustomer` etc. directly before treating the result as production state. The shape lies; the row count tells the truth.
+
+### Standard CoA template auto-runs when a Company is inserted
+
+ERPNext's Company doctype has a controller that, on insert, calls `create_chart_of_accounts` if `chart_of_accounts="Standard"` and `create_chart_of_accounts_based_on="Standard Template"` are set. This populates ~70 accounts (Income, Direct/Indirect Income, Assets, Liabilities, Duties and Taxes, Cost of Goods Sold, Cash, Bank, etc.) plus the root warehouse and root cost center.
+
+**Pattern:** for fresh-install seeds, creating the Company is the cheapest way to get a usable CoA scaffold. Layer venue-specific accounts on top — don't try to build the CoA from scratch.
+
+**Caveat:** the parent group names are slightly variable across CoA templates ("Indirect Income" vs. "Sales", "Duties and Taxes" vs. "Tax Accounts"). The seed uses a `_find_account_parent(company, root_type, preferred_names)` helper that searches by `root_type` and prefers named matches. This is more robust than hard-coding `"Indirect Income - {abbr}"`.
+
+### Mode of Payment Account is per-(company, mode); idempotency must check by company
+
+`Mode of Payment` is a global doctype with a child table `accounts` of `Mode of Payment Account` rows. Each row is keyed by `company` and points to a `default_account`. A POS Sales Invoice's payment posting needs the row for the invoice's company; without it, submit fails with `Account not specified for Cash`.
+
+**Pattern:** when seeding a company, append a Mode of Payment Account row for each mode the company will use. Idempotency check is `existing = next((a for a in mop.accounts if a.company == company), None)` — by-company, not by-account. Otherwise re-runs append duplicate rows.
+
+### POS Sales Invoice payment math: `payments[0].amount` is collected, not tendered
+
+ERPNext records `payments[i].amount` as the amount collected in that method (i.e. minus change), not the cash tendered. Change is captured separately via `change_amount`. For a $11.30 sale where the customer hands over $20:
+- `payments[0].mode_of_payment = "Cash"`
+- `payments[0].amount = 11.30` (collected)
+- `change_amount = 8.70` (returned)
+- `paid_amount = 11.30` (sum of payments.amount)
+- `outstanding_amount = 0`
+
+If you mistakenly set `payments[0].amount = 20` (cash tendered) and `change_amount = 8.70`, ERPNext's validator computes `paid_amount = 20`, then `outstanding = grand_total - paid_amount = -8.70`, and either errors or posts a phantom GL line. The correct pattern is `amount = grand_total` and `change_amount = cash_received - grand_total`, which is what `submit_retail_sale` does.
 

@@ -64,6 +64,32 @@ When writing any Frappe code, consult these sources before writing:
 
 If a convention is unclear, prefer matching what frappe/frappe itself does over inventing something new.
 
+### Production version pinning — tagged v16 minor release, NEVER branch HEAD or develop
+
+Hamilton ERP production deploys on Frappe Cloud must pin both `frappe` and `erpnext` to a **specific tagged v16 minor release** (e.g., `v16.3.4`), NOT to the `version-16` branch HEAD and NOT to `develop`.
+
+**Three tiers, three behaviors:**
+- **Tagged minor (e.g. `v16.3.4`):** immutable point-in-time. The release that production runs.
+- **`version-16` branch HEAD:** the active polish wave. ~10 fixes/month land in POS / Sales Invoice / Stock / Permissions areas (verified by issue tracker survey, 2026-04-30). Changes weekly. Acceptable for staging; never production.
+- **`develop` branch:** v17 work. Pre-release breaking changes land continuously. Never use anywhere except experimental forks.
+
+The version-16 branch survey (2026-04-30) showed ~50 PRs merged across the four functional areas in 3.5 months post-GA; auto-deploying HEAD would have introduced production churn from those changes whether or not Hamilton's flow is affected.
+
+### Disable auto-upgrade on the production bench
+
+Frappe Cloud's private bench supports disabling auto-upgrades. Hamilton's production bench MUST have auto-upgrade disabled.
+
+**Manual upgrade cadence:**
+1. **Monthly review window** — first week of each month, check `version-16` tag list for new minor releases.
+2. **Smoke-test in staging** — apply the new minor to the staging site, run Hamilton's full test suite (`/run-tests`) plus a manual cart-Confirm flow.
+3. **Promote to production** — only after staging is green for at least 48 hours of soak time.
+
+The 30-day cadence is faster than ERPNext's typical implementation cycle but matches the polish-wave fix pace. If a critical CVE or data-corruption bug is announced, off-cycle upgrades are warranted; otherwise, monthly is the rhythm.
+
+**Local dev / CI exception:** CI's vendored `frappe-setup` action installs `frappe/payments@develop` (per `.github/workflows/tests.yml` and the "Common Issues" section below) because frappe/payments has no `version-16` branch yet — CI-only and acceptable. The Hamilton ERP custom app itself tracks `main` on production. The pinning rule above applies to frappe + erpnext; Hamilton's own app updates ship through git tags on `main`.
+
+**Watch:** if frappe/payments cuts a `version-16` branch, switch the workflow checkout AND any production install of payments to it. See `docs/inbox.md` 2026-04-28 entry on the frappe/payments production-deploy decision.
+
 ### Hard rules that override defaults
 
 - Tests must be self-contained — each test creates and tears down its own data, no reliance on global seed
@@ -77,6 +103,38 @@ If a convention is unclear, prefer matching what frappe/frappe itself does over 
 - Use `frappe.db.delete()` not raw SQL for cleanup operations (transaction-safe, returns no-op on missing rows)
 
 These rules are enforced by Layer 1 conformance tests (Task 25) and CI lint checks. Violations should fail CI, not just earn a comment in code review.
+
+## Hamilton accounting / multi-venue conventions (PR #51 audit)
+
+These rules came out of the pre-merge audit on PR #51 (V9.1 Phase 2 cart → POS Sales Invoice). They apply to any future flow that creates Sales Invoices, taxes, currency-rounded amounts, or card payments.
+
+### CAD nickel rounding is site-global (Audit Issue B)
+
+The Hamilton seed sets `Currency CAD.smallest_currency_fraction_value = 0.05` so cash POS sales round to the nearest nickel per Canada's 2013 penny-elimination rule. This setting affects **every CAD invoice on the site**, not just the cart's POS invoices.
+
+If a future Hamilton flow creates a CAD invoice for a non-cash workflow (B2B vendor invoice, membership invoice, intercompany invoice, etc.), it must explicitly set `disable_rounded_total=1` on that invoice — otherwise it will silently round to nickels. The cart's `submit_retail_sale` is the reference pattern: nickel rounding is gated by `payment_method` and disabled for Card payments.
+
+### One Sales Taxes Template per place-of-supply jurisdiction (Audit Issue G)
+
+CRA's place-of-supply rule for in-store retail: HST/GST is determined by where the goods are delivered (= the venue's location). Hamilton's "Ontario HST 13%" template covers Ontario only.
+
+When the next venue rolls out:
+- **Philadelphia (PA, 6% sales tax + 8% on prepared food):** create a separate Sales Taxes Template per Philadelphia's place of supply. Don't try to make a "global" template that handles multiple provinces — each venue's template must reflect its own jurisdiction.
+- **DC (6% standard, 10% on alcohol/restaurant):** separate template.
+- **Item-level overrides** (zero-rated basic groceries, mixed food/grocery treatment) need ERPNext's Item Tax Template, not Sales Taxes Template. Hamilton's 4 SKUs are all 13%-taxable so this isn't an issue today, but Phase 2+ menu expansion may surface it.
+
+The seed must accept a per-venue tax template name via `frappe.conf` (analogous to `hamilton_company` and `hamilton_walkin_customer`) before the second venue ships.
+
+### Card payments require SAQ-A validation before going live (Audit Issue I)
+
+When the Phase 2 next iteration adds Card payments (merchant abstraction, terminal integration), the merchant adapter must keep card data outside Hamilton's network — terminal handles all card data, the SI stores only references (last 4, brand, auth code, merchant_transaction_id). This is the SAQ-A integration model.
+
+Before going live with Card:
+1. Confirm the chosen processor (Fiserv per Hamilton's existing setup, or backup) supports a SAQ-A integration model.
+2. Confirm the receipt printer integration (Epson TM-T20III) doesn't print full PANs — last 4 only.
+3. Re-attest SAQ-A annually, naming the processor explicitly.
+
+If a future integration ever transits card data through Hamilton's network in plaintext, scope expands to SAQ-D and a QSA assessment ($5-50k/year). Avoid this by keeping the merchant terminal as the only place card data exists.
 
 ## About Chris (the human you are working with)
 

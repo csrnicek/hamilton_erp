@@ -1,5 +1,151 @@
 # Inbox
 
+## 2026-04-30 (afternoon) — PR #51 ready for human review
+
+Follow-up to PR #49 (cart UX stub). Ships the QBO-mirrored accounting seed and replaces the cart Confirm stub with real POS Sales Invoice creation. PR: https://github.com/csrnicek/hamilton_erp/pull/51 — auto-merge enabled (squash + delete branch).
+
+### Commits made
+- `95cccc3` feat(asset-board): V9.1 Phase 2 cart → POS Sales Invoice with QBO-mirrored accounting seed
+- `2389e6c` fix(install): POS Profile requires write_off_account + write_off_cost_center
+- `635a77c` chore(tests): remove stale test_bulk_clean reference from /run-tests
+
+### Tests run
+Full local suite green on `hamilton-unit-test.localhost` after `bench migrate`. 415 pass / 6 skipped across 17 modules. New `test_retail_sales_invoice` module: 18 tests (9 seed verification + 9 end-to-end submit_retail_sale flow). All 78 `test_asset_board_rendering` tests still pass after replacing the 2 stub-contract tests with 3 positive contracts.
+
+### CI result
+CI started immediately on push: claude-review (queued), Linter (queued), Server Tests (in progress). Auto-merge gated on all three passing. Watch at https://github.com/csrnicek/hamilton_erp/actions/runs/25173827418.
+
+### Files changed
+13 files, +1294 / -70. New files: `hamilton_erp/test_retail_sales_invoice.py` (340), `hamilton_erp/patches/v0_1/seed_hamilton_accounting.py` (28). Largest existing-file changes: `setup/install.py` (+411), `api.py` (+120), `seed_hamilton_env.py` (+118), `inbox.md` (+90), `asset_board.js` (60 lines redone).
+
+### Remaining risks
+1. Production sites with an existing non-`Club Hamilton` company need `bench --site SITE set-config hamilton_company "<name>"` BEFORE migrate, else seed creates a sibling company.
+2. Day-one stock seeding still required — the seed deliberately does NOT auto-create Stock Entries. First retail sale on production will fail until a Material Receipt lands the SKUs.
+3. `_find_account_parent` heuristic tested only on `country=Canada, chart_of_accounts=Standard`. Country-specific CoAs may have different parent-group naming.
+
+### Rollback notes
+Reversible via `git revert -m 1 <merge SHA>`. Seeded artifacts persist on production after rollback (POS Profile, accounts, company) but are inert if the cart UX reverts to stub state. Optional cleanup: `frappe.delete_doc('POS Profile', 'Hamilton Front Desk')`. Item Defaults rows on retail items are additive — only fire when POS Profile is referenced.
+
+### Recommended merge command
+Already set: `gh pr merge --squash --auto --delete-branch` — fires when CI green.
+
+### Open questions for Chris
+1. **Production company pinning.** Pin `hamilton_company` on `hamilton-erp.v.frappe.cloud` BEFORE running migrate? If so, what's the existing real company name, or should production run under "Club Hamilton" too?
+2. **Initial stock on day one.** Want a small follow-up PR that seeds 24 units of each retail SKU as a Material Receipt (gated by `frappe.conf.seed_initial_retail_stock=true`), or do the first Material Receipt manually via Desk?
+3. **Phase 2 hardware queue priority.** Receipt printer first (operational impact) or merchant adapter first (longest lead time on processor approval)?
+
+## 2026-04-30 — Frappe Cloud production prep (Tier 0 launch tasks)
+
+Surfaced by the Frappe Cloud production-hosting research session (2026-04-30). These augment the existing Tier 0 foundations in the post-PR-9 cleanup section below. All four are pre-go-live blockers — none can wait until after opening day.
+
+### T0-FC-1 — Enable backup encryption BEFORE any PII or card payments ship
+
+**Action:** `bench --site hamilton-erp.v.frappe.cloud set-config encryption_key '<random-key>'` and store the key in 1Password.
+
+**Why:** Frappe Cloud's backup encryption is opt-in. Default = unencrypted. Without an encryption key, restored backups CAN be opened by anyone with S3 read access to the Mumbai bucket — fine for Phase 1 (no PII, cash-only) but a regulatory landmine the moment Phase 2 next iteration ships card payments (last-4, merchant_transaction_id, customer email/SMS for digital receipts).
+
+**Critical inverse risk:** if the encryption key is set AFTER existing backups are taken, those existing backups are still un-encrypted. Set the key BEFORE any sensitive data lands. Once set, store the key forever — losing it makes encrypted backups unrecoverable.
+
+**Effort:** 5 minutes + 1Password entry.
+
+### T0-FC-2 — Move backup region from Mumbai to Canada or US East
+
+**Action:** Open a support ticket with Frappe Cloud requesting backup region change from default `ap-south-1` (Mumbai, India) to `ca-central-1` (Montreal) or `us-east-1` (Virginia).
+
+**Why:** Default backup destination is an AWS S3 bucket in Mumbai. PIPEDA (Canada's privacy law) doesn't strictly prohibit cross-border data transfer, but customer PII stored in India creates a disclosure obligation in privacy notices and increases the risk surface in the event of a Frappe Cloud account compromise. `ca-central-1` is the gold standard (data residency in Canada); `us-east-1` is a defensible second choice with US Cloud Act implications.
+
+**Time pressure:** Same as T0-FC-1 — must land before Phase 2 next iteration adds PII / card data.
+
+**Effort:** Support ticket + Frappe response time. Frappe-side complexity unknown; may require a plan tier upgrade.
+
+### T0-FC-3 — Verify $40/month plan storage allocation is ≥20 GB
+
+**Action:** Confirm with Frappe Cloud support (or check the bench config UI) that the current $40/month plan includes at least 20 GB of database + file storage.
+
+**Why:** Hamilton's database growth projection: ~1-1.5 GB after Year 1, ~5-8 GB after Year 5 (GL Entry / Sales Invoice / Stock Ledger Entry growth, no partitioning). Plus receipt-bytes retention for chargeback evidence (Phase 2 next): ~2KB/receipt × 600 receipts/day × 365 days = **~430 MB/year just for receipts**. Total 5-year storage need: **~5-10 GB database + ~2-4 GB file storage = ~7-14 GB**. 20 GB gives headroom; below that, Hamilton will need to bump plan tiers mid-year, which is operationally expensive (planned migration window required).
+
+**Effort:** Read the plan dashboard + ticket if unclear. <30 minutes.
+
+### T0-FC-4 — Restore-to-staging exercise to measure actual RTO
+
+**Action:** Trigger a real restore from Frappe Cloud's offsite backup to a staging site (NOT production). Time the operation. Document the actual RTO (recovery time objective in minutes) in the launch runbook.
+
+**Why:** Frappe Cloud advertises 24-hour RPO (daily backups, retention 7d/4w/12m/10y) but **does not publish an RTO**. The actual restore time depends on backup size, S3-to-Mumbai-to-bench bandwidth, and Frappe support response time. Hamilton's measurement IS the operational baseline — without it, the disaster-recovery plan is "do whatever Frappe says" with unknown duration.
+
+**Pass criteria:** Documented RTO < 4 hours for Hamilton's database size (currently small, will grow). If the actual RTO is >24 hours, that's a "consider Dedicated server tier ($200/month) for the < 2-hour critical-issue SLA" decision point.
+
+**Caveat:** Frappe Cloud's docs don't describe whether restore is self-serve via the portal or requires a support ticket. Find out as part of this exercise — the RTO measurement is dominated by whichever path applies.
+
+**Effort:** ~1 hour for the restore + 30 minutes for runbook documentation.
+
+### T0-FC-5 — Verify `/app/asset-board` route works on v16 production
+
+**Action:** After production deploy of Hamilton ERP onto Frappe Cloud, navigate to `https://hamilton-erp.v.frappe.cloud/app/asset-board` and confirm the page loads without redirect issues.
+
+**Why:** v16 renamed the desk frontend route prefix from `/app` to `/desk` (per the v15→v16 migration wiki). Frappe added a redirect for `/app` → `/desk` to preserve backward compatibility, but redirects are exactly the kind of thing that quietly break in production deploys when an nginx config or proxy intercepts the wrong path. Hamilton's POS UI lives at `/app/asset-board`; if the redirect silently fails, the operator gets a 404 on opening day.
+
+**Pass criteria:** GET on `/app/asset-board` either returns the page directly OR returns a 301/302 to `/desk/asset-board` which then returns the page. Either path works; total time-to-render <2s.
+
+**Effort:** 5 minutes (curl + browser verification).
+
+### T0-FC-6 — Verify `Accounts Settings.use_sales_invoice_in_pos` matches Hamilton's flow
+
+**Action:** Read `Accounts Settings.use_sales_invoice_in_pos` on production and document the value. Hamilton's `submit_retail_sale` doesn't depend on this toggle (it sets `is_pos=1` directly on a `Sales Invoice` doc, bypassing the standard POS UI which the toggle controls), but consistency between the toggle state and Hamilton's actual path eliminates surprise behavior.
+
+**Why:** The v16 architecture change (PR `frappe/erpnext#46485`, "feat: sales invoice integration with pos") added this toggle in Accounts Settings. When ON, the standard POS UI creates Sales Invoice records (Hamilton's path); when OFF, it creates POS Invoice records (the legacy path). Hamilton bypasses the standard POS UI entirely by going through the cart drawer + `submit_retail_sale`. But: any future "enable the standard POS UI as a backup" or any operator who opens `/app/point-of-sale` directly will hit the toggle's behavior. Setting it to ON aligns the standard surface with Hamilton's custom surface.
+
+**Recommended state:** ON (Hamilton's path is Sales Invoice). Document the choice in `docs/decisions_log.md` if not already.
+
+**Effort:** 5 minutes.
+
+### T0-FC-7 — Verify stock valuation method is FIFO at company level
+
+**Action:** On `Company "Club Hamilton"` (or whatever Hamilton's pinned company is), confirm `default_in_transit_warehouse` and the per-item / per-company stock valuation method is FIFO.
+
+**Why:** v16 made stock valuation method selectable per-company (was global in v15). The seed doesn't currently set this explicitly — Standard CoA's default is FIFO, which is what Hamilton wants for retail (small SKU count, fast turnover, each unit's cost matches the one before it within $0.01). Moving Average and LIFO are wrong for Hamilton's retail model.
+
+**Pass criteria:** Stock Settings → Valuation Method = FIFO (default) AND Company "Club Hamilton" has no override that flips it to Moving Average.
+
+**Effort:** 5 minutes.
+
+### T0-FC-8 — Restore-to-staging drill against current v16 minor (not launch version)
+
+**Action:** Trigger a restore from production backup to a staging site running the **current** `version-16` minor (e.g., `v16.3.4` if that's the latest tag at the time of drill), NOT the version production was launched with. Run Hamilton's full test suite against the restored data on the new minor.
+
+**Why this is different from T0-FC-4:** T0-FC-4 measures RTO. This drill validates the **migration path** — that Hamilton's actual production data (Sales Invoices, Stock Ledger Entries, Asset Status Logs, etc.) survives a v16 minor upgrade without data loss or schema mismatch. The polish-wave fix cadence (R-010) makes it likely that one of the ~10 monthly fixes touches a doctype Hamilton uses.
+
+**Pass criteria:** All 17 test modules pass on the restored data + new minor. Specifically: GL Entries balance, Stock Ledger Entries reconcile, Sales Invoice → Cash Drop → Cash Reconciliation chain validates.
+
+**Frequency:** Run on every monthly upgrade promotion (per the CLAUDE.md cadence). The first run is pre-launch on whatever minor is current; subsequent runs are part of the normal upgrade flow.
+
+**Effort:** 1-2 hours per drill.
+
+### T0-FC-9 — Resolve `frappe/payments` strategy before go-live
+
+**Action:** Decide whether Hamilton's production bench installs `frappe/payments` (and from which branch) or omits it entirely.
+
+**Why:** ERPNext issue [#51946](https://github.com/frappe/erpnext/issues/51946) — "Payment Gateway Doctype not present in version-16" — has been open since 2026-01-21 with no fix announced as of 2026-04-30. Hamilton's CI installs `frappe/payments@develop` as a workaround for the `IntegrationTestCase` setUpClass test issue. Production code itself doesn't reference Payment Gateway (per `docs/inbox.md` 2026-04-28 production-code reality check), so omitting frappe/payments from production should be safe — but if Phase 2 next iteration's card payment flow ever uses Frappe's Payment Entry / Payment Gateway tooling, the absence becomes a runtime error.
+
+**Three options to evaluate:**
+1. **Omit frappe/payments from production.** Lowest risk if Phase 2 next is built on a custom merchant adapter (per inbox merchant abstraction spec) that doesn't use Frappe's Payment Gateway doctype.
+2. **Install `frappe/payments@develop`.** Mirrors CI; brings Payment Gateway doctype into production. Risk: develop-branch instability.
+3. **Wait for `frappe/payments@version-16`.** Cleanest if it ships before Hamilton goes live; otherwise blocks options 1 or 2 from being decided.
+
+**Decide before:** Hamilton goes live on Frappe Cloud (production deploy). The decision affects bench config which is cleanest set BEFORE the first migration runs against production.
+
+**Effort:** 30-minute review of Phase 2 next iteration's adapter design (does it use Payment Gateway doctype?) + 5-min bench config change.
+
+### Sequencing for the nine
+
+T0-FC-1 through T0-FC-4 are the core Frappe Cloud hardening (pre-PII / pre-card-payments). T0-FC-5 through T0-FC-9 are v16-specific verification and decisions.
+
+All nine should land in the 2-3 weeks BEFORE Hamilton opens:
+1. **T0-FC-3 storage check** + **T0-FC-9 frappe/payments decision** first (may need plan upgrade lead time and/or upstream frappe/payments visibility).
+2. **T0-FC-1 encryption** next (5 minutes, but blocking T0-FC-4's restore drill — restore drill should test the encrypted-backup path).
+3. **T0-FC-2 region change** in parallel (depends on Frappe support response time).
+4. **T0-FC-4 RTO drill** + **T0-FC-8 v16-minor migration drill** after deploy is finalized (these need a real production-state backup to test against).
+5. **T0-FC-5 / T0-FC-6 / T0-FC-7** verification once production is up (5 minutes each, before opening day).
+
 2026-04-24: V9 of asset board shipped to main as squash commit 1cc9125. PR #8 merged. decisions_log.md Part 3.1 amended (countdown text amber→red). V9 plan archived at docs/design/archive/. NEXT SESSION: update docs/claude_memory.md to reflect V9 shipping; cancel unused Frappe Cloud site (~$40/mo, won't need until deploy 6-8 weeks out).
 
 ## 2026-04-27 — Late evening
@@ -1384,3 +1530,261 @@ Not picked up this run, available for next overnight:
 - Pre-flight checks save time: track_changes Stack #2 was discovered already-implemented; Stack #3 was caught as a STOP condition before any code was written.
 - The `git stash` baseline trick is the cleanest way to attribute test failures (mine vs pre-existing).
 - Chris's `wording-fix` label + no-auto-merge instruction worked perfectly for PR #55.
+
+## 2026-04-30 — Phase 2 hardware + integration backlog (post-cart-UX)
+
+V9.1 Phase 2 retail cart shipped with cash-only single-tender (PR #49). The follow-up wires real Sales Invoice creation. After that, the next Phase 2 work is hardware integration and a card-payment merchant abstraction. Captured here so it doesn't get lost between cart-UX shipping and store-opening.
+
+### Receipt printing — Epson TM-T20III
+
+**Hardware:** Epson TM-T20III thermal receipt printer. Ethernet + WiFi capable. Same integration pattern as the Brother label printer (DEC-011) — IP address configured per-venue in Hamilton Settings, not hard-coded.
+
+**Behavior:** Print every transaction automatically after payment confirms. The receipt content includes:
+- Sale line items + totals (HST broken out)
+- Asset assignment (room number / locker number) when the sale is part of a check-in flow
+- Sales Invoice ID and timestamp
+- Cash given / change due (or last-4 of card pan if Card)
+
+**Operational pattern — receipt as physical control token.** The paper receipt printed at point-of-sale doubles as the asset-board control token. The operator hangs the receipt on the assigned key hook. Receipt-on-hook = room/locker is occupied. This keeps the physical state visible without the operator having to look at a screen, and survives system outages — if the asset board is down, the hooks still tell you what's free.
+
+**Design implications:**
+- Receipt printer config lives in Hamilton Settings: `receipt_printer_ip` (string), `receipt_printer_enabled` (check). Mirror Brother label printer fields.
+- Print job is a side-effect, not part of the Sales Invoice transaction. If the printer is offline, the sale must still complete; queue the print job to retry, surface a "printer offline" indicator on the board.
+- Test path: a `print_receipt(sales_invoice_name)` whitelisted endpoint that takes a Sales Invoice and renders to ESC/POS. Backend does the formatting; client just triggers.
+
+**v16 PRINT-FORMAT GOTCHA — load by name, do not rely on UI selection.** ERPNext v16 issue [#53857](https://github.com/frappe/erpnext/issues/53857) ("Add Sales Invoice support to POS Profile print format filter") is open as of 2026-04-30: the POS Profile's print-format filter UI doesn't show Sales Invoice formats, only POS Invoice formats. Hamilton's path uses Sales Invoice (via the v16 `is_pos=1` architecture). This means **the receipt printer code path MUST specify the print format programmatically** — load the Print Format by name (`frappe.get_doc("Print Format", "<Hamilton Receipt>")`), render the SI through `frappe.get_print(doctype, name, print_format=...)`, and send the rendered output to the printer. Do NOT depend on `pos_profile.print_format` being set correctly via the Desk UI; that field's filter is broken in v16 and will silently stay empty for Sales-Invoice-flavored POS profiles.
+
+**Concrete pattern:**
+```python
+def print_receipt(sales_invoice_name: str):
+    si = frappe.get_doc("Sales Invoice", sales_invoice_name)
+    html = frappe.get_print(
+        doctype="Sales Invoice",
+        name=sales_invoice_name,
+        print_format="Hamilton Receipt",  # explicit, NOT pos_profile.print_format
+    )
+    escpos_bytes = render_html_to_escpos(html)
+    send_to_printer(hamilton_settings.receipt_printer_ip, escpos_bytes)
+    # Also: store escpos_bytes on the SI per the receipt-bytes retention rule above.
+```
+The "Hamilton Receipt" Print Format is created as a fixture in the Hamilton ERP app and referenced by name. When ERPNext fixes #53857 (likely a v16.x patch), the workaround stays correct — it doesn't break, just becomes redundant.
+
+### CRA compliance — mandatory receipt content (Ontario / Canada)
+
+Sourced from the Ontario CRA receipt-requirements research (2026-04-30). Receipt printer code must produce output that satisfies CRA's tiered receipt rules so Hamilton stays compliant for the 6-year audit window AND so business customers (corporate cards, bachelor-party blocks) can claim Input Tax Credit on their purchases.
+
+**Pre-Phase-2 setup — Hamilton Settings field:**
+
+- Add `gst_hst_registration_number` (Data field) to Hamilton Settings BEFORE the receipt printer ships. The receipt printer integration reads this value and prints it on every receipt. Pre-populate via Desk on first install (operator types it in once); seed code can't auto-derive it because it's an external CRA-issued identifier specific to Hamilton's legal entity.
+
+**Mandatory fields on every printed receipt (and digital receipt):**
+
+| Field | Source / value |
+|---|---|
+| Business name | "Club Hamilton" — Company.company_name |
+| Business address | Hamilton Settings field (add if missing) — venue street address |
+| Business phone | Hamilton Settings field (add if missing) — venue phone |
+| Date | SI.posting_date + SI.posting_time, formatted for human reading |
+| Items list | SI.items[] — item_code, item_name, qty, rate, amount per line |
+| Tax indication per line | Implicit (all currently 13%); explicit when Phase 3 mixes rebate-eligible items |
+| HST line | "HST 13%" with rate AND dollar amount (NOT just "HST $0.91" — the rate must be visible) |
+| Total | SI.rounded_total (cash) or SI.grand_total (card) — see Canadian penny-elimination amendment |
+| GST/HST registration number | Hamilton Settings.gst_hst_registration_number — print on EVERY receipt |
+| "PAID" indication | Phrase like "PAID — CASH" or "PAID — CARD" derived from SI.payments[0].mode_of_payment |
+
+**Why GST/HST registration number on EVERY receipt regardless of amount tier:** CRA's tiered rule technically only requires the GST/HST number on transactions $30+. But: (a) the implementation cost of the conditional is higher than always printing it, (b) below-$30 receipts that omit the number can't be used by business customers for ITC even when they're inside the $30 tier informally (e.g., one-cent rounding or split-tender), (c) receipts are often given to expense-report owners separate from the original buyer. **Print it always.** No downside; eliminates a class of compliance gap.
+
+**HST display rule (CRA permits three options; Hamilton uses Option A):**
+
+- **Option A (Hamilton's choice — separate line):** "Subtotal $7.00 / HST 13% $0.91 / Total $7.91". Matches the cart drawer JS preview, matches what `submit_retail_sale` writes to the SI's tax line. Cleanest for operators and customers.
+- Option B (tax-included with rate disclosed): "Total (HST 13% included) $7.91" — valid CRA option but worse for operator math during cash transactions.
+- Option C (net + total + rate notation): "Net $7.00 / Total $7.91 / HST applied at 13%" — valid but verbose.
+
+**Rate must be visible.** A receipt showing "HST $0.91" without the "13%" rate is non-compliant for $30+ transactions. Always include "HST 13%" verbatim.
+
+**Retention:** CRA requires 6 years from the end of the tax year the records relate to. Frappe Cloud's offsite backup retention (7 daily / 4 weekly / 12 monthly / **10 yearly**) covers this naturally — the live database is the system of record (the SI itself, with `taxes_and_charges`, `taxes`, `payments`, etc.); the printed paper receipt is operator UX. The 10-year long-tail backup retention exceeds the 6-year CRA requirement comfortably. No additional retention infrastructure needed.
+
+**Receipt copy retention (chargeback evidence + CRA back-stop):** Per the Phase 2 hardware backlog above, retain ESC/POS bytes server-side for ≥18 months for chargeback dispute response. The 18-month chargeback window is shorter than the 6-year CRA window, so the SI-record-of-record outlasts the receipt-bytes copy by design. CRA cares about the SI; the receipt bytes are operator/dispute-investigation convenience.
+
+### Phase 3 forward-compat — Ontario prepared-food rebate (will apply if Hamilton adds menu items)
+
+CRA GI-064 documents the Ontario point-of-sale rebate on qualifying prepared food and beverages: when total price (excluding HST) is ≤ $4, the 8% provincial portion of HST is rebated at the point of sale. Effective HST on those items drops from 13% to 5% (federal-only).
+
+**What qualifies:** hot meals, sandwiches, heated beverages, prepared food ready for immediate consumption.
+
+**What does NOT qualify:** carbonated/sweetened beverages, snack items (chips, candy, granola bars, energy bars, protein bars), single-serving bottled water.
+
+**Hamilton's current 4 retail SKUs (WAT-500, GAT-500, BAR-PROT, BAR-ENRG) all fall into the "does not qualify" categories** — full 13% HST is correct, no rebate. The accounting seed is correct as-is.
+
+**When this becomes relevant:** Phase 3+ if Hamilton adds menu items — hot coffee/tea, made-to-order sandwiches, hot soups, etc. At that point:
+
+1. Add a per-Item flag (Custom Field on Item: `qualifies_for_on_food_rebate` Check) OR use ERPNext's Item Tax Template feature.
+2. The cleanest pattern is **Item Tax Template per-item override**: create a "Ontario HST 5% (rebate-eligible)" Sales Taxes Template and attach it to qualifying items via Item Tax Template. The cart's per-line tax computation will pick up the per-item override automatically.
+3. Cart logic must check the under-$4 threshold per qualifying item: rebate applies only when (item qualifies) AND (item price excluding HST ≤ $4) AND (item is sold in a "prepared for immediate consumption" context — coffee/sandwich orders qualify; bulk grocery purchases of the same item do not).
+4. Receipt format must show the rebate as a separate line per CRA's three permitted presentations of POS rebates (full HST minus rebate / federal-only / HST-included with net-tax notation). Choose one and apply consistently.
+
+**Scope estimate when ready:** ~3-5 days of work including the Item Tax Template seed, cart conditional-tax logic, receipt format update, regression tests covering the under-$4 threshold edge cases.
+
+### Phase 3 forward-compat — B2B invoice tier ($150+ corporate billing)
+
+CRA's tiered receipt rule: at $150+, additional fields become mandatory beyond the standard receipt — **buyer's name, description of purchase, terms of payment**.
+
+**Hamilton's current flow:** every cart sale is to "Walk-in" (anonymous) at retail prices. No corporate billing. Most carts are well under $150.
+
+**When this becomes relevant:** if Hamilton ever offers corporate billing for bachelor-party blocks, gift card purchases, multi-room reservations, etc. At that point the cart needs:
+
+1. A "named customer" path — operator types or selects a Customer record other than "Walk-in" (could be an existing membership Customer, could be an ad-hoc corporate Customer created at the cart).
+2. Per-line item descriptions written to the SI (Hamilton's seed already provides item_name → SI line description; verify it's not stripped by any custom code).
+3. Payment terms field on the SI (already a standard ERPNext SI field; just needs to be exposed in the cart UI when the customer is non-walkin).
+
+**Scope estimate when ready:** ~2-3 days for the cart UX (customer selector, payment-terms field, named-customer routing) + the receipt format already includes the customer name field for non-Walk-in receipts.
+
+### Digital receipt option
+
+Offer "Email or SMS receipt" in addition to the paper print. Operator types the customer's email or phone, system sends a digital copy. Paper still prints by default (control-token role); digital is additive, not a replacement.
+
+**Implementation note:** Digital receipt is a Sales Invoice email/SMS via Frappe's standard notification machinery — not a custom integration. Per-venue email-from address comes from Hamilton Settings (already exists per `app_email`).
+
+### Tap-to-pay treated as Card method
+
+**Decision:** Tap-to-pay does NOT get its own Mode of Payment row. It IS "Card." The merchant terminal handles the chip/swipe/tap distinction internally. The Sales Invoice records `mode_of_payment="Card"` regardless of how the customer presented their card.
+
+This avoids the trap of having "Tap", "Chip", "Swipe", "Apple Pay" as four separate Mode of Payment values that the operator has to choose between — none of which are knowable in advance because the terminal decides based on what the customer does.
+
+### Merchant abstraction (CRITICAL for adult-classified businesses)
+
+**Why this matters:** Bathhouses are adult-classified. Merchant accounts get terminated periodically with little warning. The system MUST support swapping merchants without code changes, ideally with multiple active merchants for redundancy.
+
+**Design:**
+- Per-venue merchant config lives in `site_config.json` (or Hamilton Settings, leaning toward site_config because credentials shouldn't be in DB).
+- Each venue can have **1 or N** active merchants. The default merchant is selected by name; alternates are available as a fallback if the default declines or times out.
+- Adding a new merchant must be a config change, not a code change. The codebase ships with adapter classes for the common processors (Stripe, Square, Moneris in Canada, Helcim in Canada-adult-friendly, Stripe US) and `merchant_type` selects which adapter to use.
+
+**Sales Invoice integration:**
+- Every `mode_of_payment="Card"` payment captures a `merchant_transaction_id` (custom field on Sales Invoice or Mode of Payment Account row, decision pending).
+- Capture the merchant name too (`merchant_name`), since with multiple active merchants the txn ID alone doesn't identify which merchant settled it.
+- Both fields searchable on Sales Invoice — refunds, disputes, and reconciliation all need to look up by merchant_transaction_id.
+
+**Field schema (proposal — expanded per PR #51 deeper audit, Topic 3):**
+
+The chargeback-evidence research (Visa Compelling Evidence 3.0, EMV liability shift reason codes 10.1 / 10.2 / 4870) showed that a generic `merchant_transaction_id` is **necessary but not sufficient** to win a card-present dispute. The fields below convert a generic transaction record into compelling evidence:
+
+```
+Sales Invoice custom fields (10 fields total):
+  hamilton_merchant_name         Data        (e.g. "Fiserv", "Helcim")
+  hamilton_merchant_txn_id       Data        (returned by terminal/processor)
+  hamilton_descriptor_used       Data        (the descriptor that appears on
+                                              the cardholder's statement —
+                                              e.g. "CLUB HAMILTON" not
+                                              "HAMILTON BATHHOUSE"; NEW per
+                                              deeper audit, reduces friendly-
+                                              fraud chargebacks where the
+                                              cardholder claims "I don't
+                                              recognize this charge")
+  hamilton_card_last_4           Data        (last 4 of pan, for receipt
+                                              + dispute lookup)
+  hamilton_card_brand            Data        (Visa / MC / Amex / Interac /
+                                              Discover)
+  hamilton_card_entry_method     Select      ("Chip" / "Swipe" / "Manual" /
+                                              "Tap" / "Apple Pay" / "Google
+                                              Pay" — swiped on EMV card =
+                                              merchant liability per VRC
+                                              10.1; chip-read shifts liability
+                                              to issuer)
+  hamilton_card_cvm              Select      ("PIN" / "Signature" / "NoCVM" /
+                                              "Failed" — proper CVM is the
+                                              compelling-evidence backbone)
+  hamilton_auth_code             Data        (issuer's authorization
+                                              response code; required for
+                                              every dispute response)
+  hamilton_card_aid              Data        (AID resolved by terminal —
+                                              which scheme actually settled,
+                                              critical for cards with
+                                              multiple AIDs e.g. Visa Debit +
+                                              Interac)
+  hamilton_terminal_id           Data        (which terminal — multi-terminal
+                                              venues need this for batch
+                                              reconciliation and dispute
+                                              filtering)
+  hamilton_receipt_bytes         Long Text   (or attached as File: the
+                                              ESC/POS bytes sent to the
+                                              printer, retained server-side
+                                              for >=18 months so a receipt
+                                              can be re-printed for dispute
+                                              response 6 months after the
+                                              fact)
+```
+
+**Receipt-as-evidence retention rule:** print to printer + `frappe.get_doc("File", ...).insert()` the same ESC/POS bytes as a server-side attachment to the SI. Reproducible printing means a manager can re-print a receipt 6 months later without depending on the original paper copy still being in a filing cabinet. Retention period: 18 months (covers Visa's 120-day dispute window + re-presentment + arbitration).
+
+**Why these fields collectively:** EMV liability shift (chip + CVM) handles the bulk of fraud-reason-code chargebacks (10.1, 10.2, 4870). Merchant descriptor + receipt bytes + auth code handle friendly-fraud and "I don't recognize this charge" cases. `terminal_id` + `card_aid` are batch-reconciliation safety. The 10 fields together implement the Visa CE3.0 evidence model for card-present POS.
+
+**Per-venue config shape (proposal, in site_config.json):**
+```json
+{
+  "hamilton_merchants": {
+    "default": "helcim",
+    "available": {
+      "helcim": {"adapter": "helcim_v2", "api_key_path": "secrets/helcim.key", "terminal_id": "..."},
+      "stripe_backup": {"adapter": "stripe", "api_key_path": "secrets/stripe.key"}
+    }
+  }
+}
+```
+
+**Failover behavior:** If the default merchant's terminal times out or returns DECLINED-COMMS-ERROR (not DECLINED-INSUFFICIENT-FUNDS — those are real declines, don't retry), the operator gets a one-tap "Try backup processor" button on the cart drawer. This is operator-driven not automatic — automatic failover risks double-charging the customer if the first processor actually settled but the response was lost.
+
+### Polish — cart drawer change preview off by ≤4¢
+
+The cart drawer + cash payment modal preview the running total and change using the client-side `_cart_total()` (subtotal + HST 13%, no nickel rounding). The actual post-Confirm transaction is correct because the server applies Canadian nickel rounding (Amendment 2026-04-30 (c)) and returns the rounded change in the toast — but the *pre-Confirm preview* can be off by ≤4¢.
+
+Concrete example for a $7.91 cart with $20 cash tendered:
+- **Drawer/modal preview shows:** "Total $7.91" and "Change $12.09" (penny-precision)
+- **Server returns:** rounded_total $7.90, change $12.10 (nickel)
+- **Operator sees:** preview $12.09 → tap Confirm → toast "Sale ACC-... — change $12.10"
+- **Worse symptom:** Confirm button is gated on `cash_received >= due` where `due = grand_total = $7.91`. If operator types exactly $7.90 (the actual rounded amount due), the button stays disabled because the JS thinks $7.91 is owed; they have to type $7.91 or more to enable Confirm. Then the API rounds and returns $0.00 change for $7.90 tendered — which is the right answer the operator already knew, but the modal didn't help them get there.
+
+**Fix:** add a client-side `roundToNickel(value)` helper in `asset_board.js` and use it in:
+- `_cart_total()` — show the rounded total in the drawer summary so the operator's mental math matches the cash they'll collect.
+- The cash modal `due` variable — gate Confirm on `cash_received >= rounded_total`, compute change preview against rounded_total.
+
+**Implementation note:** the math is identical to the server-side rule:
+```js
+function roundToNickel(value) {
+    // Canadian penny-elimination rule (2013): round half-up to nearest 0.05.
+    // Mirrors frappe.utils.round_based_on_smallest_currency_fraction.
+    return Math.round(value * 20) / 20;
+}
+```
+Add a unit test in `test_asset_board_rendering.py` (source-substring contract) asserting the helper exists and is called in `_cart_total` + the cash modal Confirm-gate path. Should be a half-day task.
+
+**Why deferred from PR #51:** Functional correctness (the actual sale, the actual change handed back, the GL entry) is server-side and already correct as of commit `b3e5715`. The drawer preview is UX polish that doesn't affect any data, money flow, or audit trail — operators will adjust to "preview shows ${X}.{xx}, actual change is ${X}.{x0 or x5}" within their first shift if the polish doesn't ship by go-live. Worth fixing before opening day for clean operator UX, but not blocking PR #51 review.
+
+### Phase 2 prep checklist — confirm with Fiserv / merchant before card work starts
+
+These are the questions Chris needs answered before Phase 2 next iteration (card payments) begins. Pre-confirming avoids re-architecting the integration mid-build when answers come back differently than assumed.
+
+- [ ] **MCC code on Fiserv MID 1131224.** Confirm the Merchant Category Code Fiserv has registered Hamilton under. MCC 7298 (health/beauty/spa) and 7299 (services not elsewhere classified) are the two likely candidates for a bathhouse. The MCC determines the card-network fee tier, the chargeback-ratio threshold, and whether Hamilton's transactions trigger any "high-risk" flagging in card-network systems. Hamilton processes as standard, but the MCC confirms which standard tier.
+- [ ] **Descriptor on cardholder statements.** Confirm the exact merchant descriptor that appears on Visa / Mastercard statements when a customer pays at Hamilton. The descriptor field on the SI (`hamilton_descriptor_used`) must match this exactly — friendly-fraud chargebacks ("I don't recognize this charge") happen when the descriptor is generic or unfamiliar. Best practice for adult hospitality: short non-flagging name like "CLUB HAMILTON" rather than "HAMILTON BATHHOUSE / SAUNA" which can trigger embarrassment-driven disputes.
+- [ ] **Chargeback notification process.** How does Fiserv notify Hamilton of an incoming chargeback? Email, portal, fax (still happens), API callback? What's the SLA — 7 days from cardholder dispute filing? 15 days? Hamilton's response window for compelling evidence depends on this; a portal-only notification with an unmonitored email = missed chargebacks = MATCH-list risk (R-009).
+- [ ] **Dispute portal credentials.** Get login credentials for Fiserv's dispute portal (Vantiv DisputeManager or similar) BEFORE the first chargeback. Operations runbook needs the portal URL, primary login, secondary login, escalation contact. Pre-Phase-2 ops task.
+- [ ] **Reserve schedule and held-funds release.** What reserve does Fiserv hold (% of monthly volume, fixed amount, rolling 90-day)? When does held cash release back to Hamilton's bank account? This affects cash-flow planning, not chargeback handling, but matters operationally.
+- [ ] **Terminal data flow for SAQ-A confirmation.** Confirm that the chosen terminal model (Verifone? Ingenico? Pax? Fiserv-supplied?) sends card data DIRECTLY to Fiserv via an encrypted channel that doesn't transit Hamilton's network. SAQ-A eligibility depends on this. If the terminal pumps card data through a Hamilton local server first, scope expands to SAQ-D (~$5-50k/year QSA assessment).
+
+### Sequencing
+
+This work happens AFTER the cart Confirm is wired to Sales Invoice creation (current PR). Order:
+
+1. Receipt printer integration — Epson TM-T20III + ESC/POS receipt rendering + Hamilton Settings config + retry queue + server-side ESC/POS bytes retention (per the deeper audit's receipt-as-evidence rule). Probably 2-4 days.
+2. Card payment Mode of Payment + merchant adapter scaffolding — basic Fiserv integration, capture all 10 EMV fields per the expanded schema above (merchant_transaction_id + descriptor + entry_method + cvm + auth_code + AID + terminal_id + card_brand + last_4 + receipt_bytes), add custom fields to Sales Invoice. Probably 3-5 days.
+3. Multi-merchant config + manual failover button. **Lower priority now** — R-008 is downgraded because Hamilton runs as standard merchant via Fiserv. Phase 3+ unless chargeback ratio drives need. Original estimate 2-3 days remains accurate when scheduled.
+4. Digital receipt (email/SMS). Probably half-day on top of receipt printer work since the templating is mostly shared.
+5. Cart drawer nickel-rounding polish (Phase 2 polish section). Half-day. Standalone — can land before or after items 1-4.
+
+Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
+
+### Open questions for tomorrow-Chris
+
+- Which processors are realistic for adult-classified Canadian bathhouse? Helcim is one option; need a backup. Research before committing to the adapter list.
+- Hardware: confirm TM-T20III can be sourced in Canada and supports both ethernet and WiFi (some sub-models are ethernet-only). Verify the ESC/POS command set is the standard one that python-escpos supports out of the box.
+- Receipt tape: brand + cost per roll + how many transactions per roll? Need this for the operations runbook.

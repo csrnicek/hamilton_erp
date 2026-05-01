@@ -477,6 +477,60 @@ The Return-to-Service modal's "Set:" context row now formats as `"by NAME at HH:
 
 ---
 
+## Amendment 2026-04-30 (b) — Hamilton accounting names locked from QBO mirror
+
+After the V9.1 Phase 2 cart UX shipped as PR #49 (UX-only stub), Chris's accountant decided the accounting prerequisites should mirror Hamilton's existing QBO chart-of-accounts naming. The follow-up PR (also 2026-04-30) seeds these as part of `_ensure_hamilton_accounting` in `hamilton_erp/setup/install.py`:
+
+- **HST account:** `GST/HST Payable` (account_type=Tax, root_type=Liability, tax_rate=13)
+- **Income — beverages:** `4260 Beverage` (Water, Sports Drinks, future drink SKUs)
+- **Income — food:** `4210 Food` (Protein Bar, Energy Bar, future food SKUs)
+- **Warehouse:** `Hamilton`
+- **Cost Center:** `Hamilton`
+- **POS Profile:** `Hamilton Front Desk` — operator-invisible, named target of `submit_retail_sale`
+- **Sales Taxes Template:** `Ontario HST 13%` referencing the GST/HST Payable account
+
+Per ERPNext convention, account/warehouse/cost center names are appended with the company abbreviation suffix (e.g. `4260 Beverage - CH` for company `Club Hamilton` abbr `CH`).
+
+**Why mirror QBO:** Hamilton's books have run on QBO since opening. Mirroring the names exactly means QBO sync (Phase 3) and any cross-system reporting can match by name without a translation table. The accountant signed off; locking them prevents drift.
+
+**Production pinning:** Sites that already have a non-`Club Hamilton` company configured can pin it via `bench --site SITE set-config hamilton_company "<existing name>"`. The seed augments the pinned company with Hamilton-specific accounts rather than creating a sibling Club Hamilton.
+
+**Reverses:** the placeholders proposed in V9.1-D12 of the UX-stub PR (e.g. `HST Payable - WP`, `Sales - WP`, the "Retail Sales" suggestion). Those were exploratory and were never written to code.
+
+**Related:** Phase 2 hardware + integration backlog (Epson TM-T20III receipt printer, merchant abstraction with `merchant_transaction_id` capture per Card sale, tap-to-pay treated as "Card" not separate) is documented in `docs/inbox.md` under 2026-04-30. That work follows this PR.
+
+---
+
+## Amendment 2026-04-30 (c) — Canadian penny-elimination rounding (cash sales only)
+
+After PR #51 hardening, source-of-truth review surfaced that Hamilton's POS Sales Invoice flow was setting `disable_rounded_total=1` unconditionally — sidestepping Canada's 2013 cash-rounding rule. Per the Government of Canada Budget 2012 backgrounder, cash transactions must round to the nearest 5¢ after HST is calculated; electronic payments (debit, credit, cheque, e-transfer, gift card) settle to the cent.
+
+This amendment locks the implementation:
+
+- **Rounding pattern** matches the CRA rule exactly:
+  - Totals ending in 1, 2 → round down to 0
+  - Totals ending in 3, 4 → round up to 5
+  - Totals ending in 6, 7 → round down to 5
+  - Totals ending in 8, 9 → round up to next 0
+  - Implemented via Frappe's `round_based_on_smallest_currency_fraction` with `Currency CAD.smallest_currency_fraction_value = 0.05`. Verified by `test_rounding_pattern_matches_cra_rule`, which exhaustively tests all terminal digits.
+- **HST calculated first.** Subtotal × 13% is computed to the cent on the unrounded subtotal; the rounding adjustment never enters the tax math. The CRA still receives the exact HST amount.
+- **Payment-method gate.** Cash → round; Card → exact-cent (`disable_rounded_total=1` on the SI). The gate lives in `hamilton_erp.api._should_round_to_nickel` and is parameterized via `submit_retail_sale(payment_method)`. Default is `"Cash"`; `"Card"` throws at the entry point until Phase 2 next iteration ships the merchant-abstraction work — but the rounding gate is correct for Card now.
+- **Accounting treatment (Path B per the research).** The 1–4¢ rounding adjustment posts as a separate GL entry to `Company.round_off_account` (`Round Off - {abbr}`) on submit. Net annual rounding gain/loss runs through the Round Off account.
+- **Seed responsibilities** (in `_ensure_hamilton_accounting`):
+  - `_ensure_round_off_account_linked` sets `Company.round_off_account` and `Company.round_off_cost_center` so `make_gle_for_rounding_adjustment` can post.
+  - `_ensure_cad_nickel_rounding` sets `Currency CAD.smallest_currency_fraction_value = 0.05` (overrides Frappe's default of 0.01). Idempotent; doesn't overwrite operator-customized values other than the default.
+- **Patch entry** `hamilton_erp.patches.v0_1.seed_canadian_nickel_rounding` re-applies the two new seed steps on existing sites via `bench migrate`. Fresh installs run them via `after_install`.
+
+**Why mathematically-equivalent-not-identical:** Frappe's algorithm rounds half-up at the midpoint (0.025); the CRA rule never produces a 0.025 input because cash totals are always in 0.01 increments. The exhaustive terminal-digit test covers every cash-total possibility (0.00–0.09 mod 0.10) and matches.
+
+**Reverses:** the unconditional `disable_rounded_total=1` introduced in PR #51's first hardening pass. That was a stop-gap fix for ERPNext's POS round-to-whole-dollar default; the proper fix is nickel rounding gated by payment method.
+
+**Production note:** The Currency-level setting (`smallest_currency_fraction_value=0.05`) affects every CAD invoice on the site, not just cart sales. For Hamilton this is correct (retail-only, no B2B CAD invoices). When a future B2B flow lands and needs exact-cent CAD invoicing, that flow must explicitly set `disable_rounded_total=1` on its invoices.
+
+**Reference:** docs/inbox.md 2026-04-30 research report; Wikipedia "Cash rounding"; Frappe `round_based_on_smallest_currency_fraction` in `frappe/utils/data.py`; ERPNext `make_gle_for_rounding_adjustment` in `erpnext/accounts/doctype/sales_invoice/sales_invoice.py`.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:

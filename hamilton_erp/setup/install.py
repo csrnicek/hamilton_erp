@@ -2,6 +2,7 @@
 
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 def after_install():
@@ -13,16 +14,29 @@ def after_install():
 	root records) must happen here, not in ``patches/v0_1/`` — patches only run on
 	subsequent ``bench migrate`` calls, never during the initial ``bench install-app``.
 
-	Order matters: ``_ensure_erpnext_prereqs`` must run BEFORE ``_seed_hamilton_data``
-	because ``seed_hamilton_env._ensure_walkin_customer`` looks up Customer Group
-	"All Customer Groups" and Territory "All Territories".
+	Order matters:
+	  1. ``_ensure_erpnext_prereqs`` — root records (Customer Group, Territory,
+	     Item Group, UOM) needed by Walk-in Customer and retail Items.
+	  2. ``_ensure_hamilton_accounting`` — Company + Standard CoA + Hamilton
+	     accounts (HST, 4260 Beverage, 4210 Food) + Warehouse + Cost Center +
+	     Sales Taxes Template + Mode of Payment Account. Required BEFORE
+	     ``_seed_hamilton_data`` so the retail Items created in
+	     ``seed_hamilton_env._ensure_retail_items`` can wire Item Defaults to
+	     the Hamilton accounts in the same pass.
+	  3. ``_seed_hamilton_data`` — Walk-in Customer, Hamilton Settings, 59
+	     Venue Assets, retail Items + Item Defaults.
+	  4. ``_ensure_pos_profile`` — POS Profile "Hamilton Front Desk" depends on
+	     warehouse + cost center + tax template + Mode of Payment "Cash" all
+	     existing, so it runs after the accounting seed.
 
 	``_ensure_no_setup_wizard_loop`` runs LAST so the desk lands in a usable
 	state immediately after ``bench install-app`` — without depending on a
 	follow-up ``bench migrate`` to fire the after_migrate hook.
 	"""
 	_ensure_erpnext_prereqs()
+	_ensure_hamilton_accounting()
 	_seed_hamilton_data()
+	_ensure_pos_profile()
 	_create_roles()
 	_set_role_permissions()
 	_ensure_audit_trail_enabled()
@@ -156,6 +170,139 @@ def _ensure_erpnext_prereqs():
 			"must_be_whole_number": 1,
 		}).insert(ignore_permissions=True)
 		frappe.logger().info("hamilton_erp: created UOM 'Nos'")
+	# CI fresh-install fix: ERPNext's
+	# ``Company.create_default_warehouse`` (in
+	# ``erpnext/setup/doctype/company/company.py``) creates a "Goods In
+	# Transit" Warehouse with ``warehouse_type="Transit"`` when a Company
+	# is inserted. The Warehouse doctype's ``warehouse_type`` field is a
+	# Link, so the linked Warehouse Type record must exist or the insert
+	# fails with ``LinkValidationError: Could not find Warehouse Type:
+	# Transit``.
+	#
+	# ERPNext does NOT seed Warehouse Type "Transit" in its own
+	# ``after_install`` — it's created by the setup wizard, which Hamilton
+	# skips (see ``_ensure_no_setup_wizard_loop``). Local dev sites that
+	# have been around long enough have the record from a prior migration
+	# or interactive setup; CI fresh installs never have it, which is why
+	# CI Server Tests have been failing on fresh-install since the v9.1
+	# accounting seed shipped (PR #51 commit 95cccc3, 2026-04-30).
+	#
+	# Idempotent — uses ``frappe.db.exists`` guard. Safe to re-run.
+	if not frappe.db.exists("Warehouse Type", "Transit"):
+		frappe.get_doc({
+			"doctype": "Warehouse Type",
+			"name": "Transit",
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Warehouse Type 'Transit'")
+	# Stock Entry Type "Material Receipt" is the SAME class of CI fresh-install
+	# gap as Warehouse Type "Transit" above: ERPNext's setup wizard
+	# (``erpnext/setup/setup_wizard/operations/install_fixtures.py``)
+	# seeds the standard Stock Entry Types, but the wizard never runs on
+	# Hamilton's unattended installs. ``test_retail_sales_invoice``'s
+	# ``_seed_stock`` helper creates Stock Entry docs with
+	# ``stock_entry_type="Material Receipt"`` to populate Bin counts before
+	# submit_retail_sale tests; without the type record, the Stock Entry
+	# fails with ``LinkValidationError: Could not find Stock Entry Type:
+	# Material Receipt``. Seeded matching the wizard's exact spec
+	# (``purpose="Material Receipt", is_standard=1``).
+	#
+	# Only "Material Receipt" is seeded because that's the only Stock Entry
+	# Type Hamilton's flows currently use. If future Hamilton work uses
+	# other standard types (Material Issue, Material Transfer, etc.), seed
+	# them here too — same idempotent pattern.
+	if not frappe.db.exists("Stock Entry Type", "Material Receipt"):
+		frappe.get_doc({
+			"doctype": "Stock Entry Type",
+			"name": "Material Receipt",
+			"purpose": "Material Receipt",
+			"is_standard": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Stock Entry Type 'Material Receipt'")
+	# Fiscal Year for the current calendar year — third in the same class
+	# of fresh-install gap as Warehouse Type "Transit" and Stock Entry Type
+	# "Material Receipt". ERPNext raises ``FiscalYearError`` when any
+	# transaction (Sales Invoice, Stock Entry, etc.) is created with a
+	# posting_date that doesn't fall inside an existing Fiscal Year. The
+	# setup wizard normally creates the FY covering today; Hamilton's
+	# unattended install skips the wizard.
+	#
+	# Hamilton's fiscal year aligns with the calendar year (Jan 1 - Dec 31)
+	# unless a future numbered-corp election changes that. Seeding the
+	# current calendar year covers all install/test paths; year-rollover
+	# is handled by a future patch (run before Dec 31 each year, or have
+	# a scheduled task auto-create next year's FY).
+	#
+	# The Fiscal Year is created with no ``companies`` child rows, which
+	# means it applies globally on this site (every Company's transactions
+	# use it). For multi-tenant scenarios that ever land, restrict by
+	# adding the Hamilton company name to the ``companies`` child table.
+	from datetime import date as _date
+	current_year = _date.today().year
+	fiscal_name = str(current_year)
+	# Belt-and-suspenders check: if a FY with a different name already
+	# covers today (e.g., "FY 2026" or "2026-2027"), skip seeding to avoid
+	# duplicate-FY conflicts. Use a direct frappe.get_all rather than SQL.
+	today_iso = _date.today().strftime("%Y-%m-%d")
+	covering = frappe.get_all(
+		"Fiscal Year",
+		filters={
+			"year_start_date": ["<=", today_iso],
+			"year_end_date": [">=", today_iso],
+		},
+		fields=["name"],
+		limit=1,
+	)
+	if not covering and not frappe.db.exists("Fiscal Year", fiscal_name):
+		frappe.get_doc({
+			"doctype": "Fiscal Year",
+			"year": fiscal_name,
+			"year_start_date": f"{current_year}-01-01",
+			"year_end_date": f"{current_year}-12-31",
+		}).insert(ignore_permissions=True)
+		frappe.logger().info(f"hamilton_erp: created Fiscal Year {fiscal_name!r}")
+	# Mode of Payment "Cash" — fourth fresh-install gap of the same class.
+	# ERPNext seeds the standard Modes of Payment via the setup wizard's
+	# ``install_fixtures.py``; Hamilton's unattended install skips the
+	# wizard. Without "Cash", ``_ensure_cash_mode_of_payment_account`` and
+	# ``_ensure_pos_profile`` both bail silently (their guarded code paths
+	# are correct — they shouldn't crash on missing prereqs — but the
+	# downstream effect is that POS Profile "Hamilton Front Desk" never
+	# gets created, and ``submit_retail_sale`` errors with "POS Profile
+	# is not configured" on every cart Confirm.
+	#
+	# The "type" field on Mode of Payment is one of "Cash" / "Bank" /
+	# "General" / "Phone" — for our Cash MoP, we set type="Cash" so
+	# ERPNext's standard Cash-handling logic (auto-fill Cash account on
+	# selection, etc.) works as expected.
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		frappe.get_doc({
+			"doctype": "Mode of Payment",
+			"mode_of_payment": "Cash",
+			"type": "Cash",
+			"enabled": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info("hamilton_erp: created Mode of Payment 'Cash'")
+	# Price List "Hamilton Standard Selling" — Hamilton-specific Price List
+	# for the cart's POS flow. Originally tried seeding "Standard Selling"
+	# but that caused DuplicateEntryError when ERPNext's test fixtures
+	# tried to insert "Standard Selling" with INR currency (Frappe's
+	# default for the standard Price List). Using a Hamilton-specific name
+	# avoids the collision while keeping Hamilton's POS flow self-contained.
+	#
+	# Seeded with currency=CAD because Hamilton operates in CAD. The POS
+	# Profile (``_ensure_pos_profile`` below) sets
+	# ``selling_price_list = "Hamilton Standard Selling"`` so
+	# ``submit_retail_sale`` reads it from the profile and never needs a
+	# string-literal fallback.
+	if not frappe.db.exists("Price List", HAMILTON_PRICE_LIST_NAME):
+		frappe.get_doc({
+			"doctype": "Price List",
+			"price_list_name": HAMILTON_PRICE_LIST_NAME,
+			"currency": "CAD",
+			"selling": 1,
+			"enabled": 1,
+		}).insert(ignore_permissions=True)
+		frappe.logger().info(f"hamilton_erp: created Price List {HAMILTON_PRICE_LIST_NAME!r} (CAD, selling)")
 
 
 def _seed_hamilton_data():
@@ -265,3 +412,539 @@ def _block_pos_closing_for_operator():
 	)
 	if existing:
 		frappe.db.delete("Custom DocPerm", {"parent": "POS Closing Entry", "role": "Hamilton Operator"})
+
+
+# ---------------------------------------------------------------------------
+# Hamilton accounting seed (V9.1 Phase 2 — Sales Invoice from cart)
+# ---------------------------------------------------------------------------
+#
+# Decisions locked 2026-04-30 from QBO mirror:
+#   - HST account name:   "GST/HST Payable"
+#   - Income accounts:    "4260 Beverage" (Drink SKUs), "4210 Food" (Food SKUs)
+#   - Warehouse + Cost Center:  "Hamilton"
+#   - POS Profile:        "Hamilton Front Desk" (operator-invisible)
+#   - Tax template:       "Ontario HST 13%"
+#
+# The seed is idempotent — every step uses ``frappe.db.exists`` guards. Safe
+# to re-run on partial state. See ``docs/decisions_log.md`` Amendment
+# 2026-04-30 (b) for the full rationale.
+
+HAMILTON_HST_ACCOUNT_BASE      = "GST/HST Payable"
+HAMILTON_INCOME_ACCOUNT_BEVERAGE = "4260 Beverage"
+HAMILTON_INCOME_ACCOUNT_FOOD   = "4210 Food"
+HAMILTON_WAREHOUSE_BASE        = "Hamilton"
+HAMILTON_COST_CENTER_BASE      = "Hamilton"
+HAMILTON_TAX_TEMPLATE_BASE     = "Ontario HST 13%"
+HAMILTON_POS_PROFILE_NAME      = "Hamilton Front Desk"
+HAMILTON_PRICE_LIST_NAME       = "Hamilton Standard Selling"
+HAMILTON_HST_RATE              = 13.0
+
+
+def _ensure_hamilton_accounting():
+	"""Idempotent seed of Hamilton's company + retail accounting prereqs.
+
+	Runs in ``after_install`` AND on every ``bench migrate`` (re-applied via
+	the same patch entry). Detects an existing Hamilton-named company first
+	(``frappe.conf.hamilton_company`` pin → name match → fallback create);
+	then layers QBO-mirrored accounts, warehouse, cost center, tax template,
+	and Mode of Payment Account on top.
+
+	Production sites that already have a real Company set up should pin it
+	via ``bench --site SITE set-config hamilton_company "Company Name"`` so
+	this seed augments the existing Company rather than creating a phantom
+	"Club Hamilton" alongside it.
+	"""
+	company = _ensure_hamilton_company()
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	if not abbr:
+		frappe.logger().warning(
+			f"hamilton_erp: Company {company!r} has no abbr; skipping accounting seed"
+		)
+		return
+	_ensure_hamilton_warehouse(company, abbr)
+	_ensure_hamilton_cost_center(company, abbr)
+	_ensure_hamilton_retail_accounts(company, abbr)
+	_ensure_ontario_hst_template(company, abbr)
+	_ensure_cash_mode_of_payment_account(company, abbr)
+	_ensure_default_stock_warehouse(abbr)
+	_ensure_round_off_account_linked(company, abbr)
+	_ensure_cad_nickel_rounding()
+
+
+def _ensure_hamilton_company() -> str:
+	"""Return the Hamilton company name, creating "Club Hamilton" if missing.
+
+	Detection order:
+	  1. ``frappe.conf.hamilton_company`` — explicit per-venue pin in
+	     ``site_config.json``. If set and the company exists, returned as-is.
+	     If set but missing, logged and falls through.
+	  2. Heuristic name match on common Hamilton-named companies.
+	  3. ``frappe.defaults.get_global_default("company")`` — the system
+	     default. Production sites have one; CI / fresh dev sites usually
+	     don't.
+	  4. Create "Club Hamilton" (abbr "CH") with Standard CoA + CAD + Canada.
+	"""
+	pinned = frappe.conf.get("hamilton_company")
+	if pinned:
+		if frappe.db.exists("Company", pinned):
+			return pinned
+		frappe.logger().warning(
+			f"hamilton_erp: site_config.hamilton_company={pinned!r} but "
+			f"no such Company exists; falling through to detection."
+		)
+
+	for candidate in ("Club Hamilton", "Hamilton", "Hamilton Club"):
+		if frappe.db.exists("Company", candidate):
+			return candidate
+
+	# Heuristic LIKE-match — but ONLY for Canadian-CAD companies, so a
+	# non-greenfield site with "Hamilton Insurance Co." (different country
+	# / currency) doesn't get accidentally augmented with Hamilton's
+	# accounting structure. Audit Issue E (PR #51 review).
+	matches = frappe.get_all(
+		"Company",
+		filters={
+			"company_name": ["like", "%Hamilton%"],
+			"country": "Canada",
+			"default_currency": "CAD",
+		},
+		fields=["name"],
+		limit=1,
+	)
+	if matches:
+		return matches[0]["name"]
+
+	default_company = frappe.defaults.get_global_default("company")
+	if default_company and frappe.db.exists("Company", default_company):
+		# Production site with a pre-existing default — augment it rather
+		# than create a sibling Club Hamilton. Operators can rename later.
+		frappe.logger().info(
+			f"hamilton_erp: using existing default company {default_company!r} "
+			f"(no Hamilton-named company found; pin via site_config.hamilton_company "
+			f"to override)"
+		)
+		return default_company
+
+	# Greenfield install — create Club Hamilton with Standard CoA.
+	frappe.get_doc({
+		"doctype": "Company",
+		"company_name": "Club Hamilton",
+		"abbr": "CH",
+		"default_currency": "CAD",
+		"country": "Canada",
+		"create_chart_of_accounts_based_on": "Standard Template",
+		"chart_of_accounts": "Standard",
+		"domain": "Retail",
+	}).insert(ignore_permissions=True)
+	frappe.logger().info("hamilton_erp: created Company 'Club Hamilton' (abbr CH)")
+	return "Club Hamilton"
+
+
+def _ensure_hamilton_warehouse(company: str, abbr: str):
+	"""Create Warehouse "Hamilton - {abbr}" under the company root warehouse."""
+	full_name = f"{HAMILTON_WAREHOUSE_BASE} - {abbr}"
+	if frappe.db.exists("Warehouse", full_name):
+		return
+	# Find the company's root warehouse — Standard CoA creates "All Warehouses
+	# - {abbr}" but variants exist; query by company + is_group=1 + parent=None.
+	parent = frappe.db.get_value(
+		"Warehouse",
+		{"company": company, "is_group": 1, "parent_warehouse": ["in", ["", None]]},
+		"name",
+	)
+	frappe.get_doc({
+		"doctype": "Warehouse",
+		"warehouse_name": HAMILTON_WAREHOUSE_BASE,
+		"company": company,
+		"parent_warehouse": parent,
+		"is_group": 0,
+	}).insert(ignore_permissions=True)
+	frappe.logger().info(f"hamilton_erp: created Warehouse {full_name!r}")
+
+
+def _ensure_hamilton_cost_center(company: str, abbr: str):
+	"""Create Cost Center "Hamilton - {abbr}" under the company root."""
+	full_name = f"{HAMILTON_COST_CENTER_BASE} - {abbr}"
+	if frappe.db.exists("Cost Center", full_name):
+		return
+	# Company root cost center is "{company} - {abbr}" by ERPNext convention.
+	parent = frappe.db.get_value(
+		"Cost Center",
+		{"company": company, "is_group": 1, "parent_cost_center": ["in", ["", None]]},
+		"name",
+	)
+	frappe.get_doc({
+		"doctype": "Cost Center",
+		"cost_center_name": HAMILTON_COST_CENTER_BASE,
+		"company": company,
+		"parent_cost_center": parent,
+		"is_group": 0,
+	}).insert(ignore_permissions=True)
+	frappe.logger().info(f"hamilton_erp: created Cost Center {full_name!r}")
+
+
+def _ensure_hamilton_retail_accounts(company: str, abbr: str):
+	"""Create the QBO-mirrored Hamilton accounts: GST/HST Payable + 4260 + 4210.
+
+	Standard CoA creates the parent groups (Indirect Income, Duties and Taxes)
+	when the Company is inserted; we layer Hamilton-specific leaves on top.
+	"""
+	# Income accounts under Indirect Income (or fallback to first Income group).
+	income_parent = _find_account_parent(company, root_type="Income",
+		preferred_names=("Indirect Income", "Sales", "Income"))
+	if income_parent:
+		for base in (HAMILTON_INCOME_ACCOUNT_BEVERAGE, HAMILTON_INCOME_ACCOUNT_FOOD):
+			full_name = f"{base} - {abbr}"
+			if frappe.db.exists("Account", full_name):
+				continue
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": base,
+				"parent_account": income_parent,
+				"company": company,
+				"account_type": "Income Account",
+				"root_type": "Income",
+				"is_group": 0,
+			}).insert(ignore_permissions=True)
+			frappe.logger().info(f"hamilton_erp: created Account {full_name!r}")
+	else:
+		frappe.logger().warning(
+			f"hamilton_erp: no Income parent group found for {company!r}; "
+			f"income accounts not seeded"
+		)
+
+	# HST account under Duties and Taxes (or fallback to a Liability group).
+	tax_parent = _find_account_parent(company, root_type="Liability",
+		preferred_names=("Duties and Taxes", "Tax", "Current Liabilities"))
+	if tax_parent:
+		full_name = f"{HAMILTON_HST_ACCOUNT_BASE} - {abbr}"
+		if not frappe.db.exists("Account", full_name):
+			frappe.get_doc({
+				"doctype": "Account",
+				"account_name": HAMILTON_HST_ACCOUNT_BASE,
+				"parent_account": tax_parent,
+				"company": company,
+				"account_type": "Tax",
+				"root_type": "Liability",
+				"is_group": 0,
+				"tax_rate": HAMILTON_HST_RATE,
+			}).insert(ignore_permissions=True)
+			frappe.logger().info(f"hamilton_erp: created Account {full_name!r}")
+	else:
+		frappe.logger().warning(
+			f"hamilton_erp: no Liability parent group found for {company!r}; "
+			f"GST/HST Payable not seeded"
+		)
+
+
+def _find_account_parent(company: str, root_type: str, preferred_names: tuple) -> str | None:
+	"""Find a suitable parent group account by root_type, preferring named matches."""
+	candidates = frappe.get_all(
+		"Account",
+		filters={"company": company, "is_group": 1, "root_type": root_type},
+		fields=["name"],
+		order_by="lft asc",
+	)
+	if not candidates:
+		return None
+	# Prefer names that contain one of the preferred substrings (in order).
+	for prefer in preferred_names:
+		for c in candidates:
+			if prefer in c["name"]:
+				return c["name"]
+	# No preferred match — return the first (deepest by lft asc) group.
+	return candidates[0]["name"]
+
+
+def _ensure_ontario_hst_template(company: str, abbr: str):
+	"""Create Sales Taxes and Charges Template "Ontario HST 13% - {abbr}"."""
+	full_name = f"{HAMILTON_TAX_TEMPLATE_BASE} - {abbr}"
+	if frappe.db.exists("Sales Taxes and Charges Template", full_name):
+		return
+	hst_account = f"{HAMILTON_HST_ACCOUNT_BASE} - {abbr}"
+	if not frappe.db.exists("Account", hst_account):
+		frappe.logger().warning(
+			f"hamilton_erp: HST account {hst_account!r} missing — "
+			f"Ontario HST 13% template not seeded"
+		)
+		return
+	cost_center = f"{HAMILTON_COST_CENTER_BASE} - {abbr}"
+	frappe.get_doc({
+		"doctype": "Sales Taxes and Charges Template",
+		"title": HAMILTON_TAX_TEMPLATE_BASE,
+		"company": company,
+		"taxes": [{
+			"charge_type": "On Net Total",
+			"account_head": hst_account,
+			"description": "HST",
+			"rate": HAMILTON_HST_RATE,
+			"included_in_print_rate": 0,
+			"cost_center": cost_center if frappe.db.exists("Cost Center", cost_center) else None,
+		}],
+	}).insert(ignore_permissions=True)
+	frappe.logger().info(f"hamilton_erp: created Sales Taxes Template {full_name!r}")
+
+
+def _ensure_cash_mode_of_payment_account(company: str, abbr: str):
+	"""Append a Mode of Payment Account row for Cash on this company.
+
+	Mode of Payment "Cash" is created by Standard ERPNext install. The
+	per-company account row is needed so POS Sales Invoice payments find a
+	default account when ``mode_of_payment="Cash"``.
+	"""
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		# ERPNext should have created this; if not, no-op rather than fail.
+		frappe.logger().warning(
+			"hamilton_erp: Mode of Payment 'Cash' missing — skipping account row"
+		)
+		return
+	cash_account = f"Cash - {abbr}"
+	if not frappe.db.exists("Account", cash_account):
+		# Standard CoA creates "Cash - {abbr}" under "Cash In Hand"; if it's
+		# absent, log and skip rather than crash the install.
+		frappe.logger().warning(
+			f"hamilton_erp: Account {cash_account!r} missing — "
+			f"skipping Mode of Payment Account for Cash"
+		)
+		return
+	mop = frappe.get_doc("Mode of Payment", "Cash")
+	existing = next(
+		(a for a in mop.accounts if a.company == company), None,
+	)
+	if existing:
+		if existing.default_account != cash_account:
+			existing.default_account = cash_account
+			mop.save(ignore_permissions=True)
+		return
+	mop.append("accounts", {
+		"company": company,
+		"default_account": cash_account,
+	})
+	mop.save(ignore_permissions=True)
+	frappe.logger().info(
+		f"hamilton_erp: added Mode of Payment Account Cash → {cash_account!r}"
+	)
+
+
+def _ensure_default_stock_warehouse(abbr: str):
+	"""Set Stock Settings.default_warehouse = Hamilton - {abbr} if unset."""
+	full_name = f"{HAMILTON_WAREHOUSE_BASE} - {abbr}"
+	if not frappe.db.exists("Warehouse", full_name):
+		return
+	current = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if current and current != full_name:
+		# Operator already configured one — don't overwrite.
+		return
+	if current == full_name:
+		return
+	frappe.db.set_single_value("Stock Settings", "default_warehouse", full_name)
+	frappe.logger().info(
+		f"hamilton_erp: set Stock Settings.default_warehouse = {full_name!r}"
+	)
+
+
+def _ensure_pos_profile():
+	"""Create POS Profile "Hamilton Front Desk" — operator-invisible.
+
+	This is the POS profile the cart Confirm flow uses to derive defaults
+	(warehouse, cost center, tax template, payment methods). It's not
+	exposed in the operator UI; the asset board calls submit_retail_sale
+	which references it by name.
+	"""
+	if frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE_NAME):
+		return
+	pinned = frappe.conf.get("hamilton_company")
+	company = pinned if pinned and frappe.db.exists("Company", pinned) else None
+	if not company:
+		# Re-run the same detection used by the accounting seed.
+		for candidate in ("Club Hamilton", "Hamilton", "Hamilton Club"):
+			if frappe.db.exists("Company", candidate):
+				company = candidate
+				break
+		if not company:
+			matches = frappe.get_all(
+				"Company",
+				filters={"company_name": ["like", "%Hamilton%"]},
+				fields=["name"],
+				limit=1,
+			)
+			if matches:
+				company = matches[0]["name"]
+	if not company:
+		frappe.logger().warning(
+			"hamilton_erp: no Hamilton company found — POS Profile not seeded"
+		)
+		return
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	warehouse = f"{HAMILTON_WAREHOUSE_BASE} - {abbr}"
+	cost_center = f"{HAMILTON_COST_CENTER_BASE} - {abbr}"
+	tax_template = f"{HAMILTON_TAX_TEMPLATE_BASE} - {abbr}"
+	# All three must exist for the POS Profile to validate; bail if any
+	# are missing (logged so the operator can re-run after fixing).
+	for required, doctype in (
+		(warehouse, "Warehouse"),
+		(cost_center, "Cost Center"),
+	):
+		if not frappe.db.exists(doctype, required):
+			frappe.logger().warning(
+				f"hamilton_erp: {doctype} {required!r} missing — POS Profile not seeded"
+			)
+			return
+	if not frappe.db.exists("Mode of Payment", "Cash"):
+		frappe.logger().warning(
+			"hamilton_erp: Mode of Payment 'Cash' missing — POS Profile not seeded"
+		)
+		return
+	# write_off_account is mandatory on POS Profile. ERPNext's Standard CoA
+	# creates "Round Off - {abbr}" for this purpose; fall back to the Cash
+	# account if Round Off is missing.
+	write_off_account = None
+	for candidate in (f"Round Off - {abbr}", f"Cash - {abbr}"):
+		if frappe.db.exists("Account", candidate):
+			write_off_account = candidate
+			break
+
+	profile = {
+		"doctype": "POS Profile",
+		"name": HAMILTON_POS_PROFILE_NAME,
+		"company": company,
+		"warehouse": warehouse,
+		"cost_center": cost_center,
+		"write_off_cost_center": cost_center,
+		"currency": frappe.db.get_value("Company", company, "default_currency") or "CAD",
+		"update_stock": 1,
+		"ignore_pricing_rule": 1,
+		# Audit Issue F: write_off_limit is reqd in v16's POS Profile schema;
+		# 0 is the working default but the field needs to be set explicitly
+		# so a future ERPNext minor that adds a >0 constraint doesn't break
+		# the seed silently. Operators can raise this in Desk if they want
+		# small-difference auto-write-off (e.g. for cash short).
+		"write_off_limit": 0,
+		"payments": [{
+			"mode_of_payment": "Cash",
+			"default": 1,
+		}],
+	}
+	# Set the Hamilton-specific Price List on the POS Profile so
+	# ``submit_retail_sale`` doesn't need to fall back to a literal
+	# Price List name. Only set if the Price List actually exists (it
+	# would normally be seeded by ``_ensure_erpnext_prereqs`` earlier in
+	# the install path, but on partial-state migrate runs we guard).
+	if frappe.db.exists("Price List", HAMILTON_PRICE_LIST_NAME):
+		profile["selling_price_list"] = HAMILTON_PRICE_LIST_NAME
+	if write_off_account:
+		profile["write_off_account"] = write_off_account
+	if frappe.db.exists("Sales Taxes and Charges Template", tax_template):
+		profile["taxes_and_charges"] = tax_template
+	frappe.get_doc(profile).insert(ignore_permissions=True)
+	frappe.logger().info(
+		f"hamilton_erp: created POS Profile {HAMILTON_POS_PROFILE_NAME!r}"
+	)
+
+
+# ---------------------------------------------------------------------------
+# Canadian penny-elimination rounding (2013) — cash sales round to nickel
+# ---------------------------------------------------------------------------
+#
+# Per the 2013 Canadian penny-elimination rule, cash transactions round to
+# the nearest 5¢ and the rounding adjustment posts as a separate GL entry
+# to the Round Off account. Two seed steps are required:
+#
+#   1. ``_ensure_round_off_account_linked``: links the auto-created
+#      "Round Off - {abbr}" account on Company so ERPNext's
+#      ``make_gle_for_rounding_adjustment`` has somewhere to post.
+#   2. ``_ensure_cad_nickel_rounding``: sets
+#      ``Currency CAD.smallest_currency_fraction_value = 0.05`` so
+#      ERPNext's ``round_based_on_smallest_currency_fraction`` produces
+#      nickel-incremented ``rounded_total`` values.
+#
+# The payment-method gate (Cash → round, Card → exact-cent) lives in
+# ``hamilton_erp.api.submit_retail_sale``, which sets per-invoice
+# ``disable_rounded_total=1`` for non-cash payments to override the global
+# Currency setting. See docs/decisions_log.md Amendment 2026-04-30 (c).
+
+
+def _ensure_round_off_account_linked(company: str, abbr: str):
+	"""Link "Round Off - {abbr}" + Hamilton cost center on Company.
+
+	Standard CoA creates the Round Off account but does NOT auto-link it
+	on the Company. Without the link, submitting any Sales Invoice with a
+	non-zero ``rounding_adjustment`` fails with
+	"Round Off Account not configured for the Company".
+
+	Idempotent: only writes when the field is currently unset, so an
+	operator-customized account/cost-center is preserved.
+	"""
+	round_off_account = f"Round Off - {abbr}"
+	cost_center = f"{HAMILTON_COST_CENTER_BASE} - {abbr}"
+
+	if not frappe.db.exists("Account", round_off_account):
+		frappe.logger().warning(
+			f"hamilton_erp: Account {round_off_account!r} missing — "
+			f"Round Off Account not linked on {company!r}"
+		)
+		return
+
+	current_account = frappe.db.get_value("Company", company, "round_off_account")
+	if not current_account:
+		frappe.db.set_value("Company", company, "round_off_account", round_off_account)
+		frappe.logger().info(
+			f"hamilton_erp: linked round_off_account = {round_off_account!r} "
+			f"on Company {company!r}"
+		)
+
+	current_cost_center = frappe.db.get_value("Company", company, "round_off_cost_center")
+	# Audit Issue H: Standard CoA auto-assigns "Main - {abbr}" as
+	# round_off_cost_center on Company creation. For Hamilton-scoped
+	# reporting, the Round Off entries should tie to the Hamilton cost
+	# center instead. Overwrite when the current value is the auto-default;
+	# preserve any operator-customized value.
+	standard_coa_default = f"Main - {abbr}"
+	if (
+		(not current_cost_center or current_cost_center == standard_coa_default)
+		and frappe.db.exists("Cost Center", cost_center)
+	):
+		frappe.db.set_value("Company", company, "round_off_cost_center", cost_center)
+		frappe.logger().info(
+			f"hamilton_erp: linked round_off_cost_center = {cost_center!r} "
+			f"on Company {company!r} (was {current_cost_center!r})"
+		)
+
+
+def _ensure_cad_nickel_rounding():
+	"""Set CAD smallest_currency_fraction_value = 0.05 (Canadian nickel).
+
+	Frappe's ``round_based_on_smallest_currency_fraction`` rounds amounts
+	to the nearest multiple of this value. Default for CAD per Frappe's
+	``country_info.json`` is 0.01 (cent precision); overriding to 0.05
+	enables nickel-rounding on every CAD invoice unless the per-invoice
+	``disable_rounded_total=1`` flag is set (which the cart's API does
+	for Card payments).
+
+	Idempotent. Only overwrites the default 0.01 (or 0); never overwrites
+	an operator-customized value (e.g. 0.10 or 0.25 if the operator chose
+	a different rounding convention).
+	"""
+	if not frappe.db.exists("Currency", "CAD"):
+		frappe.logger().warning(
+			"hamilton_erp: Currency CAD missing — Canadian nickel rounding skipped"
+		)
+		return
+
+	current = flt(frappe.db.get_value("Currency", "CAD", "smallest_currency_fraction_value"))
+	target = 0.05
+
+	if abs(current - target) < 0.001:
+		return  # already nickel
+	if current == 0 or abs(current - 0.01) < 0.001:
+		# Default value or unset; safe to override.
+		frappe.db.set_value("Currency", "CAD", "smallest_currency_fraction_value", target)
+		frappe.logger().info(
+			f"hamilton_erp: set CAD smallest_currency_fraction_value = {target} "
+			f"(Canadian penny-elimination rule, 2013)"
+		)
+	else:
+		frappe.logger().warning(
+			f"hamilton_erp: CAD smallest_currency_fraction_value = {current!r}; "
+			f"not overwriting an operator-customized value"
+		)

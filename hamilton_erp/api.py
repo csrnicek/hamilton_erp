@@ -1,5 +1,8 @@
+import json
+
 import frappe
 from frappe import _
+from frappe.utils import flt
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +335,345 @@ def return_asset_from_oos(asset_name: str, reason: str) -> dict:
 
 	return_asset_to_service(asset_name, operator=frappe.session.user, reason=reason)
 	return {"status": "ok"}
+
+
+# ---------------------------------------------------------------------------
+# Retail cart — Sales Invoice creation (V9.1 Phase 2)
+# ---------------------------------------------------------------------------
+
+
+HAMILTON_POS_PROFILE = "Hamilton Front Desk"
+
+# Roles authorized to record retail sales via the cart drawer.
+#
+# Hamilton Operator deliberately does NOT have direct Sales Invoice
+# permissions in the role grid (DEC-005 / DEC-021 — POS Closing Entry is
+# blocked from Operators because it shows expected cash totals; Sales Invoice
+# direct-write would defeat the same blind-cash invariants and bypass the
+# constrained cart UX). The cart wraps Sales Invoice creation in a tightly
+# scoped surface (cash-only, fixed POS Profile, server-validated rates,
+# server-validated stock) and the underlying writes run with
+# ``ignore_permissions=True``. This is a pure delegation pattern, not
+# "permission check + bypass" — the role gate at the function entry IS the
+# authorization check; there is no second layer.
+HAMILTON_RETAIL_SALE_ROLES = (
+	"Hamilton Operator",
+	"Hamilton Manager",
+	"Hamilton Admin",
+	"System Manager",
+)
+
+# Payment methods accepted by submit_retail_sale. V9.1 ships Cash; Card lands
+# in Phase 2 next iteration (alongside the merchant-abstraction work — see
+# docs/inbox.md 2026-04-30 hardware backlog). The tuple is the source of
+# truth for both the entry-point validation and the rounding gate.
+HAMILTON_PAYMENT_METHODS = ("Cash", "Card")
+
+
+def _should_round_to_nickel(payment_method: str) -> bool:
+	"""Return True if this payment method should round to the nearest 5¢.
+
+	Per the Canadian penny-elimination rule (2013), cash transactions
+	round to the nearest 5¢ and electronic transactions (debit, credit,
+	cheque, e-transfer, gift card) settle to the cent. Tap-to-pay = card
+	method per V9.1-D14, so it stays exact-cent too.
+
+	Reference: Government of Canada Budget 2012 backgrounder; the precise
+	rule is "totals ending in 1, 2 round down to 0; 3, 4 round up to 5;
+	6, 7 round down to 5; 8, 9 round up to 10". Frappe's
+	``round_based_on_smallest_currency_fraction`` produces the same
+	results when ``smallest_currency_fraction_value = 0.05``.
+	"""
+	return payment_method == "Cash"
+
+
+def _check_retail_sale_permission():
+	"""Gate the retail-sale endpoint to Hamilton roles + System Manager.
+
+	Administrator is implicitly allowed (Frappe convention — install hooks,
+	bench scripts, and dev sessions all run as Administrator). Everyone else
+	must hold at least one of HAMILTON_RETAIL_SALE_ROLES.
+	"""
+	user = frappe.session.user
+	if user == "Administrator":
+		return
+	if not (set(frappe.get_roles(user)) & set(HAMILTON_RETAIL_SALE_ROLES)):
+		frappe.throw(
+			_("You do not have permission to record retail sales. "
+			  "Required role: one of {0}").format(", ".join(HAMILTON_RETAIL_SALE_ROLES)),
+			frappe.PermissionError,
+		)
+
+
+@frappe.whitelist(methods=["POST"])
+def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> dict:
+	"""Create + submit a POS Sales Invoice from the cart drawer.
+
+	Called by ``_open_cash_payment_modal`` in asset_board.js when the
+	operator confirms a cash payment. Creates a POS Sales Invoice with
+	``is_pos=1, update_stock=1`` so submitting auto-creates the Stock
+	Ledger Entry that decrements warehouse stock.
+
+	Authorization model — delegated capability:
+	  - Entry is gated by ``_check_retail_sale_permission``: caller must
+	    hold a Hamilton role (or System Manager / Administrator).
+	  - The Sales Invoice is created with ``ignore_permissions=True``
+	    because Hamilton Operator does not have direct Sales Invoice
+	    perms by design — direct write would bypass the constrained cart
+	    UX and the blind-cash invariants. The cart IS the only legitimate
+	    write surface; the role gate is the only authorization check.
+
+	Server-side rate authority:
+	  - Client-supplied ``unit_price`` is validated against
+	    ``Item.standard_rate`` (within $0.01 tolerance for floating-point
+	    noise). Mismatches are rejected to defeat client-side price
+	    tampering. The rate written to the Sales Invoice is always the
+	    server-side value, never the client's submission.
+
+	Pre-submit stock guard:
+	  - ``Bin.actual_qty`` is checked against the cart's aggregate
+	    requested qty (per item) before insert. Produces clean operator
+	    errors for the common "cart has more than stock" case. True
+	    concurrent last-unit races (two cashiers selling the last item
+	    simultaneously) still surface as raw ERPNext stock-ledger errors
+	    on the second submit; Hamilton is single-operator most of the
+	    time, so this gap is acceptable. A locked Bin row would be
+	    over-engineering for the current operating model.
+
+	Canadian penny-elimination rounding (2013):
+	  - Cash sales round the post-tax grand_total to the nearest 5¢.
+	    HST is computed first on the unrounded subtotal; the
+	    rounding_adjustment posts as a separate GL entry to
+	    ``Company.round_off_account`` (DEC-038 + Canadian nickel rule).
+	  - Card / electronic sales settle to the exact cent
+	    (``disable_rounded_total=1``). Tap-to-pay = Card per V9.1-D14.
+	  - The gate is the ``payment_method`` argument; ``_should_round_to_nickel``
+	    encapsulates the decision so the contract is testable in isolation.
+
+	Arguments:
+	  items: list of {item_code, qty, unit_price}. JSON-encoded by
+	         frappe.xcall when sent from the client; accepts list or str.
+	         ``unit_price`` must match ``Item.standard_rate``.
+	  cash_received: numeric (Currency). Must be >= the rounded total
+	         (which equals grand_total for Card, rounded-to-nickel for
+	         Cash). Change is computed and returned.
+	  payment_method: "Cash" (default) or "Card". V9.1 supports Cash;
+	         Card lands in Phase 2 next iteration (merchant abstraction).
+	         The parameter exists now so the rounding contract is stable.
+
+	Returns:
+	  {
+	    sales_invoice: str,
+	    grand_total: float,           # pre-rounding total (HST included)
+	    rounded_total: float,         # what the customer pays
+	    rounding_adjustment: float,   # rounded_total - grand_total
+	    change: float,                # cash_received - rounded_total
+	  }
+
+	Raises:
+	  - PermissionError if caller lacks any Hamilton role.
+	  - ValidationError if cart empty, cash_received < amount due,
+	    unknown item, rate mismatch, insufficient stock, unsupported
+	    payment_method, or POS Profile / Walk-in customer missing.
+	  - ValidationError ("Card payments are Phase 2 next iteration")
+	    when payment_method="Card" — the gate is in place so the
+	    rounding contract is stable, but the actual Card flow (merchant
+	    integration) ships separately.
+	"""
+	_check_retail_sale_permission()
+
+	if payment_method not in HAMILTON_PAYMENT_METHODS:
+		frappe.throw(_(
+			"Unsupported payment method: {0}. Supported: {1}"
+		).format(payment_method, ", ".join(HAMILTON_PAYMENT_METHODS)))
+	if payment_method == "Card":
+		# Gate is in place (rounding will correctly disable for Card via
+		# _should_round_to_nickel) but the end-to-end Card flow — merchant
+		# adapter, terminal integration, merchant_transaction_id capture —
+		# is Phase 2 next iteration. Throw clearly rather than create a
+		# half-recorded Card invoice without the merchant linkage.
+		frappe.throw(_(
+			"Card payments are Phase 2 next iteration; not yet implemented. "
+			"See docs/inbox.md 2026-04-30 hardware backlog."
+		))
+
+	# frappe.xcall serializes lists to JSON over the wire. Accept both.
+	if isinstance(items, str):
+		items = json.loads(items)
+	if not items or not isinstance(items, list):
+		frappe.throw(_("Cart is empty"))
+	cash_received = flt(cash_received)
+	if cash_received < 0:
+		frappe.throw(_("Cash received cannot be negative"))
+
+	if not frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE):
+		frappe.throw(_(
+			"POS Profile {0} is not configured. Run `bench migrate` to seed."
+		).format(HAMILTON_POS_PROFILE))
+	# Audit Issue C: walk-in customer name is venue-configurable. Default
+	# "Walk-in" matches Hamilton; Toronto / DC / Montreal can pin their own
+	# label via ``bench set-config hamilton_walkin_customer "<name>"``.
+	walkin_customer = frappe.conf.get("hamilton_walkin_customer") or "Walk-in"
+	if not frappe.db.exists("Customer", walkin_customer):
+		frappe.throw(_(
+			"Walk-in customer {0} not seeded. Run `bench migrate` to populate."
+		).format(walkin_customer))
+
+	pos_profile = frappe.get_cached_doc("POS Profile", HAMILTON_POS_PROFILE)
+
+	# Validate every cart line up front (existence, qty, server-side rate)
+	# and aggregate quantities by item_code so the stock check sees the
+	# true total per SKU. The JS cart guarantees one line per item, but
+	# server-side aggregation is the right contract.
+	qty_by_item: dict[str, float] = {}
+	rate_by_item: dict[str, float] = {}
+	for line in items:
+		item_code = line.get("item_code")
+		qty = flt(line.get("qty"))
+		unit_price = flt(line.get("unit_price"))
+		if not item_code or qty <= 0:
+			frappe.throw(_("Invalid cart line: {0}").format(line))
+		if not frappe.db.exists("Item", item_code):
+			frappe.throw(_("Item {0} does not exist").format(item_code))
+		# Server-side rate authority — fetch Item.standard_rate and reject
+		# mismatches outside a $0.01 tolerance. The rate written to the
+		# Sales Invoice (further down) uses ``rate_by_item``, NOT the
+		# caller-supplied ``unit_price``.
+		expected_rate = flt(frappe.db.get_value("Item", item_code, "standard_rate"))
+		if abs(unit_price - expected_rate) > 0.01:
+			frappe.throw(_(
+				"Price mismatch for {0}: client sent ${1}, server price is ${2}"
+			).format(item_code, f"{unit_price:.2f}", f"{expected_rate:.2f}"))
+		qty_by_item[item_code] = qty_by_item.get(item_code, 0) + qty
+		rate_by_item[item_code] = expected_rate
+
+	# Pre-submit stock guard. Raw ERPNext stock-ledger errors are
+	# operator-hostile (a multi-line stack trace inside a "Negative stock"
+	# wrapper); this surfaces a clean, translatable message before insert.
+	for item_code, total_qty in qty_by_item.items():
+		bin_qty = flt(frappe.db.get_value(
+			"Bin",
+			{"item_code": item_code, "warehouse": pos_profile.warehouse},
+			"actual_qty",
+		) or 0)
+		if bin_qty < total_qty:
+			frappe.throw(_(
+				"Insufficient stock for {0}: {1} requested, {2} available"
+			).format(item_code, total_qty, bin_qty))
+
+	# Delegated capability — see the docstring's authorization-model section.
+	# Hamilton Operator does NOT have direct Sales Invoice or Customer perms,
+	# so ERPNext's validation hooks (notably ``_get_party_details`` in
+	# erpnext/accounts/party.py) need a permission elevation. The
+	# ``frappe.flags.ignore_permissions=True`` flag alone is insufficient
+	# because some ERPNext perm checks (specifically the doctype-level
+	# access check inside ``has_permission``) bypass the flag. The reliable
+	# pattern is to switch to Administrator for the duration of the write,
+	# then restore. We override ``owner`` post-insert so the audit trail
+	# still captures the real operator who recorded the sale.
+	real_user = frappe.session.user
+	original_ignore_perms = frappe.flags.get("ignore_permissions", False)
+	frappe.set_user("Administrator")
+	frappe.flags.ignore_permissions = True
+	apply_rounding = _should_round_to_nickel(payment_method)
+	try:
+		si = frappe.new_doc("Sales Invoice")
+		si.update({
+			"company": pos_profile.company,
+			"customer": walkin_customer,
+			"is_pos": 1,
+			"update_stock": 1,
+			"pos_profile": HAMILTON_POS_PROFILE,
+			"currency": pos_profile.currency,
+			# Read the Price List from the POS Profile — seed sets this to
+			# "Hamilton Standard Selling" via ``_ensure_pos_profile``. No
+			# string-literal fallback to "Standard Selling" because that
+			# name collides with ERPNext's own test-fixture Price List
+			# (which uses INR currency and conflicts with our CAD).
+			"selling_price_list": pos_profile.selling_price_list,
+			# Canadian penny-elimination rule: Cash sales round the
+			# post-tax total to the nearest 5¢; Card / electronic sales
+			# settle to the exact cent. The Currency-level setting
+			# (CAD.smallest_currency_fraction_value=0.05) is the global
+			# default; this per-invoice flag is the payment-method gate
+			# that overrides for non-cash payments.
+			"disable_rounded_total": 0 if apply_rounding else 1,
+		})
+		if pos_profile.taxes_and_charges:
+			si.taxes_and_charges = pos_profile.taxes_and_charges
+
+		# One Sales Invoice line per cart entry. Rate is always the
+		# server-side value from rate_by_item, never the caller-supplied
+		# unit_price.
+		for line in items:
+			item_code = line["item_code"]
+			si.append("items", {
+				"item_code": item_code,
+				"qty": flt(line["qty"]),
+				"rate": rate_by_item[item_code],
+				"warehouse": pos_profile.warehouse,
+				"cost_center": pos_profile.cost_center,
+			})
+
+		# Audit Issue A: ``si.set_taxes_and_charges()`` is a no-op for
+		# is_pos=1 invoices in v16 (early-exits at the `is_pos` check
+		# in accounts_controller.py). The actual tax-row population
+		# happens inside ``set_missing_values`` → ``set_pos_fields``,
+		# which copies taxes_and_charges + the rows from the POS Profile
+		# onto the SI. The previous explicit call was misleading code,
+		# not broken — tests pass at 13% HST because of the POS path.
+		si.set_missing_values()
+		si.calculate_taxes_and_totals()
+		grand_total = flt(si.grand_total)
+		# When rounding is enabled, ERPNext populates rounded_total with
+		# the nickel-rounded value; when disabled, rounded_total is 0 and
+		# the grand_total is the amount due. ``amount_due`` is what the
+		# customer actually pays — this is what cash math + payment line
+		# must use, otherwise outstanding_amount drifts by the rounding
+		# delta.
+		amount_due = flt(si.rounded_total) if (apply_rounding and si.rounded_total) else grand_total
+		rounding_adjustment = flt(si.rounding_adjustment) if apply_rounding else 0.0
+
+		if cash_received < amount_due:
+			frappe.throw(_(
+				"Cash received {0} is less than amount due {1}"
+			).format(cash_received, amount_due))
+
+		change = flt(cash_received - amount_due)
+		si.append("payments", {
+			"mode_of_payment": payment_method,
+			"amount": amount_due,  # rounded total for Cash, exact grand_total for Card
+		})
+		si.change_amount = change
+		si.base_change_amount = change
+		si.paid_amount = amount_due
+		si.base_paid_amount = amount_due
+
+		# Audit-trail note: the operator who actually made the sale is
+		# captured in ``remarks`` (visible in the SI form / list) so a
+		# manager reviewing a sale can identify the responsible operator
+		# even though the SI's ``owner`` is the elevated user.
+		if real_user and real_user != "Administrator":
+			si.remarks = (si.remarks or "") + f"\nRecorded via cart by {real_user}"
+
+		si.flags.ignore_permissions = True
+		si.insert(ignore_permissions=True)
+		# Override ``owner`` so the audit trail captures the actual operator,
+		# not the elevated Administrator session. ``db_set`` with
+		# update_modified=False keeps modified/modified_by intact at the
+		# elevated user (which is fine — the modification IS being done by
+		# the system on behalf of the operator).
+		if real_user and real_user != "Administrator":
+			si.db_set("owner", real_user, update_modified=False)
+		si.submit()
+
+		return {
+			"sales_invoice": si.name,
+			"grand_total": grand_total,
+			"rounded_total": amount_due,
+			"rounding_adjustment": rounding_adjustment,
+			"change": change,
+		}
+	finally:
+		frappe.flags.ignore_permissions = original_ignore_perms
+		frappe.set_user(real_user)

@@ -46,6 +46,41 @@ This file is **not** a lessons-learned log. The lessons file (`docs/lessons_lear
 - **Why deferred:** Real regulated-industry hardening would add `CODEOWNERS` for `docs/design/` and require dual approval. Out of scope for solo-developer phase. Re-evaluate when a second engineer joins.
 - **Severity:** Low (solo phase) → Medium (multi-developer).
 
+## R-008 — Single-acquirer SPOF (downgraded for Hamilton's actual classification)
+
+- **Source:** PR #51 deeper audit (2026-04-30, Topic 2 — merchant redundancy patterns).
+- **Description:** Hamilton currently processes card payments through Fiserv (MID 1131224) as a **standard merchant**, NOT under high-risk classification. The deeper audit researched the worst case for adult-classified processors (Stripe-style algorithmic termination without notice, 5-year MATCH list listings, 4-12 week re-onboarding for a new high-risk processor). For Hamilton's actual setup, the risk profile is much lower:
+  - **Notice period:** Standard Fiserv merchant agreements provide 30-day termination notice (versus zero-day for high-risk algorithmic processors).
+  - **Re-onboarding:** A standard-classified merchant who needs to switch acquirers can typically onboard a backup in 1-2 weeks (versus 4-12 weeks for high-risk).
+  - **MATCH list:** Standard merchants with clean chargeback history rarely land on MATCH; the 1% chargeback ratio threshold (R-009) is the real watch line.
+- **Mitigation in place:** Standard MID classification means termination requires substantial cause (chargeback noise, AML flag, prolonged inactivity). Fiserv is a tier-1 acquirer with established adult-hospitality acceptance via the MID's MCC; a sudden re-classification to high-risk is unlikely without warning.
+- **Why deferred:** The original Phase 2 hardware backlog assumed high-risk classification and called for pre-onboarded multiple merchants. With standard classification, the backup-merchant work drops in priority — still useful as a true SPOF mitigation, but not a launch blocker. Phase 3+ depending on how chargeback history develops in the first year of operation.
+- **Severity:** **MEDIUM (downgraded from HIGH).** Hamilton operating as standard via Fiserv is meaningfully different from the adult-industry default.
+- **Watch points:** (a) Fiserv re-classifies the MID to high-risk, (b) chargeback ratio approaches the 0.65% Visa-monitored threshold, (c) Fiserv changes terms on the MID. Any of these escalates this risk back to HIGH.
+
+## R-009 — MATCH list 1% chargeback threshold (latent until card payments ship)
+
+- **Source:** PR #51 deeper audit (2026-04-30, Topic 2).
+- **Description:** Mastercard's MATCH list (Member Alert To Control High-Risk merchants — a.k.a. Terminated Merchant File) is the cross-network blacklist that prevents a terminated merchant from being onboarded by another acquirer for **5 years** from listing date. The trigger isn't a single bad transaction; it's sustained chargeback noise. Visa's "monitored" threshold is **0.65% chargebacks-to-transactions ratio** in a rolling quarter; Visa's "high-risk" threshold (where penalties begin) is **0.9-1.0% depending on volume**. Crossing 1% sustained for two quarters is the typical MATCH listing trigger.
+- **Mitigation in place:** None today. Phase 1 has zero card transactions (cart is cash-only). Phase 2 next iteration adds card processing.
+- **Why deferred:** Pre-card-payment-launch, this risk doesn't exist (no chargebacks possible without card transactions). Becomes active the day Phase 2 next ships card payments.
+- **Severity:** **HIGH (latent — activates when card payments go live).** A 5-year MATCH listing would force Hamilton onto high-risk processors only, with worse rates and shorter notice windows — the exact situation R-008 is currently below.
+- **Watch points (post-card-launch):** Track chargeback ratio monthly. Alert at 0.5% (early warning), 0.65% (Visa monitored — escalation conversation), 0.9% (active mitigation required). Phase 2 next iteration's CE3.0 evidence capture (10 EMV fields per inbox spec, including `auth_code`, `card_entry_method`, `card_cvm`, `card_aid`) is the operational defense — chip-read with proper CVM shifts liability to the issuer for fraud chargebacks.
+
+## R-010 — ERPNext v16 polish-wave fix cadence
+
+- **Source:** v16 production-readiness survey (2026-04-30, github.com/frappe/erpnext issue tracker + version-16 backport PR list).
+- **Description:** ERPNext v16 GA'd 2026-01-12. In the 3.5 months since, **~10 fixes per month** have been backported into the `version-16` branch across each of POS / Sales Invoice / Stock / Permissions areas (~50 PRs total in 3.5 months). Two open issues are particularly relevant to Hamilton's current and near-term flows:
+  - **[#54183](https://github.com/frappe/erpnext/issues/54183)** "POS Closing Failure Due to Timestamp Mismatch of Return Invoices" — Return invoices update stock at POS Closing time instead of creation time, causing stock-validation failures during close when returns are reused in subsequent sales. **Latent for Hamilton today** (Phase 1 has no returns), **active when Phase 3 returns ship**.
+  - **[#50787](https://github.com/frappe/erpnext/issues/50787)** "POS Closing Entry fails due to Stock Validation Error when Refunds are processed in the batch" — Same family. Open since v15. Active the day Hamilton processes its first refund.
+- **Mitigation in place:** Phase 1 doesn't process returns/refunds, so neither bug is currently triggerable. Hamilton's elevation pattern in `submit_retail_sale` (set user to Administrator + ignore_permissions=True) is robust against the permission-check tightenings landing in v16.
+- **Why deferred:** Both are open upstream issues. Hamilton can't fix them in the Hamilton ERP custom app — they're inside ERPNext's `pos_invoice.py` and `sales_invoice.py`. Watch for upstream fixes; design Phase 3 returns/refunds AROUND the bugs (e.g., process returns immediately, not batched at POS Closing) until upstream lands a fix.
+- **Severity:** **HIGH (latent — activates with Phase 3 returns/refunds).** A POS Closing failure during a busy shift's reconciliation = manual workaround under pressure = exactly the kind of incident Tier 0 monitoring is meant to catch but can't fix.
+- **Watch points:**
+  - Monthly upgrade review (per CLAUDE.md cadence) checks for fixes to #54183 and #50787 in the version-16 backport list.
+  - Phase 3 returns/refunds design must explicitly account for these two issues OR depend on upstream fixes shipping first.
+  - The general ~10/month fix pace means Hamilton's monthly upgrade window WILL touch a doctype Hamilton uses; the staging-then-production promotion process (per CLAUDE.md) is the structural defense.
+
 ---
 
 ## Maintenance
