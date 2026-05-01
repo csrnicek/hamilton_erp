@@ -159,7 +159,7 @@
         "id": "13",
         "title": "Venue Asset whitelisted methods delegate to lifecycle.py",
         "description": "Rewrite Venue Asset whitelisted methods as thin entry points that delegate into hamilton_erp/lifecycle.py.",
-        "details": "Plan section: Task 13 (lines 1916-2036). Modifies venue_asset.py.",
+        "details": "Plan section: Task 13 (lines 1916-2036). Modifies venue_asset.py.\n\nReversal note (2026-05-01): Work shipped (pre-PR-workflow direct commit defining 5 whitelisted methods on Venue Asset DocType controller: `assign_to_session`, `mark_vacant`, `mark_clean`, `set_out_of_service`, `return_to_service`), then REVERSED on 2026-04-29 as part of the AI bloat audit cleanup (PR #34 / `chore/audit-cleanup-deletions` \u2014 see `docs/audits/ai_bloat_audit_2026-04-29.md` Finding #1). Reason: the methods were 1-line delegators to `lifecycle.*` never called from the JS \u2014 the Asset Board calls top-level `hamilton_erp.api.*` directly. Status remains `done` because the task was completed; the subsequent removal was a deliberate cleanup, not a regression. See `hamilton_erp/hamilton_erp/doctype/venue_asset/venue_asset.py:70-78` for the in-code removal note.",
         "testStrategy": "TDD \u2014 existing venue_asset tests continue passing; verify no business logic lives in the controller.",
         "status": "done",
         "dependencies": [
@@ -185,7 +185,7 @@
         "id": "15",
         "title": "api.py \u2014 bulk mark_all_clean_rooms / mark_all_clean_lockers",
         "description": "Implement bulk API endpoints mark_all_clean_rooms() and mark_all_clean_lockers() for the operator 'Mark All Clean' flow.",
-        "details": "Plan section: Task 15 (lines 2201-2337). Modifies hamilton_erp/hamilton_erp/api.py.",
+        "details": "Plan section: Task 15 (lines 2201-2337). Modifies hamilton_erp/hamilton_erp/api.py.\n\nReversal note (2026-05-01): Work shipped (pre-PR-workflow direct commit defining `mark_all_clean_rooms` / `mark_all_clean_lockers` whitelisted endpoints + `_mark_all_clean` helper), then REVERSED on 2026-04-29 via DEC-054 reversal (Amendment A29-1 in `docs/decisions_log.md:438-444`). Reason: the entire bulk \"Mark All Clean\" feature was determined unnecessary \u2014 Phase 1 cleaning is per-tile. Status remains `done` because the task was completed; the subsequent removal was a deliberate scope reversal, not a regression. See `hamilton_erp/api.py:277` for the in-code removal note.",
         "testStrategy": "TDD \u2014 test bulk happy path, partial failures, and audit log coverage for every asset touched.",
         "status": "done",
         "dependencies": [
@@ -326,7 +326,7 @@
         "id": "21",
         "title": "Asset Board \u2014 bulk Mark All Clean confirmation dialog",
         "description": "Upgrade bulk 'Mark All Clean' to use a proper Frappe dialog for confirmation (replaces any placeholder confirm).",
-        "details": "Plan section: Task 21 (lines 3230-3320). Modifies asset_board.js. 3-AI review checkpoint after this task.\n\nResolved 2026-05-01 via DEC-054 reversal (Amendment A29-1, 2026-04-29). The bulk Mark All Clean feature was REMOVED entirely: no footer button, no `mark_all_clean_*` endpoints, no `_mark_all_clean` helper, no `bulk_reason` parameter on `mark_asset_clean`. See `docs/decisions_log.md` lines 438-444 and `hamilton_erp/api.py:277` for the removal comment. The original confirmation dialog scope no longer applies \u2014 there is no bulk action to dialog about. Cleaning is per-tile.",
+        "details": "Plan section: Task 21 (lines 3230-3320). Modifies asset_board.js. 3-AI review checkpoint after this task.\n\nReversal note (2026-05-01): Original work shipped via PR #4 (`feat(task-21): bulk Mark Clean confirmation dialog (DEC-054)`, merged 2026-04-16), then REVERSED on 2026-04-29 alongside Task 15 via DEC-054 reversal (Amendment A29-1 in `docs/decisions_log.md` lines 438-444 and `hamilton_erp/api.py:277`). The bulk Mark All Clean feature was removed entirely: no footer button, no `mark_all_clean_*` endpoints, no `_mark_all_clean` helper, no `bulk_reason` parameter on `mark_asset_clean`. Reason: Phase 1 cleaning is per-tile \u2014 the dialog has no surviving feature to confirm. Status was flipped from `pending` to `done` in PR #96 (2026-05-01) on the basis that the original scope no longer applies. Distinct from Tasks 13 and 15 in that an actual merged PR (#4) shipped the dialog before the reversal.",
         "testStrategy": "Manual QA \u2014 confirm dialog fires, cancellation works, accept triggers bulk API.",
         "status": "done",
         "dependencies": [
