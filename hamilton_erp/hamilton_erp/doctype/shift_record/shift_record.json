@@ -185,10 +185,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Auto-calculated from card-mode Sales Invoices for the shift.",
+   "description": "Auto-calculated from card-mode Sales Invoices for the shift. Blind-count theft-detection figure (DEC-038, parallel to DEC-021 / Cash Reconciliation.system_expected): permlevel 1 hides this from Hamilton Operator at the API layer, not just the form. Operator enters their card-batch figure first; the system-expected is only revealed at Manager review. See risk_register.md R-006/R-007 and TestShiftRecordBlindRevealGuardrail.",
    "fieldname": "system_expected_card_total",
    "fieldtype": "Currency",
    "label": "System Expected Card Total",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -232,12 +233,22 @@
    "write": 0
   },
   {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Manager"
+  },
+  {
    "create": 1,
    "delete": 1,
    "read": 1,
    "report": 1,
    "role": "Hamilton Admin",
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Admin"
   }
  ],
  "sort_field": "shift_start",

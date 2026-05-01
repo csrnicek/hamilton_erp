@@ -58,6 +58,7 @@ These are the rules that have already cost us hours (or would cost us days) when
 | LL-029 | Production Safety | S0 | Never modify Frappe / ERPNext core |
 | LL-030 | Production Safety | S0 | Production recovery — rollback before live debugging |
 | LL-031 | Production Safety | S0 | Agents may diagnose broadly but execute narrowly |
+| LL-033 | Production Safety | S1 | Schema can lag documented intent — `permissions_matrix.md` named fields Manager-only that the JSON still exposes to Operator |
 | LL-035 | Production Safety | S1 | Whitelisted endpoints touching money / stock / permissions need adversarial tests in the **first** PR — hardening passes are 5x the cost |
 | LL-036 | UI / Asset Board | S2 | Paper receipt as occupancy token is a defensible-but-fragile control — digital state must remain canonical, paper is operator UX |
 | LL-037 | Operational | S2 | Frappe v16 caches `site_config` for 60 seconds — `bench set-config` changes don't take immediate effect on running workers |
@@ -521,6 +522,20 @@ These are the rules that have already cost us hours (or would cost us days) when
 - **Detection:** Agent action log contains any "Forbidden" item without an explicit human approval token.
 - **Prevention for next venue:** Per-action allowlist in agent harness. Forbidden actions require an explicit approval flow.
 - **References:** Future Night Watch system design.
+
+### LL-033 — Schema can lag documented intent — audit field configs against design docs, not just role grids
+
+- **Category:** Production Safety
+- **Severity:** S1
+- **Applies to:** Any DocType where field-level sensitivity is asserted in design docs, decisions, or permission matrices but enforced only at the row level in JSON.
+- **What happened:** Task 25 item 7 audit (autonomous, 2026-04-30) compared every Hamilton DocType field against documented sensitivity intent. Three classes of gap surfaced: (a) the `permissions_matrix.md` "Sensitive fields" section already named `Comp Admission Log.comp_value` as Manager-only, but the DocType JSON grants Hamilton Operator full read on it; (b) `Shift Record.system_expected_card_total` is the same blind-count theft-detection figure as `Cash Reconciliation.system_expected` (DEC-021) but is fully readable by Operator pre-submit, defeating DEC-038's blind-count workflow at the API layer; (c) Venue Session ships eight forward-compat PII fields (`full_name`, `date_of_birth`, `scanner_data`, etc.) for Philadelphia rollout — null at Hamilton today, but freely readable by Operator the moment Philadelphia populates them.
+- **Time cost:** ~30 min for the audit pass. Time cost of the unmitigated gaps would be measured in incident hours if exploited.
+- **Root cause:** Frappe's role-permission grid is row-level. Granting `read: 1` on a DocType grants read on every field on it. Field-level enforcement (`permlevel`, `mask`, `is_password`) is an opt-in second layer. The Phase 1 build leaned on JS form hides and convention to enforce field-level rules that should have been declared in JSON. JS hides bypass at the API; convention does not survive contributors.
+- **The fix:** Two parts. (1) The audit itself, captured in `docs/field_masking_audit.md` — every field, sensitivity tier, current role read access, recommendation, and a prioritized implementation queue. (2) No field configs were changed in this pass; remediation is sequenced as follow-up PRs starting with the smallest-blast-radius gaps (one-field `permlevel: 1` edits with regression tests).
+- **Detection:** Whenever `permissions_matrix.md`, `decisions_log.md`, or any design doc names a field as "Manager-only" or "blind reveal" or "sensitive," the DocType JSON should be checked the same day. Add this check to the coding-standards review (alongside the existing role-grid check).
+- **Prevention for next venue:** Two structural changes recommended. (a) Before any Philadelphia rollout that populates the Venue Session PII fields, the `permlevel: 1` block on those fields must land — Philadelphia cannot be the first venue to discover the gap in production. (b) For new DocTypes, add a field-sensitivity column to the schema review checklist. Three questions per field: "Could a peer-Operator browsing this leak a theft signal?" "Is this PII?" "Is this a blind-reveal figure?" Any 'yes' triggers a `permlevel`/`mask`/`is_password` decision before the JSON is committed.
+- **Generalizes:** Documented intent is not enforcement. Whenever a design doc, decision log, or matrix names a field-level rule, treat it as a TODO that must be matched in JSON, not as a fact about the system. The schema is the authority; the doc is the spec the schema must satisfy.
+- **References:** `docs/field_masking_audit.md`, `docs/permissions_matrix.md` lines 53–60, DEC-021, DEC-038, DEC-039, DEC-050, `hamilton_erp/test_security_audit.py::TestNoFrontDeskSelfEscalation`.
 
 ### LL-034 — Concurrent Claude Code agents on the same repo race on `git checkout` and nuke uncommitted work
 
