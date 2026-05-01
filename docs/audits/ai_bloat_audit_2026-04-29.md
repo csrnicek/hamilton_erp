@@ -263,3 +263,47 @@ The triangulation matters: the user-facing bug in finding #3 surfaced in method 
 - Source: `docs/inbox.md` 2026-04-29 entry (lines 483-702 at promotion time).
 - Related: `docs/lessons_learned.md` LL-031 (agents may diagnose broadly but execute narrowly), `docs/risk_register.md` (no related risk yet).
 - Cross-references: `docs/hooks_audit.md` (Task 25 item 11) confirms `hooks.py` top-level vars are correct (false positives in vulture).
+
+---
+
+## Status updates — Chris's review (2026-05-01)
+
+Chris worked through the 15 findings on 2026-05-01 with a current-state verification (many findings had been resolved between the original 2026-04-29 audit and the review date — see `~/Downloads/pr78_ai_bloat_audit.md` review export). Final disposition per finding:
+
+| # | Outcome | PR / note |
+|---|---|---|
+| 1 | ✅ Already done | `venue_asset.py:75-110` whitelisted methods deleted on 2026-04-29 (predates this audit's review) |
+| 2 | ✅ DELETED option (b) | PR #92 — dead `oos_days_html` removed; Phase 2 task 28 queued for proper stale-OOS visibility (12-14px badge, color-coded by staleness, section-header summary) |
+| 3 | ✅ Already done | `api.py:91` field list now includes `"reason"` — user-facing "Reason unknown" bug is fixed |
+| 4 | ✅ Already done | `tasks.py` removed via PR #53; `hooks.py:85` documents the former Phase 1 stub |
+| 5 | ✅ Verified false positives | vulture findings on `hooks.py` top-level vars are framework-dispatched-by-name; confirmed in `docs/hooks_audit.md` |
+| 6 | ✅ Aggressive trim shipped | PR #93 — `_create_session` docstring 60 → 25 lines; kept retry contract / exception scope / DEC-056 reference; removed Task 11 review provenance and "Fix 10" labels |
+| 7 | ✅ Trim shipped | PR #93 (combined with #6) — `_set_cleaned_timestamp` comment 7 → 3 lines |
+| 8 | ✅ Already done | PR #72 (`adfc226`) linked the `locks.py:81` TODO to GitHub issue #71 |
+| 9 | ✅ Trim shipped | PR #94 — `on_sales_invoice_submit` docstring 18 → 11 lines; removed framework re-explanation that's already in `hooks.py` |
+| 10 | ⏸ **DEFERRED** to a planned session — see below |
+| 11 | ✅ Already done | duplicate of #1; resolved by the 2026-04-29 cleanup |
+| 12 | ✅ KEEP per audit | `mark_all_clean_*` wrappers — moot since DEC-054 reversal removed the entire bulk Mark All Clean feature on 2026-04-29 (Amendment A29-1) |
+| 13 | ✅ KEEP per audit | `_get_hamilton_settings()` — defaults-on-fresh-install logic is non-trivial; inlining would muddy the caller |
+| 14 | ✅ Already done | `publish_board_refresh` was removed (DEC-054 reversed) — see `realtime.py:77-79` for the removal note |
+| 15 | ✅ KEEP per audit | `_require_oos_entry` — borderline; inlining would lose the named intent |
+
+### Finding #10 — deferred to a planned session
+
+**Decision (2026-05-01):** Chris reviewed the refactor scope and deferred. The `_show_overlay` / `_redraw_overlay` duplication is real (~40 lines), but extracting `_build_overlay` carries non-trivial regression risk because:
+
+1. **The overlay is the action surface** — every Mark Clean, Vacate, OOS, Return-to-Service action goes through it. Click-handler binding (`.off('click.action')` vs `.on('click.action')`) is order-sensitive.
+2. **Vacate-sub-buttons state** — the parent → sub-button flip (Key Return / Discovery on Rounds) lives in instance state and the redraw path. Refactor must preserve this state machine.
+3. **CI doesn't cover the regression surface** — Server Tests don't exercise JS overlay rendering. The refactor passes CI by default; real regressions surface only in browser testing.
+
+**What needs to happen for the refactor to ship safely:**
+1. Read both functions side-by-side end-to-end (~120 lines combined) before extracting
+2. Add a Playwright/manual browser regression test for each action path (Mark Clean, Vacate Key Return, Vacate Discovery on Rounds, OOS modal flow + cancel, Return-to-Service modal flow + cancel) BEFORE refactoring
+3. Refactor with the test as the regression net
+4. Browser-verify on `hamilton-test.localhost`
+
+**Estimated effort:** half a day of careful work. Not a 5-minute autonomous PR.
+
+**Tracking:** this audit doc is the canonical record. Schedule a planned session when the asset-board JS test surface is ready (currently `test_asset_board_rendering.py` is grep-based, not interactive).
+
+**Cleanup PRs sequence above (line 241) supersedes:** items 1, 2, 3 of that sequence have shipped; item 4 (`_build_overlay` refactor) is deferred per this entry; item 5 (over-comment trim) is shipped via PRs #93 + #94. The sequence is closed.
