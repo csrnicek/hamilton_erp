@@ -1,5 +1,15 @@
 # Inbox
 
+## 2026-05-01 — NEXT: Hardware audit for Hamilton POS
+
+**Action:** Audit what hardware is currently specced for the Hamilton front-desk POS station vs what's missing. Cover at minimum the cash drawer, barcode scanner, and card reader. Note model numbers, connection type, vendor, and price where each is already chosen; flag the gaps where nothing is specced yet.
+
+**Deliverable order:**
+1. Outline first — `docs/design/pos_hardware_spec.md` skeleton with section headings only. Land that for Chris approval before filling in.
+2. Full doc after approval — populate each section with the audit findings, recommended models, and the integration touchpoints in `hamilton_erp` code (e.g. receipt printer = Hamilton Settings field; cash drawer = kicked open by ESC/POS receipt print; scanner = HID keyboard input handled by cart UI).
+
+**Why this is next:** Phase 2 hardware backlog already lists the Epson TM-T20III receipt printer (see this file, "2026-04-30 — Phase 2 hardware + integration backlog (post-cart-UX)"). The receipt printer is one piece — Hamilton's full front-desk station is several pieces, none of which are written down in one place. This audit is the prerequisite to ordering hardware for the launch fit-out.
+
 ## 2026-04-30 (afternoon) — PR #51 ready for human review
 
 Follow-up to PR #49 (cart UX stub). Ships the QBO-mirrored accounting seed and replaces the cart Confirm stub with real POS Sales Invoice creation. PR: https://github.com/csrnicek/hamilton_erp/pull/51 — auto-merge enabled (squash + delete branch).
