@@ -193,6 +193,18 @@ Before going live with Card:
 
 If a future integration ever transits card data through Hamilton's network in plaintext, scope expands to SAQ-D and a QSA assessment ($5-50k/year). Avoid this by keeping the merchant terminal as the only place card data exists.
 
+### Hardware procurement is per-venue, never bulk (hard rule)
+
+Hardware procurement is per-venue, on each venue's own go-live schedule. Never order hardware for multiple venues at once. Each venue's rollout includes its own hardware evaluation against the current spec, sourced and tested independently.
+
+Why: multi-venue bulk orders compound risk — a spec error, a model EOL announcement, a connectivity-survey miss, or a venue-specific regulatory issue (provincial sales tax, US-state PCI scope, language-of-receipts) becomes a multi-site sunk cost instead of a single-site lesson. Each venue rollout is also separated by months in practice; the spec drifts (Bluetooth-only models get USB-C variants, Brother releases a successor, a processor changes terminals) and the spec-of-record at evaluation time is the spec that must apply.
+
+How to apply:
+- Phase 0 of `docs/venue_rollout_playbook.md` runs hardware evaluation independently per venue.
+- Hamilton's hardware order does NOT presume Philadelphia, DC, or Dallas use the same models — re-evaluate at each rollout.
+- Acceptable to keep cross-venue stylistic continuity (same printer family, same scanner brand) when current spec still recommends it; not acceptable to lock it in advance.
+- Spares are part of the venue's own order, not a corporate stockroom shipped between sites.
+
 ## About Chris (the human you are working with)
 
 - **Experience level:** Beginner with coding, terminal, and developer tools
@@ -203,6 +215,7 @@ If a future integration ever transits card data through Hamilton's network in pl
 ## Communication preferences
 
 - Be direct and concise — no filler phrases, no excessive praise
+- **State consequences before actions. Never after.** Before running anything irreversible (drop site, force push, delete files, run migration, install global package, swap merchant config), say what will happen and what could go wrong, then stop. Don't act first and explain the consequences in the post-mortem. Chris is a beginner — he needs to know the cost of "yes" before he says yes, not after.
 - When something fails, diagnose properly before suggesting a fix — do not guess and iterate
 - If a task is better done in Claude Code terminal than the browser, say so immediately
 - Never use browser automation tools to navigate or click on behalf of Chris — it never works
