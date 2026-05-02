@@ -614,20 +614,22 @@ Add **2 Playwright behavioral tests** (no screenshots): load `/app/asset-board`,
 
 **5. `test_database_advanced.py::test_after_migrate_hook_is_importable` and `test_scheduler_job_is_importable` (lines 479-484).** "Function is callable / importable" smoke tests with zero logic. ~10 LOC. Delete.
 
-**6. `test_environment_health.py::test_redis_cache_port_reachable` and `test_redis_queue_port_reachable`.** Belong in `/debug-env`, not the suite. If Redis is down, every test fails 30s later anyway. ~30 LOC. Demote.
+~~**6. `test_environment_health.py::test_redis_cache_port_reachable` and `test_redis_queue_port_reachable`.**~~ Belong in `/debug-env`, not the suite. If Redis is down, every test fails 30s later anyway. ~30 LOC. ~~Demote.~~ **[✅ DONE in PR #37 2026-04-29]**
 
 #### Framework-testing (delete or refactor to test Hamilton instead)
 
+> **Status: 12/12 tests deleted in PR #37 (2026-04-29). Section retained for historical reference.**
+
 These test Frappe/MariaDB/redis-py behavior, not Hamilton's. If the framework ships a different version with different behavior, they fail for reasons unrelated to Hamilton.
 
-- `test_frappe_edge_cases.py::test_timestamp_mismatch_on_concurrent_save` — testing Frappe's conflict detection. Hamilton's CAS tests cover what we rely on. Delete.
-- `test_frappe_edge_cases.py::test_xss_stripped_from_oos_reason` — testing Frappe's `strip_html_tags`. Hamilton-side XSS test is in `test_security_audit.py`. Delete.
-- `test_frappe_edge_cases.py::test_mandatory_field_enforced_on_insert` — testing Frappe's required-field validator. Delete.
-- `test_frappe_edge_cases.py::test_new_doc_with_fields_pattern` — testing Frappe's constructor signature. Delete.
-- `test_frappe_edge_cases.py::test_frappe_ui_lock_prevents_second_lock` and `test_frappe_ui_lock_persists_across_instances` — testing Frappe's `Document.lock()`. Delete (keep the third test in the class — `test_lifecycle_bypasses_frappe_ui_lock` is Hamilton-specific).
-- `test_frappe_edge_cases.py::TestNamingAndSequence::test_asset_code_unique_constraint_raises_duplicate_entry` — testing the MariaDB UNIQUE constraint. Same invariant in `test_database_advanced.py`. Keep one, delete the duplicate.
-- `test_database_advanced.py::TestMariaDBEdgeCases::test_global_isolation_matches_session`, `test_for_update_locks_row_not_table`, `test_datetime_microsecond_precision` — testing MariaDB defaults. Keep one (the isolation test, since Frappe relies on it); delete the other 3. Document MariaDB requirements in `docs/coding_standards.md`.
-- `test_database_advanced.py::TestRedisEdgeCases::test_incr_returns_integer`, `test_incr_at_large_values`, `test_nx_flag_prevents_overwrite` — testing redis-py contracts. Hamilton-side is pinned by `test_lifecycle.py::test_C3_incr_return_value_cast_to_int`. Delete.
+- ~~`test_frappe_edge_cases.py::test_timestamp_mismatch_on_concurrent_save`~~ — testing Frappe's conflict detection. Hamilton's CAS tests cover what we rely on. ~~Delete.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_frappe_edge_cases.py::test_xss_stripped_from_oos_reason`~~ — testing Frappe's `strip_html_tags`. Hamilton-side XSS test is in `test_security_audit.py`. ~~Delete.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_frappe_edge_cases.py::test_mandatory_field_enforced_on_insert`~~ — testing Frappe's required-field validator. ~~Delete.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_frappe_edge_cases.py::test_new_doc_with_fields_pattern`~~ — testing Frappe's constructor signature. ~~Delete.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_frappe_edge_cases.py::test_frappe_ui_lock_prevents_second_lock` and `test_frappe_ui_lock_persists_across_instances`~~ — testing Frappe's `Document.lock()`. ~~Delete~~ (keep the third test in the class — `test_lifecycle_bypasses_frappe_ui_lock` is Hamilton-specific). **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_frappe_edge_cases.py::TestNamingAndSequence::test_asset_code_unique_constraint_raises_duplicate_entry`~~ — testing the MariaDB UNIQUE constraint. Same invariant in `test_database_advanced.py`. ~~Keep one, delete the duplicate.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_database_advanced.py::TestMariaDBEdgeCases::test_for_update_locks_row_not_table`~~, ~~`test_datetime_microsecond_precision`~~ — testing MariaDB defaults. ~~Delete the other 3. Document MariaDB requirements in `docs/coding_standards.md`.~~ **[✅ DONE in PR #37 2026-04-29]**
+- ~~`test_database_advanced.py::TestRedisEdgeCases::test_incr_returns_integer`~~, ~~`test_incr_at_large_values`~~, ~~`test_nx_flag_prevents_overwrite`~~ — testing redis-py contracts. Hamilton-side is pinned by `test_lifecycle.py::test_C3_incr_return_value_cast_to_int`. ~~Delete.~~ **[✅ DONE in PR #37 2026-04-29]**
 
 **Total: ~14 tests, ~200 LOC.**
 
@@ -656,7 +658,7 @@ These test Frappe/MariaDB/redis-py behavior, not Hamilton's. If the framework sh
 
 Ranked by ROI:
 
-1. **Delete framework-testing tests** (~14 tests, ~200 LOC). Effort: 30 min. Risk: zero — these don't test Hamilton.
+1. ~~**Delete framework-testing tests** (~14 tests, ~200 LOC). Effort: 30 min. Risk: zero — these don't test Hamilton.~~ **[✅ DONE in PR #37 2026-04-29]**
 2. **Delete `TestNamedConstants` and `TestHamiltonSettingsDefaults` from `test_lifecycle.py`** (9 tests, ~50 LOC). Effort: 5 min. Risk: zero.
 3. **Delete duplicate "current_session is None after vacate" tests** (2 tests, ~25 LOC). Effort: 5 min.
 4. **Delete the 5 inline `verify-release` blocks in `test_lifecycle.py`** (~30 LOC). Effort: 10 min.
