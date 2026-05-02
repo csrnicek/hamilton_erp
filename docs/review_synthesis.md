@@ -111,12 +111,15 @@ Two roles is too thin. Hamilton Manager currently means "can access reconciliati
 
 **Decision DEC-022:** Three roles: Operator, Manager, Admin.
 
-### 2.3 Bulk "Mark All Clean" on Asset Board (Gemini + implied by all)
+### 2.3 Bulk "Mark All Clean" on Asset Board (Gemini + implied by all) — ⚠️ DEC-023 REVERSED, FEATURE REMOVED
+
+> **STALENESS WARNING (2026-05-01):** DEC-023 below was **REVERSED** — the Bulk "Mark All Clean" feature was **REMOVED entirely** from Phase 1. See `docs/decisions_log.md` "A29-1 Bulk 'Mark All Clean' feature REMOVED" for the canonical removal record. The endpoints (`mark_all_clean_rooms`, `mark_all_clean_lockers`, `_mark_all_clean`) are deleted from code; regression tests in `test_asset_board_rendering.py` (`test_api_does_not_define_mark_all_clean_endpoints`, `test_js_does_not_render_bulk_mark_all_clean_button`) pin the absence. The asset board now uses per-tile clean actions only. The text below is preserved as historical context — DO NOT implement it.
+
 59 assets manually clicked clean every morning is unworkable.
 
 **Fix:** Add "Mark All Dirty → Available" bulk action to asset board. Add to Phase 1 scope.
 
-**Decision DEC-023:** Bulk "Mark All Clean" action added to Phase 1 asset board scope.
+**Decision DEC-023 (REVERSED — see A29-1 in decisions_log.md):** Bulk "Mark All Clean" action added to Phase 1 asset board scope.
 
 ### 2.4 board_corrections Should Be a Child Table (ChatGPT + Grok)
 Free text for board corrections is too loose for audit purposes.
@@ -199,7 +202,7 @@ Remaining blockers before first line of code:
 | DEC-020 | assignment_status field on Venue Session + daily orphan cleanup job |
 | DEC-021 | Blind cash control = DocType permissions + Report/Page permissions + field masking |
 | DEC-022 | Three roles: Hamilton Operator / Hamilton Manager / Hamilton Admin |
-| DEC-023 | Bulk "Mark All Clean" action on asset board (Phase 1) |
+| DEC-023 | Bulk "Mark All Clean" action on asset board (Phase 1) — ⚠️ **REVERSED**; feature REMOVED per A29-1 in `docs/decisions_log.md` |
 | DEC-024 | board_corrections on Shift Record → child table |
 
 ---
