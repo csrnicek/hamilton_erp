@@ -140,10 +140,10 @@ class TestLoad10k(IntegrationTestCase):
 		y = int(today_prefix_parts[0])
 		start_of_test_prefix = f"{d}-{m}-{y}"
 
-		print(f"\n  Starting 10,000 check-in load test...")
+		print("\n  Starting 10,000 check-in load test...")
 		print(f"  Assets: {NUM_ASSETS} | Cycles per asset: {CYCLES_PER_ASSET}")
 		print(f"  Test start date prefix (most sessions): {start_of_test_prefix}")
-		print(f"  (Sessions after a midnight cross use their own date per DEC-056.)")
+		print("  (Sessions after a midnight cross use their own date per DEC-056.)")
 
 		start_time = time.time()
 		completed = 0
@@ -202,9 +202,9 @@ class TestLoad10k(IntegrationTestCase):
 		rate = completed / elapsed if elapsed > 0 else 0
 
 		# ── REPORT ──────────────────────────────────────────────────
-		print(f"\n  ═══════════════════════════════════════")
-		print(f"  LOAD TEST RESULTS")
-		print(f"  ═══════════════════════════════════════")
+		print("\n  ═══════════════════════════════════════")
+		print("  LOAD TEST RESULTS")
+		print("  ═══════════════════════════════════════")
 		print(f"  Total check-ins completed : {completed:,}/{TOTAL_CHECKINS:,}")
 		print(f"  Total time                : {elapsed:.1f}s")
 		print(f"  Throughput                : {rate:.1f} check-ins/sec")
@@ -258,16 +258,16 @@ class TestLoad10k(IntegrationTestCase):
 		print(f"  Bad format (not d-m-y---NNNN+): {len(bad_format)}")
 
 		if failures:
-			print(f"\n  FAILURES (first 5):")
+			print("\n  FAILURES (first 5):")
 			for f in failures[:5]:
 				print(f"    Asset {f['asset']} cycle {f['cycle']}: {f['error']}")
 
 		if duplicates:
-			print(f"\n  DUPLICATES (first 5):")
+			print("\n  DUPLICATES (first 5):")
 			for sn, count in list(duplicates.items())[:5]:
 				print(f"    {sn} appeared {count} times")
 
-		print(f"  ═══════════════════════════════════════\n")
+		print("  ═══════════════════════════════════════\n")
 
 		# ── ASSERTIONS ──────────────────────────────────────────────
 		self.assertEqual(
