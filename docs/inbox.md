@@ -1,5 +1,11 @@
 # Inbox
 
+## Queued
+
+Fix two CI failures — commit to existing PR branches, do not open new PRs:
+1. **PR #122**: `tip_pull_currency` returns "CAD" instead of reading `frappe.conf.anvil_currency` — find where it gets set and wire it through. Run failing test to confirm.
+2. **PR #123**: `_ensure_test_item()` in `test_zero_value_invoice.py` missing `stock_uom` on Item fixture — add `stock_uom = "Nos"` before insert. Run failing tests to confirm.
+
 ## 2026-05-01 — Phase 2 hardware research delivered
 
 The five hardware-research entries that lived here are no longer needed in the inbox — each has shipped as a permanent doc. Trail:
