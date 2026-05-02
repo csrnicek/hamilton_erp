@@ -426,7 +426,7 @@ class TestNoFrontDeskSelfEscalation(IntegrationTestCase):
 # ---------------------------------------------------------------------------
 
 
-import json as _json  # avoid shadowing the existing top-level imports
+import json as _json  # noqa: E402 — avoid shadowing the existing top-level imports
 
 _SHIFT_RECORD_JSON = (
 	PACKAGE_ROOT

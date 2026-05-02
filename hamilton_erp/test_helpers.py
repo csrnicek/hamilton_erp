@@ -123,7 +123,7 @@ def restore_dev_state():
 # define their own copies for historical reasons; they're being kept
 # as-is to avoid churn but new test code should import from here.
 
-from contextlib import contextmanager
+from contextlib import contextmanager  # noqa: E402 — late import follows the module-purpose docstring
 
 
 @contextmanager
