@@ -382,6 +382,7 @@ class TestAssetBoardHTTPVerb(IntegrationTestCase):
 		block so failure of one test cannot bleed into the next.
 		"""
 		from unittest.mock import MagicMock
+
 		import frappe.handler
 
 		original_request = getattr(frappe.local, "request", None)

@@ -33,17 +33,15 @@ from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
-from hamilton_erp.test_helpers import real_logs
 from hamilton_erp.lifecycle import (
-    VALID_TRANSITIONS,
-    mark_asset_clean,
-    set_asset_out_of_service,
-    return_asset_to_service,
-    start_session_for_asset,
-    vacate_session,
+	mark_asset_clean,
+	return_asset_to_service,
+	set_asset_out_of_service,
+	start_session_for_asset,
+	vacate_session,
 )
 from hamilton_erp.locks import LockContentionError, asset_status_lock
-
+from hamilton_erp.test_helpers import real_logs
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -335,7 +333,6 @@ class TestSessionLifecycleChecklist(IntegrationTestCase):
 		Venue Session insert. Task 11 widened the trailing sequence from
 		3 to 4 digits (DEC-033 addendum 2026-04-10).
 		"""
-		import re
 		session_name = start_session_for_asset(self.asset.name, operator=OPERATOR)
 		session = frappe.get_doc("Venue Session", session_name)
 		pattern = r"^\d{1,2}-\d{1,2}-\d{4}---\d{4}$"

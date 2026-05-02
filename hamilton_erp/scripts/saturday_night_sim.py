@@ -8,9 +8,9 @@ audit trails, and session records are created properly.  After lifecycle
 transitions, it adjusts session_start times via DB to simulate various
 check-in times for the overtime ticker.
 """
-import frappe
 from datetime import datetime, timedelta
 
+import frappe
 
 # ---------------------------------------------------------------------------
 # Target layout
@@ -128,7 +128,6 @@ def _reset_to_available(doc_name, current_status, operator):
 def _set_target(doc_name, target, hours_ago_or_reason, operator):
     """Transition an Available asset to the target state."""
     from hamilton_erp.lifecycle import (
-        mark_asset_clean,
         set_asset_out_of_service,
         start_session_for_asset,
         vacate_session,

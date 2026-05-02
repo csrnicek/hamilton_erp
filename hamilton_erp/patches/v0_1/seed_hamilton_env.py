@@ -89,8 +89,8 @@ def _ensure_retail_item_defaults():
 	we'd rather no-op than crash.
 	"""
 	from hamilton_erp.setup.install import (
-		HAMILTON_WAREHOUSE_BASE,
 		HAMILTON_COST_CENTER_BASE,
+		HAMILTON_WAREHOUSE_BASE,
 	)
 
 	# Detect Hamilton company using the same pin → name → default flow as

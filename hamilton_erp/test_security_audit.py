@@ -29,7 +29,6 @@ from pathlib import Path
 import frappe
 from frappe.tests import IntegrationTestCase
 
-
 # Package root — every .py file under this directory is in scope for
 # the SQL audit. Resolved at import time so the test is robust to
 # different bench layouts.

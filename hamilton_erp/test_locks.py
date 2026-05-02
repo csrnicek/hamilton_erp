@@ -6,7 +6,7 @@ import uuid
 import frappe
 from frappe.tests import IntegrationTestCase
 
-from hamilton_erp.locks import asset_status_lock, LockContentionError
+from hamilton_erp.locks import LockContentionError, asset_status_lock
 
 # Note: This test module lives at the package root (not inside a doctype
 # folder), so `cls.doctype` is None and Frappe skips test-record generation
@@ -127,6 +127,7 @@ class TestAssetStatusLock(IntegrationTestCase):
 		to-back acquisitions.
 		"""
 		from unittest.mock import patch
+
 		from hamilton_erp import locks
 		seen: list[str] = []
 		real_uuid4 = locks.uuid.uuid4
@@ -257,6 +258,7 @@ class TestAssetStatusLock(IntegrationTestCase):
 		"""
 		import uuid as _u
 		from unittest.mock import patch
+
 		from hamilton_erp import locks
 		fixed = _u.UUID("11111111-1111-1111-1111-111111111111")
 		cache = frappe.cache()

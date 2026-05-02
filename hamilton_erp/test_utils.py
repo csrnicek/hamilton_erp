@@ -17,7 +17,6 @@ from frappe.utils import now_datetime, today
 
 from hamilton_erp.utils import get_current_shift_record, get_next_drop_number
 
-
 OPERATOR = "Administrator"
 
 

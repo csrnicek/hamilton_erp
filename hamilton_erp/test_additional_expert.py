@@ -15,7 +15,6 @@ These tests complement the main test modules. They are marked with
 from __future__ import annotations
 
 import threading
-import time
 import uuid
 from unittest.mock import MagicMock, patch
 
@@ -25,12 +24,10 @@ from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
 from hamilton_erp.lifecycle import (
-	mark_asset_clean,
 	start_session_for_asset,
 	vacate_session,
 )
 from hamilton_erp.locks import LockContentionError, asset_status_lock
-
 
 # ---------------------------------------------------------------------------
 # Helpers

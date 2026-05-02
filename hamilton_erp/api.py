@@ -4,7 +4,6 @@ import frappe
 from frappe import _
 from frappe.utils import flt
 
-
 # ---------------------------------------------------------------------------
 # Sales Invoice doc_event hook (wired in hooks.py)
 # Phase 2 completes this implementation. Phase 0 stub only.
