@@ -82,7 +82,7 @@ class TestZeroValueInvoiceSubmission(IntegrationTestCase):
 		customer.update({
 			"customer_name": _TEST_CUSTOMER,
 			"customer_type": "Individual",
-			"customer_group": "All Customer Groups",
+			"customer_group": "Individual",  # Leaf group; "All Customer Groups" is the root (is_group=1) and rejected
 			"territory": "All Territories",
 		})
 		customer.insert(ignore_permissions=True)
@@ -103,6 +103,7 @@ class TestZeroValueInvoiceSubmission(IntegrationTestCase):
 		si = frappe.new_doc("Sales Invoice")
 		si.update({
 			"customer": customer,
+			"company": "Club Hamilton",  # Hamilton's seeded company; no global default is set on test_site
 			"posting_date": today(),
 			"due_date": today(),
 		})
