@@ -18,6 +18,7 @@ Specific enough that Claude Code can follow it autonomously.
   [tool.bench.frappe-dependencies]
   frappe = ">=16.0.0-dev,<17.0.0-dev"
   ```
+  This range is the app's **compatibility window** (what versions of Frappe Hamilton's code is known to work with), NOT the **production deployment pin**. Frappe Cloud production must pin a specific tagged minor release (e.g. `v16.3.4`) per Phase A step 2 + CLAUDE.md "Production version pinning." The `>=16.0.0-dev,<17.0.0-dev` range allows local dev / CI to install any compatible v16, while the production-side pin chooses ONE specific release. These are different things and both are needed.
 - [ ] All patches listed in `patches.txt` with correct `[pre_model_sync]` / `[post_model_sync]` sections
 - [ ] **Local dev bench is working before deploying to Frappe Cloud.** Use `scripts/init.sh` for the fresh-bench bootstrap — it verifies version pins (Python 3.14, Node 24, MariaDB, Redis, frappe-bench), sets up a working bench, and installs frappe + erpnext + payments + hamilton_erp on a dev site. The script is idempotent. CI uses the same install path (`.github/workflows/tests.yml`), so a green local `init.sh` is the strongest signal that production deploy will succeed.
 
@@ -113,7 +114,13 @@ Specific enough that Claude Code can follow it autonomously.
 11. Enable security features:
     - [ ] Document Versioning on all critical DocTypes (Venue Asset, Venue Session, Cash Drop, Shift Record)
     - [ ] Audit Trail in System Settings
-    - [ ] v16 Role-Based Field Masking on sensitive financial fields
+    - [ ] **🔒 v16 Role-Based Field Masking — PRE-GO-LIVE BLOCKER, supervised migration only.** This is NOT a routine setup item. See `docs/risk_register.md` R-006, R-007, R-012 for full BLOCKER context. Status as of 2026-05-01:
+      - ✅ R-006 (Comp Admission Log `comp_value`) — closed by PR #98
+      - ✅ R-007 (Venue Session 7 PII fields) — in flight via PR #100; awaiting auto-merge
+      - ⏸ Cash Reconciliation field masking (gap #4) — **DEFERRED to Phase 3** alongside the variance redesign in `docs/design/cash_reconciliation_phase3.md` (PR #108). Item ships as 4 of 5 gaps complete.
+      - 🔓 R-012 (Cash Drop envelope label print pipeline) — open BLOCKER tracked as Taskmaster Task 30; must close before Hamilton go-live.
+      - ✅ Cash Drop `if_owner` row-level isolation (gap #3) — in flight via PR #99.
+      Verify each linked PR has merged AND the matching test in `hamilton_erp/test_security_audit.py` passes before checking this box.
 
 ---
 
@@ -129,12 +136,44 @@ Specific enough that Claude Code can follow it autonomously.
     - [ ] Asset Board loads with correct asset count
     - [ ] Can change asset status (Available → Occupied → Dirty → Available)
     - [ ] Out of Service flow works (mandatory reason)
-    - [ ] Mark All Clean bulk action works
     - [ ] Correct color coding and tier badges displayed
+
+    **Note:** "Mark All Clean bulk action" is no longer a smoke-test step — the Bulk Mark All Clean feature was REMOVED per `docs/decisions_log.md` "A29-1 Bulk 'Mark All Clean' feature REMOVED" (DEC-054 reversed). Do NOT re-add this test step or attempt to resurrect the deleted endpoints (`mark_all_clean_rooms`, `mark_all_clean_lockers`, `_mark_all_clean`). The asset board now uses per-tile clean actions only.
 
 ---
 
 ## Phase F — Go-Live Verification
+
+### 🛑 DO NOT LAUNCH UNTIL — Risk Register + Phase 1 BLOCKERs cleared
+
+Before flipping the production URL on a new venue, every **Critical / High / PRE-GO-LIVE BLOCKER** entry in `docs/risk_register.md` MUST be CLOSED, and every **Phase 1 BLOCKER** Taskmaster task MUST be in `done` status. The risk register and Taskmaster live in separate files — without this explicit cross-reference, an operator following the playbook can complete Phases A–F successfully while a launch-blocking risk silently sits in the risk register.
+
+**Pre-launch gate (verify each line CLOSED before launching):**
+
+| Source | Item | How to verify |
+|---|---|---|
+| `docs/risk_register.md` | R-006 — Comp Admission Log comp_value masking | PR #98 merged; `TestCompAdmissionLogValueMasking` passes |
+| `docs/risk_register.md` | R-007 — Venue Session PII masking | PR #100 merged; `TestVenueSessionPIIMasking` passes |
+| `docs/risk_register.md` | R-009 — MATCH list 1% chargeback threshold | Latent until card-payment integration (Phase 2). Confirm no card-integration code shipped to this venue at launch. |
+| `docs/risk_register.md` | R-010 — ERPNext v16 polish-wave fix cadence | Frappe + erpnext pinned to specific tagged v16 minor (Phase A step 2); auto-upgrade disabled |
+| `docs/risk_register.md` | R-011 — Cash Reconciliation variance non-functional | Manager training documented; managers know to ignore variance flag until Phase 3 ships |
+| `docs/risk_register.md` | R-012 — Cash Drop envelope label print pipeline | Taskmaster Task 30 status = `done` |
+| `docs/risk_register.md` | R-013 — Deferred stock validation @ POS Closing | Latent until Phase 2 returns. Confirm refund flow not shipped at launch (cash-only refunds via Task 31 if shipped). |
+| Taskmaster Task 31 | Cash-side refunds (Phase 1 BLOCKER) | Status = `done` if refund flow is in scope at launch; otherwise documented as deferred |
+| Taskmaster Task 32 | Comps manager-PIN gate | Status = `done` |
+| Taskmaster Task 33 | Voids — mid-shift undo | Status = `done` |
+| Taskmaster Task 34 | Tip-pull schema | Status = `done` (schema only; full UX is Phase 2) |
+| Taskmaster Task 35 | Post-close orphan-invoice integrity check | Status = `done` |
+| Taskmaster Task 36 | Zero-value comp item verification test | Status = `done` (test passes against the production-pinned v16 minor) |
+| Taskmaster Task 37 | Receipt printer integration (Epson TM-m30III) | Status = `done` |
+
+If any entry above is NOT closed, **do NOT launch.** Either:
+- (a) close the entry first, OR
+- (b) document an explicit deferral with Chris's written approval (e.g. "Hamilton launches without integrated card payments; standalone Fiserv terminal accepted; integrated card path queued for Phase 2"). Deferrals must be captured in `docs/inbox.md` with date stamp.
+
+The point of this gate is to make it impossible to "complete Phase F" while a launch blocker silently sits in a separate file. The risk register and Taskmaster tracking are NOT optional reading.
+
+### Standard Phase F steps
 
 14. Verify Frappe Cloud auto-deploy is configured:
     - GitHub repo connected to Frappe Cloud site
