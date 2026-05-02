@@ -127,7 +127,7 @@ class TestH10VacateAndTurnover(IntegrationTestCase):
 			)
 			self.assertEqual(len(all_logs), 3)
 			self.assertEqual(
-				[(l["previous_status"], l["new_status"]) for l in all_logs],
+				[(log["previous_status"], log["new_status"]) for log in all_logs],
 				[("Available", "Occupied"),
 				 ("Occupied", "Dirty"),
 				 ("Dirty", "Available")],
@@ -352,7 +352,7 @@ class TestH11OutOfService(IntegrationTestCase):
 			)
 			self.assertEqual(len(all_logs), 2)
 			self.assertEqual(
-				[(l["previous_status"], l["new_status"]) for l in all_logs],
+				[(log["previous_status"], log["new_status"]) for log in all_logs],
 				[("Available", "Out of Service"),
 				 ("Out of Service", "Available")],
 			)
