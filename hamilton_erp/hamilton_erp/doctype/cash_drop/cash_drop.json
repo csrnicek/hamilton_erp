@@ -19,6 +19,12 @@
   "column_break_amount",
   "reconciled",
   "reconciliation",
+  "section_tip_pull",
+  "tip_pull_amount",
+  "tip_pull_currency",
+  "column_break_tip_pull",
+  "tip_settled_via_processor_amount",
+  "tip_pull_difference",
   "section_pos",
   "pos_closing_entry"
  ],
@@ -112,6 +118,47 @@
    "fieldtype": "Link",
    "label": "Reconciliation",
    "options": "Cash Reconciliation",
+   "read_only": 1
+  },
+  {
+   "description": "Operator's card-tip cash pull from the till at end of shift. Schema-only at Phase 1 — operators currently enter the rounded amount they took manually. Phase 2 adds system-enforced rounding (Canada nickel rule) + 'Take exactly $X' UX. See Task 34 + docs/design/tip_pull_phase2.md. R-011 in docs/risk_register.md tracks the placeholder calculator that subtracts this field once Phase 3 wires up the real system_expected math. DEC-065 documents the schema decision.",
+   "fieldname": "section_tip_pull",
+   "fieldtype": "Section Break",
+   "label": "Tip Pull from Till"
+  },
+  {
+   "default": "0",
+   "description": "Cash you pulled from the drawer for your card tips. Enter exact amount taken; system will use this to reconcile the drawer correctly. Negative values < -$50 trigger a manager-attention warning (catches typos like -200 when -2.00 was meant).",
+   "fieldname": "tip_pull_amount",
+   "fieldtype": "Currency",
+   "in_list_view": 1,
+   "label": "Tip Pull Amount"
+  },
+  {
+   "description": "Currency of the tip pull. Defaults to CAD for Hamilton; controller overrides from frappe.conf.anvil_currency for other venues (Philadelphia/DC/Dallas = USD).",
+   "fieldname": "tip_pull_currency",
+   "fieldtype": "Link",
+   "label": "Tip Pull Currency",
+   "options": "Currency"
+  },
+  {
+   "fieldname": "column_break_tip_pull",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "description": "Phase 2 settlement reconciliation field. What the processor (Fiserv/Clover) actually paid the venue for tips at T+1 settlement. Stays 0 in Phase 1; populated by the settlement-pairing job in Phase 2.",
+   "fieldname": "tip_settled_via_processor_amount",
+   "fieldtype": "Currency",
+   "label": "Tip Settled via Processor",
+   "read_only": 1
+  },
+  {
+   "default": "0",
+   "description": "Calculated read-only: tip_pull_amount - tip_settled_via_processor_amount. The rounding loss the venue absorbs as operating cost (e.g. operator pulled $12.70 for an actual $12.67 tip = $0.03 venue cost). Zero in Phase 1 since processor settlement amount stays 0.",
+   "fieldname": "tip_pull_difference",
+   "fieldtype": "Currency",
+   "label": "Tip Pull Difference (Operating Cost)",
    "read_only": 1
   },
   {

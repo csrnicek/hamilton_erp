@@ -249,3 +249,56 @@ class TestCashReconciliation(IntegrationTestCase):
 		# Direct field-level reset without re-running validate; the guard
 		# is what we are testing — no exception should fire.
 		recon.on_cancel()
+
+
+	def test_system_expected_subtracts_tip_pull_amount(self):
+		"""Task 34 / DEC-065 — verify the tip-pull subtraction hook is wired
+		in _calculate_system_expected. Phase 1 stub: sum_of_cash_sales = 0,
+		sum_of_cash_refunds = 0, so system_expected = 0 - 0 - tip_pull_amount
+		= -tip_pull_amount. Mathematically negative today (placeholder), but
+		the WIRING is in place so when Phase 3 lands the real
+		sum_of_cash_sales calculation, tip-pull handling works automatically.
+
+		This test pins the hook itself, not the future Phase 3 math. R-011
+		in docs/risk_register.md tracks the placeholder state.
+		"""
+		drop = self._make_drop(50.0)
+		drop.tip_pull_amount = 12.70
+		drop.save(ignore_permissions=True)
+
+		recon = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": 50.0,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+
+		recon._calculate_system_expected()
+
+		# Phase 1 placeholder math: 0 - 0 - 12.70 = -12.70.
+		# The negative result is expected; pinned here to prove the
+		# subtraction line is in place. Phase 3 replaces 0 with real cash sales.
+		self.assertAlmostEqual(recon.system_expected, -12.70, places=2)
+
+	def test_system_expected_remains_zero_when_tip_pull_amount_zero(self):
+		"""Verify the calculator returns 0 when tip_pull is 0 — same as the
+		pre-Task-34 behavior. Ensures the Phase 1 schema change doesn't break
+		existing pre-Phase-3 reconciliations."""
+		drop = self._make_drop(50.0)
+
+		recon = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": 50.0,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+
+		recon._calculate_system_expected()
+
+		self.assertEqual(recon.system_expected, 0)
