@@ -19,7 +19,7 @@ for app_path in [
 	if app_path not in sys.path:
 		sys.path.insert(0, app_path)
 
-import frappe
+import frappe  # noqa: E402  # intentional late import — must follow sys.path setup above
 
 # Skip files that import from incompatible paths or need bench runner
 collect_ignore_glob = [
