@@ -830,7 +830,8 @@ class TestCreateSessionMidnightBoundary(IntegrationTestCase):
 		  - session_start date    = day X (not day Y)
 		  - _next_session_number called with for_date=day_X on BOTH attempts
 		"""
-		from datetime import date as date_cls, datetime as datetime_cls
+		from datetime import date as date_cls
+		from datetime import datetime as datetime_cls
 		from unittest.mock import patch
 
 		day_x_night = datetime_cls(2099, 3, 15, 23, 59, 30)
@@ -918,8 +919,9 @@ class TestNextSessionNumberRedisFailure(IntegrationTestCase):
 		"""If cache().get raises redis.ConnectionError, _next_session_number
 		catches it and raises frappe.ValidationError with 'temporarily
 		unavailable' in the message."""
-		import redis
 		from unittest.mock import patch
+
+		import redis
 
 		# Patch the cache's .get to raise on the very first call — this
 		# simulates Redis being down when we check whether the sequence
@@ -1393,6 +1395,7 @@ class TestRealtimeContracts(IntegrationTestCase):
 		miss because the names never live on the lifecycle module.
 		"""
 		from unittest.mock import patch
+
 		from hamilton_erp import locks, realtime
 		events: list[str] = []
 		real_lock = locks.asset_status_lock
@@ -1457,6 +1460,7 @@ class TestRealtimeContracts(IntegrationTestCase):
 		old_status, session_start.
 		"""
 		from unittest.mock import patch
+
 		from hamilton_erp import realtime
 		captured = {}
 		def fake(event, payload, **kwargs):
@@ -1477,6 +1481,7 @@ class TestRealtimeContracts(IntegrationTestCase):
 		receives an event for state that may still roll back.
 		"""
 		from unittest.mock import patch
+
 		from hamilton_erp import realtime
 		captured = {}
 		def fake(event, payload, **kwargs):

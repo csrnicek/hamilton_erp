@@ -24,7 +24,6 @@ from frappe.tests import IntegrationTestCase
 from hamilton_erp import api
 from hamilton_erp.patches.v0_1 import seed_hamilton_env
 
-
 # Must match the ``.hamilton-status-*`` classes defined in
 # ``hamilton_erp/public/css/asset_board.css`` lines 83-87.
 EXPECTED_CSS_CLASSES = {

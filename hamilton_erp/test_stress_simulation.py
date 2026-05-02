@@ -37,7 +37,6 @@ from hamilton_erp import lifecycle
 from hamilton_erp.locks import LockContentionError, asset_status_lock
 from hamilton_erp.patches.v0_1 import seed_hamilton_env
 
-
 # ---------------------------------------------------------------------------
 # Helpers — mirror the test_e2e_phase1.py style.
 # ---------------------------------------------------------------------------

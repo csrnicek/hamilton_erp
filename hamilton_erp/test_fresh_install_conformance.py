@@ -42,7 +42,6 @@ from hamilton_erp.patches.v0_1.seed_hamilton_env import (
 	HAMILTON_RETAIL_ITEMS,
 )
 
-
 # ---------------------------------------------------------------------------
 # ERPNext root records (created by setup/install.py:_ensure_erpnext_prereqs)
 # ---------------------------------------------------------------------------

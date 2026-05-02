@@ -14,21 +14,21 @@ from __future__ import annotations
 
 import re
 import uuid
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from hypothesis import given, settings, assume, HealthCheck
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from hamilton_erp.lifecycle import (
 	_next_session_number,
+	mark_asset_clean,
+	return_asset_to_service,
+	set_asset_out_of_service,
 	start_session_for_asset,
 	vacate_session,
-	mark_asset_clean,
-	set_asset_out_of_service,
-	return_asset_to_service,
 )
 
 OPERATOR = "Administrator"

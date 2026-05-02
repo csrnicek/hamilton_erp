@@ -25,19 +25,15 @@ Categories:
 """
 from __future__ import annotations
 
-import time
-import unittest
 import uuid
 from unittest.mock import MagicMock, patch
 
 import frappe
 import pymysql.err
 from frappe.tests import IntegrationTestCase
-from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
 from hamilton_erp.lifecycle import (
-    VALID_TRANSITIONS,
     mark_asset_clean,
     return_asset_to_service,
     set_asset_out_of_service,

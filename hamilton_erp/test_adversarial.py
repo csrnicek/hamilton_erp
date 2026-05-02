@@ -21,7 +21,6 @@ Usage:
       --app hamilton_erp --module hamilton_erp.test_adversarial
 """
 import json
-import os
 import uuid
 from datetime import datetime
 
@@ -29,7 +28,7 @@ import frappe
 from frappe.tests import IntegrationTestCase
 
 from hamilton_erp import lifecycle
-from hamilton_erp.locks import LockContentionError, LOCK_TTL_MS, asset_status_lock
+from hamilton_erp.locks import LOCK_TTL_MS, LockContentionError, asset_status_lock
 
 # ---------------------------------------------------------------------------
 # Crash reporter — collects pass/crash per attack ID for post-run summary
@@ -547,8 +546,9 @@ class TestFamilyC_SessionSequenceAttacks(IntegrationTestCase):
 	def test_c05_redis_failure_raises_validation_error(self):
 		attack_id = "C05"
 		try:
-			import redis as redis_lib
 			from unittest.mock import patch
+
+			import redis as redis_lib
 
 			with patch.object(
 				frappe.cache(), "get",

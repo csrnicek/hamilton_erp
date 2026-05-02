@@ -1,6 +1,6 @@
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import today, now_datetime
+from frappe.utils import now_datetime, today
 
 
 class TestCashReconciliation(IntegrationTestCase):

@@ -1,6 +1,6 @@
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import today, now_datetime, add_to_date
+from frappe.utils import add_to_date, now_datetime, today
 
 
 class TestShiftRecord(IntegrationTestCase):

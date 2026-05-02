@@ -1,7 +1,6 @@
 """Install and migrate hooks for the Hamilton ERP app."""
 
 import frappe
-from frappe import _
 from frappe.utils import flt
 
 

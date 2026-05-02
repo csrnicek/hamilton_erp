@@ -29,7 +29,6 @@ from __future__ import annotations
 import time
 import uuid
 from collections import Counter
-from datetime import date as date_cls
 
 import frappe
 from frappe.tests import IntegrationTestCase

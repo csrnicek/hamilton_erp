@@ -22,16 +22,14 @@ from frappe.utils import now_datetime
 
 from hamilton_erp import lifecycle
 from hamilton_erp.lifecycle import (
-	WALKIN_CUSTOMER,
 	VACATE_DISCOVERY,
 	mark_asset_clean,
+	return_asset_to_service,
+	set_asset_out_of_service,
 	start_session_for_asset,
 	vacate_session,
-	set_asset_out_of_service,
-	return_asset_to_service,
 )
-from hamilton_erp.locks import LOCK_TTL_MS, LockContentionError, asset_status_lock
-
+from hamilton_erp.locks import LOCK_TTL_MS, asset_status_lock
 
 # ---------------------------------------------------------------------------
 # Shared helpers

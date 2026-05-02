@@ -18,22 +18,17 @@ from __future__ import annotations
 
 import unittest
 import uuid
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import frappe
 from frappe.tests import IntegrationTestCase
 from frappe.utils import now_datetime
 
-from hamilton_erp import lifecycle
 from hamilton_erp.lifecycle import (
-	VALID_TRANSITIONS,
 	mark_asset_clean,
-	return_asset_to_service,
-	set_asset_out_of_service,
 	start_session_for_asset,
 	vacate_session,
 )
-from hamilton_erp.locks import LockContentionError, asset_status_lock
 
 OPERATOR = "Administrator"
 
@@ -448,7 +443,6 @@ class TestVenueSessionControllerAudit(IntegrationTestCase):
 		leaves it alone. Covers the `if not self.session_number` guard
 		in venue_session.py:28.
 		"""
-		from datetime import datetime
 		year, month, day = frappe.utils.nowdate().split("-")
 		prefix = f"{int(day)}-{int(month)}-{int(year)}"
 		explicit = f"{prefix}---9998"
