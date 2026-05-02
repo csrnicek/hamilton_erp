@@ -176,8 +176,10 @@ class TestStressConcurrentAssign(IntegrationTestCase):
 		errors = []
 		t1 = threading.Thread(target=self._attempt_assign, args=("Administrator", results, errors))
 		t2 = threading.Thread(target=self._attempt_assign, args=("Administrator", results, errors))
-		t1.start(); t2.start()
-		t1.join(); t2.join()
+		t1.start()
+		t2.start()
+		t1.join()
+		t2.join()
 
 		self.assertEqual(
 			results["success"], 1,
