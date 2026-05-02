@@ -42,17 +42,21 @@ _TIP_PULL_NEGATIVE_WARN_THRESHOLD = -50.0
 
 class CashDrop(Document):
 	def before_insert(self):
-		"""Set tip_pull_currency from the venue's per-venue config.
+		"""Resolve tip_pull_currency from the venue's per-venue config.
 
 		Multi-venue feature flag `frappe.conf.anvil_currency` is the canonical
 		per-venue currency identifier (per docs/venue_rollout_playbook.md
-		Phase B + DEC-064). When unset (e.g. during testing or pre-Phase-2
-		venues), the JSON-default of "CAD" applies.
+		Phase B + DEC-064). Resolution order:
+		1. Caller passed an explicit value → keep it.
+		2. `frappe.conf.anvil_currency` is set → use that.
+		3. Otherwise → fall back to "CAD" (Hamilton's currency).
+
+		No JSON `default` is set on this field, because Frappe applies static
+		JSON defaults during Document.__init__ — that would shadow this hook
+		and pin the field to "CAD" before we ever read the conf.
 		"""
 		if not self.tip_pull_currency:
-			venue_currency = frappe.conf.get("anvil_currency")
-			if venue_currency:
-				self.tip_pull_currency = venue_currency
+			self.tip_pull_currency = frappe.conf.get("anvil_currency") or "CAD"
 
 	def validate(self):
 		self._set_timestamp()

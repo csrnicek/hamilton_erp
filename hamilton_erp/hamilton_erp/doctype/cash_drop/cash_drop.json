@@ -135,7 +135,7 @@
    "label": "Tip Pull Amount"
   },
   {
-   "description": "Currency of the tip pull. Defaults to CAD for Hamilton; controller overrides from frappe.conf.anvil_currency for other venues (Philadelphia/DC/Dallas = USD).",
+   "description": "Currency of the tip pull. Set by the controller's before_insert hook from frappe.conf.anvil_currency (Philadelphia/DC/Dallas = USD), falling back to CAD for Hamilton. No JSON default — Frappe applies static JSON defaults during Document.__init__, which would mask the venue-aware logic in before_insert.",
    "fieldname": "tip_pull_currency",
    "fieldtype": "Link",
    "label": "Tip Pull Currency",
