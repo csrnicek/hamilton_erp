@@ -74,11 +74,15 @@ Specific enough that Claude Code can follow it autonomously.
    ```
    (Fixtures declared in `hooks.py` are synced automatically during migrate.)
 
-8. Run seed data patch to create venue assets:
+8. (Optional re-seed) The seed patch already ran automatically during step 6's `bench migrate` (it's registered in `patches.txt` under `[post_model_sync]`). The block below is **only** for re-running the seed on an already-migrated site (e.g. after wiping seeded records by hand for testing). For a fresh deploy, skip this step — step 6 already did it.
+
    ```bash
-   bench --site {site} execute hamilton_erp.patches.seed_hamilton_env.execute
+   bench --site {site} execute hamilton_erp.patches.v0_1.seed_hamilton_env.execute
    ```
-   This creates:
+
+   Note the dotted path includes `v0_1` — the patches module is namespaced by version, and `hamilton_erp.patches.seed_hamilton_env.execute` (without `v0_1`) **does NOT resolve and will error out**. The correct path matches the entry in `patches.txt`.
+
+   The seed creates:
    - 59 Venue Assets (26 rooms + 33 lockers) — or venue-specific count if customized
    - Walk-in Customer record
    - Hamilton Settings singleton with defaults
