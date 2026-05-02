@@ -65,6 +65,7 @@ class TestZeroValueInvoiceSubmission(IntegrationTestCase):
 			"item_code": _TEST_ITEM_CODE,
 			"item_name": "Test Zero-Value Comp Admission",
 			"item_group": "All Item Groups",
+			"stock_uom": "Nos",  # Frappe Item.stock_uom is mandatory even for service items
 			"is_stock_item": 0,  # Service item — no stock ledger impact
 			"include_item_in_manufacturing": 0,
 			"standard_rate": 0,
