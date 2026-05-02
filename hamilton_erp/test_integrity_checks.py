@@ -9,7 +9,7 @@ seed data. Each test creates its own fixtures and tearDown rolls back.
 
 import frappe
 from frappe.tests import IntegrationTestCase
-from frappe.utils import today, now_datetime
+from frappe.utils import add_days, today
 
 from hamilton_erp.integrity_checks import (
 	find_orphan_sales_invoices,
@@ -57,6 +57,68 @@ class TestOrphanInvoiceDetection(IntegrationTestCase):
 		"""Sanity: DEFAULT_ALERT_THRESHOLD is 0 — alerts on every orphan
 		until a venue manually raises it via Hamilton Settings."""
 		self.assertEqual(DEFAULT_ALERT_THRESHOLD, 0.0)
+
+	def test_window_is_pure_yesterday_not_yesterday_plus_today(self):
+		"""Issue A pin: the orphan scan window must be yesterday's calendar
+		date only — equality match — not a 24h-rolling range that would
+		also include today's still-open invoices.
+
+		Behaviour we're locking in:
+		  * cutoff value passed into the SQL is yesterday's DATE (not a
+		    "now - 24h" datetime), so an SI with posting_date == today
+		    cannot match — even if it's docstatus=1, is_pos=1, and has no
+		    POS Invoice Reference.
+		  * SQL clause uses ``si.posting_date = %s``, not ``>= %s`` —
+		    a range comparison would re-introduce the false-positive
+		    behaviour we're fixing.
+
+		Implemented as a SQL-introspection test rather than a real-fixture
+		test because the broader real-fixture orphan/non-orphan coverage
+		(Issue B in PR review) is deferred to Phase 2 — see TODO at the
+		top of integrity_checks.py.
+		"""
+		captured = {}
+
+		def fake_sql(query, values=None, *args, **kwargs):
+			# Frappe's frappe.db.sql signature is (query, values, ...).
+			# Capture both for assertion.
+			captured["query"] = query
+			captured["values"] = values
+			return []
+
+		original_sql = frappe.db.sql
+		frappe.db.sql = fake_sql
+		try:
+			find_orphan_sales_invoices(threshold=0)
+		finally:
+			frappe.db.sql = original_sql
+
+		# 1. Cutoff value is yesterday's calendar date, not a datetime.
+		self.assertIn("query", captured,
+			"frappe.db.sql was not invoked — find_orphan_sales_invoices "
+			"may have short-circuited before issuing its query.")
+		yesterday = add_days(today(), -1)
+		cutoff_param = captured["values"][0]
+		self.assertEqual(
+			str(cutoff_param), str(yesterday),
+			f"find_orphan_sales_invoices passed cutoff={cutoff_param!r}; "
+			f"expected yesterday {yesterday!r}. A different cutoff would "
+			"either re-include today's not-yet-closed invoices "
+			"(false positives) or miss yesterday's orphans entirely.",
+		)
+
+		# 2. SQL filter uses equality on posting_date, not >=.
+		normalized_query = " ".join(captured["query"].split())
+		self.assertIn(
+			"si.posting_date = %s", normalized_query,
+			"SQL must use equality on posting_date for a pure-yesterday "
+			f"window. Saw: {normalized_query[:200]}",
+		)
+		self.assertNotIn(
+			"si.posting_date >= %s", normalized_query,
+			"SQL still uses >= on posting_date — a range comparison "
+			"re-introduces today's invoices as false-positive orphans.",
+		)
 
 	def test_daily_orphan_check_handles_zero_orphans_silently(self):
 		"""Happy-path: when there are no orphans, daily_orphan_check returns

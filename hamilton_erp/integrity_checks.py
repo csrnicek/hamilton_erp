@@ -2,7 +2,7 @@
 would otherwise sit invisible in the database.
 
 Phase 1 Task 35 (BLOCKER) — Post-close orphan-invoice integrity check.
-Detects Sales Invoices submitted in the past 24h that are NOT linked to any
+Detects Sales Invoices on yesterday's posting_date that are NOT linked to any
 POS Closing Entry. Without this check, network blips, browser tab crashes,
 or POS Closing Entry generation bugs (e.g. G-002 deferred-stock-validation
 in `docs/research/erpnext_pos_business_process_gotchas.md`) can leave
@@ -27,7 +27,7 @@ Reference:
 """
 
 import frappe
-from frappe.utils import flt, get_datetime, now_datetime, add_days
+from frappe.utils import add_days, flt, today
 
 
 # Threshold below which orphans don't trigger a notification (just log).
@@ -36,18 +36,42 @@ from frappe.utils import flt, get_datetime, now_datetime, add_days
 DEFAULT_ALERT_THRESHOLD = 0.0
 
 
-def find_orphan_sales_invoices(hours_lookback: int = 24, threshold: float | None = None) -> list[dict]:
-	"""Return submitted Sales Invoices in the past `hours_lookback` hours
-	that are NOT linked to any POS Closing Entry.
+# TODO(phase-2): Real-fixture SQL coverage for find_orphan_sales_invoices.
+# Tests today verify wrapper behaviour (threshold pass-through, error
+# swallowing, hooks registration, yesterday-only window via SQL inspection)
+# but do NOT exercise the JOIN + orphan condition end-to-end. A proper
+# Phase 2 test pair would:
+#   (a) create a Sales Invoice with is_pos=1, docstatus=1, no
+#       `POS Invoice Reference` row, posting_date=yesterday → must surface,
+#   (b) create a Sales Invoice with the same fields but linked via a
+#       `POS Invoice Reference` row → must NOT surface.
+# Deferred because the fixture chain (Customer/Item/Company/Currency) is
+# the same one that hit PR #123. Address it after the test-helper /
+# fixture work that PR #123 surfaced is sorted out.
+
+
+def find_orphan_sales_invoices(threshold: float | None = None) -> list[dict]:
+	"""Return submitted Sales Invoices on YESTERDAY's posting_date that
+	are NOT linked to any POS Closing Entry.
+
+	Window: pure yesterday (calendar day in the site's timezone — Frappe's
+	daily scheduler fires when local-midnight rolls over, so by the time
+	this runs, "yesterday" is a complete day whose POS Close has already
+	happened). This deliberately excludes today's still-open shift, where
+	invoices haven't been linked to a closing entry yet and would surface
+	as false positives every run.
+
+	Trade-off: orphans from days *before* yesterday are NOT caught by a
+	single run. If the scheduler was down for multiple days, only the
+	most-recent yesterday is scanned at next fire. A multi-day catch-up
+	is a Phase 2 follow-up if it ever becomes a real failure mode.
 
 	Args:
-		hours_lookback: How far back to scan. Default 24h matches the daily
-			scheduler cadence; longer values catch orphans that older runs
-			missed (e.g. when the scheduler itself was down).
-		threshold: Minimum grand_total to include. Orphans below this amount
-			are silently dropped (NOT included in the returned list). When
-			None, reads from Hamilton Settings `orphan_check_alert_threshold_amount`
-			or falls back to DEFAULT_ALERT_THRESHOLD.
+		threshold: Minimum grand_total to include. Orphans below this
+			amount are silently dropped (NOT included in the returned
+			list). When None, reads from Hamilton Settings
+			`orphan_check_alert_threshold_amount` or falls back to
+			DEFAULT_ALERT_THRESHOLD.
 
 	Returns:
 		List of dicts: [{name, grand_total, owner, posting_date, ...}]
@@ -61,16 +85,11 @@ def find_orphan_sales_invoices(hours_lookback: int = 24, threshold: float | None
 			) or DEFAULT_ALERT_THRESHOLD
 		)
 
-	# Window: now - hours_lookback hours. We compare against `posting_date`
-	# (a Date) rather than `creation` (a Datetime) because Hamilton's daily
-	# scheduler runs once per day and we want to catch yesterday's orphans
-	# even when the run fires after the calendar day rolls over.
-	cutoff = add_days(get_datetime(now_datetime()), -1)
+	# Pure-yesterday window. `today()` honours the site's timezone, so on
+	# Hamilton's EST/EDT site the comparison is against the calendar
+	# yesterday Hamilton operators just lived through.
+	yesterday = add_days(today(), -1)
 
-	# Find every submitted Sales Invoice whose posting_date is on/after
-	# the cutoff AND that does NOT appear in any POS Closing Entry's
-	# pos_transactions child table.
-	#
 	# Implementation note: ERPNext's POS Closing Entry uses the
 	# `POS Invoice Reference` child table (or in older versions
 	# `POS Closing Entry Detail`) to list invoices in the closing batch.
@@ -78,8 +97,8 @@ def find_orphan_sales_invoices(hours_lookback: int = 24, threshold: float | None
 	# parent = the POS Closing Entry name and pos_invoice = the SI name.
 	#
 	# The orphan condition: SI is submitted (docstatus=1), is_pos=1, and
-	# no `POS Invoice Reference` row exists pointing at it. We use a
-	# parameterized SQL query with %s placeholders per coding_standards.md.
+	# no `POS Invoice Reference` row exists pointing at it. Parameterized
+	# SQL with %s placeholders per coding_standards.md.
 	rows = frappe.db.sql(
 		"""
 		SELECT si.name, si.grand_total, si.owner, si.posting_date,
@@ -89,12 +108,12 @@ def find_orphan_sales_invoices(hours_lookback: int = 24, threshold: float | None
 		  ON pir.pos_invoice = si.name
 		WHERE si.docstatus = 1
 		  AND si.is_pos = 1
-		  AND si.posting_date >= %s
+		  AND si.posting_date = %s
 		  AND pir.name IS NULL
 		  AND si.grand_total >= %s
-		ORDER BY si.posting_date DESC, si.creation DESC
+		ORDER BY si.creation DESC
 		""",
-		(cutoff, threshold),
+		(yesterday, threshold),
 		as_dict=True,
 	)
 	return list(rows)
@@ -131,7 +150,7 @@ def daily_orphan_check():
 	# an email to subscribers of "Hamilton Manager" / "Hamilton Admin" roles.
 	subject = (
 		f"⚠️ Hamilton: {len(orphans)} orphan invoice"
-		f"{'s' if len(orphans) != 1 else ''} detected (past 24h)"
+		f"{'s' if len(orphans) != 1 else ''} detected (yesterday)"
 	)
 	body_lines = [
 		f"The daily integrity check found {len(orphans)} submitted POS Sales "
