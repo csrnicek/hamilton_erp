@@ -689,13 +689,13 @@ Ranked by ROI:
 
 ## Bugs to fix
 
-1. **RTS modal shows "Reason unknown"** — OOS reason captured at SET OOS isn't read back on Return-to-Service. Same root cause likely affects asset-record persistence. Repro: OOS L029 with "Lock or Hardware" → click L029 → modal shows "Reason unknown" instead.
+1. ✅ DONE — **RTS modal shows "Reason unknown"** — OOS reason captured at SET OOS isn't read back on Return-to-Service. Same root cause likely affects asset-record persistence. Repro: OOS L029 with "Lock or Hardware" → click L029 → modal shows "Reason unknown" instead. **Resolved by PR #35** (merged 2026-04-29) — `get_asset_board_data` now includes `reason` in the field list. The 2026-04-29 audit verification entry below also confirms persistence works correctly.
 
-2. **RTS modal "SET" line missing timestamp** — shows "by Administrator" but should match OOS audit format ("by ADMINISTRATOR at HH:MM AM/PM").
+2. ⏳ OPEN — **RTS modal "SET" line missing timestamp** — shows "by Administrator" but should match OOS audit format ("by ADMINISTRATOR at HH:MM AM/PM").
 
-3. **Watch tab missing active-state styling** — selected tab looks identical whether on it or not. Other tabs invert correctly.
+3. ⏳ OPEN — **Watch tab missing active-state styling** — selected tab looks identical whether on it or not. Other tabs invert correctly.
 
-4. **No "dirty since X minutes" timer on dirty tiles** — V9 spec wanted this for cleaner prioritization. Missing on both lockers and rooms.
+4. ✅ DONE — **No "dirty since X minutes" timer on dirty tiles** — V9 spec wanted this for cleaner prioritization. Missing on both lockers and rooms. **Logged as A29-5** in `decisions_log.md` and implemented; tests pin it at `test_asset_board_rendering.py:927-946` (`test_dirty_tiles_render_elapsed_timer`, `test_css_styles_dirty_elapsed_timer`).
 
 ## Decisions to log in decisions_log.md
 
