@@ -52,7 +52,7 @@ The test suite has a documented baseline of pre-existing failures (Payment Gatew
 | [`docs/coding_standards.md`](docs/coding_standards.md) | Code conventions; especially §13 on locking discipline |
 | [`docs/lessons_learned.md`](docs/lessons_learned.md) | Recurring-failure catalogue (LL-001 through LL-032+) |
 | [`docs/RUNBOOK.md`](docs/RUNBOOK.md) | Operational incident response, routine ops |
-| [`docs/api_reference.md`](docs/api_reference.md) | Public API surface — 7 whitelisted endpoints |
+| [`docs/api_reference.md`](docs/api_reference.md) | Public API surface — 8 whitelisted endpoints |
 | [`docs/permissions_matrix.md`](docs/permissions_matrix.md) | DocType-level role permissions, sensitive fields list |
 | [`docs/testing_guide.md`](docs/testing_guide.md) | 4 levels of testing + which to run when |
 | [`docs/build_phases.md`](docs/build_phases.md) | Phase 1 / 2 / 3 / 4 plan |
@@ -69,7 +69,7 @@ The test suite has a documented baseline of pre-existing failures (Payment Gatew
            │                                  │
 ┌──────────┴────────────────────┐  ┌──────────┴────────────────────┐
 │  hamilton_erp.api             │  │  hamilton_erp.realtime        │
-│  (7 whitelisted endpoints)    │  │  (site-wide broadcast)        │
+│  (8 whitelisted endpoints)    │  │  (site-wide broadcast)        │
 └──────────┬────────────────────┘  └────────────────────────────────┘
            │
            ▼
