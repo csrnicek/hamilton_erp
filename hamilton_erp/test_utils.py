@@ -77,7 +77,7 @@ class TestGetCurrentShiftRecord(IntegrationTestCase):
 
 	def test_returns_most_recent_when_multiple_open(self):
 		"""Returns the most recent Open shift when multiple exist."""
-		older = _make_shift(status="Open")
+		_make_shift(status="Open")  # older shift — fixture-only, return value unused
 		# Ensure the second shift has a later shift_start
 		import time
 		time.sleep(0.01)

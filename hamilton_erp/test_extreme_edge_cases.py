@@ -308,7 +308,6 @@ class TestRedisProductionFailures(IntegrationTestCase):
         a 48h TTL for garbage collection.
         """
         from hamilton_erp.lifecycle import _SESSION_KEY_TTL_MS
-        cache = frappe.cache()
         # Verify TTL constant is reasonable (48 hours = 172800000ms)
         self.assertGreater(_SESSION_KEY_TTL_MS, 0)
         self.assertLessEqual(_SESSION_KEY_TTL_MS, 172800000,
