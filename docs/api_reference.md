@@ -1,7 +1,7 @@
 # Hamilton ERP — API Reference
 
 **Audience:** Frontend developers integrating with the Asset Board, integration partners, and senior contractors auditing the public surface.
-**Scope:** Every `@frappe.whitelist()` endpoint in `hamilton_erp/api.py`. As of 2026-04-30 (main branch), 7 endpoints. Phase 2 / V9.1 cart work in PR #51 will add `submit_retail_sale` and may reintroduce bulk endpoints — this file must be updated in the same PR that lands them.
+**Scope:** Every `@frappe.whitelist()` endpoint in `hamilton_erp/api.py`. As of 2026-05-01 (main branch), **8 endpoints** — PR #51 added `submit_retail_sale` (cart → POS Sales Invoice) on 2026-04-30. The bulk `mark_all_clean_*` endpoints were removed and stay removed per `docs/decisions_log.md` "A29-1 Bulk 'Mark All Clean' feature REMOVED."
 **Source of truth:** `hamilton_erp/api.py`. When this doc and the code disagree, the code wins; update this doc to match.
 
 ---
@@ -250,6 +250,56 @@ Frappe wraps unhandled exceptions in `{"exc_type": "...", "exception": "...", "_
 **Phase 2 plan:** Will create a Venue Session linked to both the Sales Invoice and the asset, transitioning the asset Available → Occupied. The operator UX of "scan QR → confirm payment → assign locker" routes through this method post-Phase-2.
 
 **For now:** Treat as not-implemented. Calls return Frappe's not-yet-implemented exception; do not document as a usable endpoint to integration partners.
+
+---
+
+### `submit_retail_sale` (POST)
+
+**Purpose:** Create and submit a POS Sales Invoice from the cart drawer (V9.1-D8 cart UX). Called by `_open_cash_payment_modal` in `asset_board.js` when the operator confirms payment. Shipped 2026-04-30 in PR #51 (V9.1 Phase 2 cart → POS Sales Invoice with QBO-mirrored accounting seed).
+
+**Permissions (delegated capability model):**
+- Caller must hold a Hamilton role (Hamilton Operator / Hamilton Manager / Hamilton Admin) OR System Manager / Administrator. Enforced by `_check_retail_sale_permission`.
+- The Sales Invoice itself is created with `ignore_permissions=True` because Hamilton Operator does not have direct Sales Invoice perms by design — direct write would bypass the constrained cart UX and the blind-cash invariants. **The cart IS the only legitimate write surface; the role gate is the only authorization check.**
+
+**Args:**
+- `items` (list of objects, required) — cart lines, each `{item_code: str, qty: int, unit_price: float}`. Accepted as a JSON-encoded string (frappe.xcall serializes lists over the wire) or as a list. **`unit_price` is validated server-side against `Item.standard_rate` (within $0.01 tolerance); mismatches raise ValidationError to defeat client-side price tampering.** The rate written to the Sales Invoice is always the server-side value.
+- `cash_received` (Currency, required) — must be ≥ the rounded total. Change is computed and returned. Negative values rejected.
+- `payment_method` (string, optional, default `"Cash"`) — `"Cash"` or `"Card"`. **Card raises ValidationError today** ("Card payments are Phase 2 next iteration; not yet implemented"). The argument exists now so the rounding contract is stable across phases — `_should_round_to_nickel` gates rounding by payment method, and Card is intentionally not yet wired.
+
+**Returns:**
+```json
+{
+  "sales_invoice": "ACC-SINV-...",
+  "grand_total": 11.30,           // pre-rounding total (HST included)
+  "rounded_total": 11.30,         // what the customer actually pays
+  "rounding_adjustment": 0.0,     // rounded_total - grand_total
+  "change": 8.70                  // cash_received - rounded_total
+}
+```
+
+**Canadian penny-elimination rounding (2013):**
+- Cash sales round the post-tax `grand_total` to the nearest 5¢. HST is computed first on the unrounded subtotal; the `rounding_adjustment` posts as a separate GL entry to `Company.round_off_account` (DEC-038 + Canadian nickel rule + CLAUDE.md "CAD nickel rounding is site-global").
+- Card sales settle to the exact cent (`disable_rounded_total=1`). Tap-to-pay = Card per V9.1-D14.
+
+**Pre-submit guards (in order):**
+1. Hamilton role check — raises PermissionError if caller has no Hamilton role.
+2. `payment_method` check — raises ValidationError on unknown method or `Card`.
+3. Cart shape — raises ValidationError on empty cart or non-list items.
+4. `cash_received >= 0` — raises ValidationError on negative.
+5. POS Profile `Hamilton Front Desk` exists — raises ValidationError if not (operator instructed to run `bench migrate`).
+6. Walk-in customer exists (configurable per venue via `frappe.conf.hamilton_walkin_customer`).
+7. Per-item rate validation against `Item.standard_rate` — raises ValidationError on mismatch.
+8. Pre-submit stock check via `Bin.actual_qty` — produces clean operator errors for "cart has more than stock." True concurrent last-unit races still surface as raw ERPNext stock-ledger errors on the second submit; Hamilton is single-operator most of the time so this gap is accepted.
+
+**Stock impact:** Sales Invoice is created with `is_pos=1, update_stock=1` so submission auto-creates the Stock Ledger Entry that decrements warehouse stock on the Hamilton warehouse.
+
+**Raises:**
+- `PermissionError` — caller lacks any Hamilton role.
+- `ValidationError` — empty cart, `cash_received < amount due`, unknown item, rate mismatch, insufficient stock, unsupported `payment_method`, `payment_method="Card"` (Phase 2 not yet shipped), POS Profile or Walk-in customer missing.
+
+**Source:** `hamilton_erp/api.py:404` (`submit_retail_sale`).
+
+**Tests:** `hamilton_erp/test_retail_sales_invoice.py` — 18 tests covering 9 seed-verification + 9 end-to-end submit_retail_sale flow + 10 adversarial tests (rounding gates, permission elevation, stock pre-checks).
 
 ---
 
