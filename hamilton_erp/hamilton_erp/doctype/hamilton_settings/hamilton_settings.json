@@ -18,6 +18,7 @@
   "grace_minutes",
   "column_break_thresholds",
   "assignment_timeout_minutes",
+  "orphan_check_alert_threshold_amount",
   "section_asset_board",
   "show_waitlist_tab",
   "column_break_asset_board",
@@ -100,6 +101,13 @@
    "fieldname": "assignment_timeout_minutes",
    "fieldtype": "Int",
    "label": "Assignment Timeout (Minutes)"
+  },
+  {
+   "default": "0",
+   "description": "Task 35 — Daily orphan-invoice integrity check threshold. Submitted POS Sales Invoices below this amount are silently skipped (no alert) when found unlinked to any POS Closing Entry. Default 0 alerts on every orphan; raise to e.g. 5.00 if noise becomes a problem in practice. See hamilton_erp/integrity_checks.py.",
+   "fieldname": "orphan_check_alert_threshold_amount",
+   "fieldtype": "Currency",
+   "label": "Orphan Invoice Alert Threshold"
   },
   {
    "fieldname": "section_asset_board",

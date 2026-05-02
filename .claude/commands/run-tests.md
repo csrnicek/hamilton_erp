@@ -18,6 +18,7 @@
 # (test_e2e_phase1 added 2026-04-28 (Tasks 22-24) — H10 Vacate/Turnover, H11 OOS, H12 Occupied-rejection E2E with real Asset Status Log audit trail.)
 # (test_retail_sales_invoice added 2026-04-30 — V9.1 Phase 2 cart → POS Sales Invoice flow + accounting seed verification.)
 # (test_zero_value_invoice added 2026-05-01 — Task 36 Phase 1 BLOCKER regression pin: ERPNext v16 must accept zero-grand_total Sales Invoices for the comp admission flow.)
+# (test_integrity_checks added 2026-05-01 — Task 35 Phase 1 BLOCKER daily orphan-invoice check (G-023 G-002 mitigation).)
 # For autonomous fixing of failures use /fix-and-test instead.
 
 cd ~/frappe-bench-hamilton && source env/bin/activate && \
@@ -38,4 +39,5 @@ cd ~/frappe-bench-hamilton && source env/bin/activate && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_hypothesis && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_e2e_phase1 && \
   ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_retail_sales_invoice && \
-  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_zero_value_invoice
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_zero_value_invoice && \
+  ~/.pyenv/versions/3.11.9/bin/bench --site hamilton-unit-test.localhost run-tests --app hamilton_erp --module hamilton_erp.test_integrity_checks

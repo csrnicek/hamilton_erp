@@ -88,9 +88,17 @@ doc_events = {
 # operationally bounded by shift length, so 24h is generous. Wraps in
 # try/except + Error Log per the Tier-1 audit requirement that scheduled
 # jobs surface failures rather than silently logging "Success".
+#
+# `daily_orphan_check` (Task 35 — Phase 1 BLOCKER, integrity_checks.py)
+# scans for submitted POS Sales Invoices in the past 24h that aren't
+# linked to any POS Closing Entry. When orphans exist, emits an email
+# to Hamilton Manager + Admin role-holders + writes a logger.warning.
+# Wrapped in try/except per Tier-1 audit — scheduler errors must NOT
+# silently terminate the job.
 
 scheduler_events = {
 	"daily": [
 		"hamilton_erp.api.purge_old_idempotency_records",
+		"hamilton_erp.integrity_checks.daily_orphan_check",
 	],
 }
