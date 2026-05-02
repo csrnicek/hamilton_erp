@@ -84,6 +84,7 @@ class TestZeroValueInvoiceSubmission(IntegrationTestCase):
 			"customer_type": "Individual",
 			"customer_group": "Individual",  # Leaf group; "All Customer Groups" is the root (is_group=1) and rejected
 			"territory": "All Territories",
+			"default_currency": "CAD",  # Match Club Hamilton; avoids INR→CAD exchange-rate lookup on the SI
 		})
 		customer.insert(ignore_permissions=True)
 		return _TEST_CUSTOMER
