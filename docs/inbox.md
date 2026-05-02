@@ -699,10 +699,10 @@ Ranked by ROI:
 
 ## Decisions to log in decisions_log.md
 
-- **Tab badge = Available count only** (sellable now). Verified consistent across Lockers, Single, Double, GH Room.
-- **Watch badge = OT + OOS combined** (everything needing attention).
-- **Watch tab grouping by sub-category subtitles** (e.g. "Single Standard 4") — extends to all tabs per earlier V9.1 amendment discussion.
-- **Header PM SHIFT + ADMINISTRATOR are read-only** by design. Shift change / logout live on dedicated pages, not header.
+- ✅ DONE — **Tab badge = Available count only** (sellable now). Verified consistent across Lockers, Single, Double, GH Room. Logged as **A29-2** in `decisions_log.md`.
+- ✅ DONE — **Watch badge = OT + OOS combined** (everything needing attention). Logged as **A29-3** in `decisions_log.md`.
+- ⏳ OPEN — **Watch tab grouping by sub-category subtitles** (e.g. "Single Standard 4") — extends to all tabs per earlier V9.1 amendment discussion. Not yet logged in `decisions_log.md`; needs Chris confirmation of scope (Watch tab only vs. all tabs) before adding amendment.
+- ✅ DONE — **Header PM SHIFT + ADMINISTRATOR are read-only** by design. Shift change / logout live on dedicated pages, not header. Logged as **A29-4** in `decisions_log.md`.
 
 ## Minor
 
