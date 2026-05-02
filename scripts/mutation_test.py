@@ -13,10 +13,9 @@ Usage:
 """
 import os
 import re
+import shutil
 import subprocess
 import sys
-import shutil
-import tempfile
 from pathlib import Path
 
 # Derive paths from this script's location:
@@ -111,7 +110,7 @@ def main():
 	skipped = 0
 	survivors = []
 
-	print(f"Hamilton ERP Mutation Testing")
+	print("Hamilton ERP Mutation Testing")
 	print(f"Targets: {', '.join(TARGETS)}")
 	print(f"Mutations: {len(MUTATIONS)}")
 	print(f"Test modules: {len(TEST_MODULES)}")
@@ -135,14 +134,14 @@ def main():
 		applied, original = apply_mutation(filepath, pattern, replacement)
 
 		if not applied:
-			print(f"  SKIPPED (pattern not found)")
+			print("  SKIPPED (pattern not found)")
 			skipped += 1
 			continue
 
 		try:
 			tests_pass = run_tests()
 		except subprocess.TimeoutExpired:
-			print(f"  TIMEOUT (killed — mutation caused infinite loop or hang)")
+			print("  TIMEOUT (killed — mutation caused infinite loop or hang)")
 			killed += 1
 			restore_file(filepath, original)
 			continue
@@ -150,11 +149,11 @@ def main():
 		restore_file(filepath, original)
 
 		if tests_pass:
-			print(f"  SURVIVED — tests did not catch this mutation!")
+			print("  SURVIVED — tests did not catch this mutation!")
 			survived += 1
 			survivors.append(description)
 		else:
-			print(f"  KILLED")
+			print("  KILLED")
 			killed += 1
 
 	print("\n" + "=" * 60)
