@@ -407,8 +407,10 @@ class TestStressCrossAssetIsolation(IntegrationTestCase):
 			threading.Thread(target=self._assign_one, args=(name, results, errors))
 			for name in self.asset_names
 		]
-		for t in threads: t.start()
-		for t in threads: t.join()
+		for t in threads:
+			t.start()
+		for t in threads:
+			t.join()
 		self.assertEqual(
 			results["success"], self.N_ASSETS,
 			f"Expected all {self.N_ASSETS} parallel assigns to succeed. "
