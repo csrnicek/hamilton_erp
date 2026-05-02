@@ -127,6 +127,25 @@ This file is **not** a lessons-learned log. The lessons file (`docs/lessons_lear
   - Tests confirming label content matches the 8 spec fields and prints reliably under simulated submit conditions
   - Operator-side error handling: if print fails, surface a clear blocker on the Cash Drop submit (operator cannot drop an unlabeled envelope into the safe).
 
+## R-013 — Deferred stock validation explodes at POS Closing when same-shift returns are batched
+
+- **Source:** Phase A research output (`docs/research/erpnext_pos_business_process_gotchas.md` G-002), surfaced in Task 29's morning brief on 2026-05-01 as "the single 'we wish we'd known' gotcha."
+- **Description:** ERPNext defers stock validation from Sales Invoice submit time to POS Closing Entry time. When a same-shift return is included in the batch (operator returns an item, then sells it again the same shift, or returns are processed alongside sales at end of shift), the deferred validator hits an inconsistency between the running stock ledger and the post-close ledger and rejects the entire POS Closing Entry. The pattern reported across at least 4 GitHub issues spanning ERPNext v13 → v16 (still open as of 2026-Q2): teams test in staging without same-shift returns, go live, hit it on day three, enable `Allow Negative Stock` as a workaround, forget to re-disable it, and two weeks later the stock ledger has sold more than was ever in the warehouse. The negative-stock workaround silently corrupts inventory accuracy.
+- **Hamilton's current exposure:** **Latent** — Phase 1 ships without any return/refund flow, so same-shift returns cannot occur. The bug is not currently triggerable. Risk activates the moment Phase 2 returns ship (Task 31 — cash-side refunds — is the entry point).
+- **Mitigation in place (Phase 1):** Phase 1 has no returns. The `Allow Negative Stock` setting on Hamilton sites is OFF and must stay OFF.
+- **Mitigation required (Phase 2 — when Task 31 ships):** Refund design must explicitly route AROUND this bug. Specifically, refunds must commit a Sales Invoice Return immediately (`update_stock = 1` at the time of refund), NEVER deferring stock impact to POS Closing Entry batch. Under no circumstances should `Allow Negative Stock` be turned on as a "fix." Task 31's design and test strategy already include this routing requirement. The first refund night after Phase 2 launch must explicitly verify: (a) refund created a paired SI Return, (b) stock ledger updated immediately, (c) end-of-shift POS Closing Entry submits without error.
+- **Why this is in the risk register, not just a gotcha:** Hamilton's monthly version pin process (per CLAUDE.md "Disable auto-upgrade on the production bench") could pull a v16 minor that has this bug fixed upstream, OR could pull one that worsens the workaround surface. The watch-points below define what to monitor.
+- **Severity:** **HIGH (latent — activates with Phase 2 returns).** When it fires, the symptom is a POS Closing Entry that won't submit during a busy shift's close-out. The wrong response (enable Allow Negative Stock) silently corrupts the stock ledger; the right response (route refunds with immediate stock update) requires architectural discipline.
+- **Watch points:**
+  - Monthly upgrade review (per CLAUDE.md cadence) checks for fixes to ERPNext Issues #54183 and #50787 (same family per R-010) AND for fixes to G-002 specifically in the version-16 backport list.
+  - Phase 2 Task 31 (cash-side refunds) MUST include a regression test verifying same-shift refund + sale combinations don't break POS Closing Entry submission.
+  - If Hamilton ever processes a same-shift return + sale combination and the closing fails, the FIRST response is NOT "enable Allow Negative Stock." Read this risk entry first.
+- **References:**
+  - G-002 in `docs/research/erpnext_pos_business_process_gotchas.md` — the field-research gotcha
+  - R-010 in this register — sibling risk on ERPNext v16 polish-wave fix cadence (Issues #54183, #50787)
+  - Task 31 — cash-side refunds (the design must route around this)
+  - `docs/design/refunds_phase2.md` — design intent doc captures the routing requirement (review-pending)
+
 ---
 
 ## Maintenance
