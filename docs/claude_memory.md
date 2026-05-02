@@ -134,9 +134,8 @@ during Phase 0 and Phase 1 development (2026-03 through 2026-04).
 12. **Redis lock key is asset-only: `hamilton:asset_lock:{asset_name}`.** Not asset+operation. One lock
     per asset regardless of what operation is being performed. TTL is 15 seconds (`LOCK_TTL_MS = 15_000`).
 
-13. **Deterministic lock ordering for bulk operations.** `_mark_all_clean(category)` sorts dirty assets
-    by name before iterating, preventing deadlocks when multiple operators trigger bulk clean simultaneously.
-    See coding_standards.md section 13.4.
+13. **Deterministic lock ordering for bulk operations** ⚠️ **OBSOLETE — bulk clean feature removed (2026-04-30 per A29-1 / DEC-054 reversal in `docs/decisions_log.md`).** The `_mark_all_clean(category)` function and the `mark_all_clean_rooms` / `mark_all_clean_lockers` whitelisted endpoints are deleted from `api.py`; the asset board now uses per-tile clean actions only. The deterministic-lock-ordering principle in `coding_standards.md` §13.4 still applies in spirit if any future bulk operation is reintroduced, but there is no current bulk-clean code path to enforce it on. Original entry preserved below for historical context only:
+    ~~`_mark_all_clean(category)` sorts dirty assets by name before iterating, preventing deadlocks when multiple operators trigger bulk clean simultaneously. See coding_standards.md section 13.4.~~
 
 14. **New assets must start as "Available".** Enforced by `venue_asset._validate_status_transition`.
     Walk-in customer fixture is required for session creation (DEC-055 section 1).
@@ -331,7 +330,7 @@ These items must all be complete before Phase 1 is marked done.
    - Tap the orange (Dirty) tile
    - Select "Mark Clean"
    - Tile turns green (Available)
-   - Or use "Mark All Clean" for bulk operations
+   - ~~Or use "Mark All Clean" for bulk operations~~ ⚠️ **REMOVED 2026-04-30** — bulk Mark All Clean feature deleted per A29-1 / DEC-054 reversal in `docs/decisions_log.md`. Per-tile clean is the only supported flow.
 
 6. Out of Service
    - Tap any tile -> "Set Out of Service"
@@ -430,7 +429,7 @@ Identified during a full source review. No changes made — these are future imp
 | File | Opportunity | Impact | Risk |
 |------|-------------|--------|------|
 | `lifecycle.py` | `_set_asset_status` does a second FOR UPDATE read that could be folded into the existing lock-body read | Medium | Medium |
-| `api.py` | `_mark_all_clean` fires N+1 realtime publishes (one `publish_status_change` per asset + one final `publish_board_refresh`) | Medium | Low |
+| ~~`api.py`~~ ⚠️ MOOT | ~~`_mark_all_clean` fires N+1 realtime publishes (one `publish_status_change` per asset + one final `publish_board_refresh`)~~ — function REMOVED 2026-04-30 per A29-1 / DEC-054 reversal | Medium | Low |
 
 ### Low Impact / Cleanup
 

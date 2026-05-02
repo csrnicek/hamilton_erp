@@ -415,7 +415,7 @@ This is a 2-3 hour rewrite, not 15 minutes. Either rewrite from scratch against 
 **Phase 1 task status after tonight (Taskmaster IDs)**
 - 1-19: done (pre-existing)
 - 20: Asset Board realtime listeners — pending, frontend, needs design spec check before code
-- 21: Bulk Mark All Clean confirmation dialog — pending, frontend, 3-AI checkpoint after this task
+- 21: ~~Bulk Mark All Clean confirmation dialog — pending, frontend, 3-AI checkpoint after this task~~ ⚠️ **OBSOLETE** — Bulk Mark All Clean feature removed entirely 2026-04-30 per A29-1 / DEC-054 reversal in `docs/decisions_log.md`. Task no longer exists.
 - 22, 23, 24: in PR #26 (E2E coverage). After #26 lands these can flip to "done" in Taskmaster.
 - 25: Frappe Cloud deploy + manual QA — pending, requires owner + browser. Review prompts now live in `docs/reviews/review_task25_blind.md` + `review_task25_context.md` (PR #27).
 - 26: stale stress simulation — see scope note above. Defer to a dedicated session.
@@ -529,7 +529,7 @@ Add **2 Playwright behavioral tests** (no screenshots): load `/app/asset-board`,
 
 11. **`api.py:280-326` and `venue_asset.py:75-110` — 5 paired wrappers.** Each pair is 6-9 lines of `has_permission` + `from … import` + 1-line delegator. Five of these per file = ~80 lines that could be 0 if either file is deleted. See finding #1.
 
-12. **`api.py:216-230` — `mark_all_clean_rooms()` and `mark_all_clean_lockers()`** are 5-line wrappers around `_mark_all_clean(category=...)`. Could collapse into one whitelisted endpoint. **Verdict: borderline; leave as-is for audit clarity** (2 narrow endpoints permission/audit cleaner than 1 generic).
+12. ~~**`api.py:216-230` — `mark_all_clean_rooms()` and `mark_all_clean_lockers()`** are 5-line wrappers around `_mark_all_clean(category=...)`. Could collapse into one whitelisted endpoint. **Verdict: borderline; leave as-is for audit clarity** (2 narrow endpoints permission/audit cleaner than 1 generic).~~ ⚠️ **MOOT** — all three functions REMOVED from api.py on 2026-04-30 per A29-1 / DEC-054 reversal in `docs/decisions_log.md`. Regression-pinned by `test_asset_board_rendering.test_api_does_not_define_mark_all_clean_endpoints`.
 
 #### Over-abstraction (mostly verdict: keep)
 
@@ -768,7 +768,7 @@ Bug #1 ("RTS modal Reason unknown") is **already fixed in main** as of PR #35. I
 
 - ~~RTS modal "Reason unknown"~~ (fixed by PR #35; if it still shows after bench restart + browser refresh, file as a fresh bug)
 - RTS modal SET line missing timestamp
-- Remove "Mark All Clean" feature entirely (per DEC-054)
+- ✅ DONE — Remove "Mark All Clean" feature entirely (per DEC-054). Action item executed 2026-04-30; recorded in `docs/decisions_log.md` A29-1.
 - Dirty-for-Xm timer
 
 If the "Reason unknown" symptom persists after the user's restart + refresh, the next investigation step is to capture the actual API response payload (browser DevTools → Network tab → `get_asset_board_data` response) and confirm whether `reason` is in the payload for the OOS asset.
