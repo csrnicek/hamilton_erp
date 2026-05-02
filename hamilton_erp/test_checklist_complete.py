@@ -493,8 +493,10 @@ class TestConcurrencyChecklist(IntegrationTestCase):
 				frappe.destroy()
 
 		t1, t2 = threading.Thread(target=worker), threading.Thread(target=worker)
-		t1.start(); t2.start()
-		t1.join(timeout=30); t2.join(timeout=30)
+		t1.start()
+		t2.start()
+		t1.join(timeout=30)
+		t2.join(timeout=30)
 		return results
 
 	def test_concurrent_start_session_exactly_one_succeeds(self):
