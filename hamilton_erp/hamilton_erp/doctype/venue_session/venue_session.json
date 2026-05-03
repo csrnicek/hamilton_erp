@@ -49,7 +49,7 @@
    "label": "Session"
   },
   {
-   "description": "Auto-generated. Format: {day}-{month}-{year}---{NNNN}. Resets to 0001 at midnight. UNIQUE KEY: this unique constraint is the retry-loop contract in lifecycle._create_session — it MUST NOT be dropped. Removing it breaks collision detection and allows duplicate session numbers under Redis cold-start races.",
+   "description": "Auto-generated. Format: {day}-{month}-{year}---{NNNN}. Resets to 0001 at midnight. UNIQUE KEY: this unique constraint is the retry-loop contract in lifecycle._create_session \u2014 it MUST NOT be dropped. Removing it breaks collision detection and allows duplicate session numbers under Redis cold-start races.",
    "fieldname": "session_number",
    "fieldtype": "Data",
    "in_list_view": 1,
@@ -72,7 +72,8 @@
    "fieldtype": "Link",
    "label": "Sales Invoice",
    "options": "Sales Invoice",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "admission_item",
@@ -153,7 +154,7 @@
   },
   {
    "default": "Walk-in",
-   "description": "Forward compatibility — defaults to Walk-in at Hamilton.",
+   "description": "Forward compatibility \u2014 defaults to Walk-in at Hamilton.",
    "fieldname": "customer",
    "fieldtype": "Link",
    "label": "Customer",
@@ -165,7 +166,7 @@
    "label": "Audit"
   },
   {
-   "description": "Audit trail — which pricing rule was applied to this admission.",
+   "description": "Audit trail \u2014 which pricing rule was applied to this admission.",
    "fieldname": "pricing_rule_applied",
    "fieldtype": "Data",
    "label": "Pricing Rule Applied",
@@ -173,7 +174,7 @@
   },
   {
    "default": "0",
-   "description": "Audit trail — Under 25 discount was applied.",
+   "description": "Audit trail \u2014 Under 25 discount was applied.",
    "fieldname": "under_25_applied",
    "fieldtype": "Check",
    "label": "Under 25 Applied",
@@ -194,13 +195,13 @@
   },
   {
    "default": "not_applicable",
-   "description": "Forward compatibility — null at Hamilton.",
+   "description": "Forward compatibility \u2014 null at Hamilton.",
    "fieldname": "identity_method",
    "fieldtype": "Data",
    "label": "Identity Method"
   },
   {
-   "description": "Forward compatibility — null at Hamilton.",
+   "description": "Forward compatibility \u2014 null at Hamilton.",
    "fieldname": "member_id",
    "fieldtype": "Link",
    "label": "Member ID",

@@ -29,7 +29,8 @@
    "in_list_view": 1,
    "label": "Venue Session",
    "options": "Venue Session",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "sales_invoice",
@@ -48,7 +49,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "What the comp was worth. permlevel 1 hides this from Hamilton Operator at the API layer (margin-leak / self-justification protection per docs/permissions_matrix.md \"Sensitive fields\"). Auto-populated programmatically by the Phase 2 comp flow from admission_item.standard_rate — operators don't enter this directly. PHASE 2 WIRING CONTRACT: code creating Comp Admission Log records must run with permlevel:1 write access (e.g. ignore_permissions=True under Administrator elevation), or comp_value silently lands as None. See TestCompAdmissionLogValueMasking.",
+   "description": "What the comp was worth. permlevel 1 hides this from Hamilton Operator at the API layer (margin-leak / self-justification protection per docs/permissions_matrix.md \"Sensitive fields\"). Auto-populated programmatically by the Phase 2 comp flow from admission_item.standard_rate \u2014 operators don't enter this directly. PHASE 2 WIRING CONTRACT: code creating Comp Admission Log records must run with permlevel:1 write access (e.g. ignore_permissions=True under Administrator elevation), or comp_value silently lands as None. See TestCompAdmissionLogValueMasking.",
    "fieldname": "comp_value",
    "fieldtype": "Currency",
    "label": "Comp Value",
@@ -61,7 +62,8 @@
    "in_list_view": 1,
    "label": "Operator",
    "options": "User",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "fieldname": "timestamp",

@@ -1005,6 +1005,18 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 ---
 
+## Amendment 2026-05-04 — DEC-078: Add `search_index: 1` on high-traffic Link fields (audit F4.1)
+
+**Decision.** `search_index: 1` added to the Link fields the audit identified as highest-value filter targets: `Cash Drop.operator`, `Cash Reconciliation.cash_drop`, `Cash Reconciliation.shift_record`, `Comp Admission Log.venue_session`, `Comp Admission Log.operator`, `Venue Session.sales_invoice`. Other Link fields listed in F4.1 deferred until they show up in slow-query logs.
+
+**Why.** Frappe creates an index on `parent` and `name` only — Link FK columns are not auto-indexed. List-view filters and ORM `filters={"foo": "..."}` queries against these columns table-scan. At Hamilton's current single-venue volume the perf cost is invisible, but at the 6-venue rollout these particular columns are the ones reconciliation reporting and audit lookups hit hardest. Adding the index now is cheap (small tables) and avoids a future migrate-required hotfix.
+
+**What changed.** JSON edits to four DocType definitions: `cash_drop.json`, `cash_reconciliation.json`, `comp_admission_log.json`, `venue_session.json`. `bench migrate` REQUIRED — DocType JSON `search_index` adds create new MariaDB indices. Bundle into the next Phase 3 migrate window with #168 / #170 / #171 / #172 / #174.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F4.1; skill `frappe-syntax-doctypes` (search_index hygiene).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
