@@ -1090,3 +1090,25 @@
 	margin: 8px 0 0 16px;
 	padding: 0;
 }
+
+/* DEC-103 — Comp visual indicator on Venue Session tiles ------------- */
+/* Gold/amber outline ring distinct from the Occupied red border.
+   Pairs with .hamilton-status-occupied (which sets the fill); this
+   class adds a 2px outline + small star indicator so scanning the
+   board surfaces "this is a comp" at a glance. */
+.hamilton-tile-comp {
+	outline: 2px solid #d97706;
+	outline-offset: 2px;
+	position: relative;
+}
+.hamilton-tile-comp::after {
+	content: "★";
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	color: #d97706;
+	font-size: 14px;
+	font-weight: 700;
+	text-shadow: 0 0 2px rgba(0, 0, 0, 0.35);
+	pointer-events: none;
+}

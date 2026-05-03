@@ -156,7 +156,9 @@ def get_asset_board_data() -> dict:
 	if occupied_session_ids:
 		rows = frappe.get_all(
 			"Venue Session",
-			fields=["name", "session_start", "full_name"],
+			# DEC-103 — pull comp_flag so the board can render the comp visual
+			# indicator on Occupied tiles whose session is comped.
+			fields=["name", "session_start", "full_name", "comp_flag"],
 			filters={"name": ["in", occupied_session_ids]},
 		)
 		session_data = {r["name"]: r for r in rows}
@@ -165,6 +167,10 @@ def get_asset_board_data() -> dict:
 		a["session_start"] = sess.get("session_start")
 		# V9 D6/E8: guest_name for Occupied tile guest-info panel
 		a["guest_name"] = sess.get("full_name") or None
+		# DEC-103: comp flag for the .hamilton-tile-comp visual indicator.
+		# We surface this as `is_comp` (boolean) so the JS doesn't need to
+		# know the underlying field name.
+		a["is_comp"] = bool(sess.get("comp_flag"))
 
 	# V9 E11: who set this asset Out of Service?
 	# Batched lookup of the most-recent Asset Status Log entry where
@@ -1341,4 +1347,93 @@ def get_shift_summary() -> dict:
 		"cash_sales_total": float(cash_sales_total),
 		"cash_drops_count": len(drop_rows),
 		"cash_drops_total": float(cash_drops_total),
+	}
+
+
+# Comp Admissions (DEC-103) — Manager-only comp from the Asset Board
+# ---------------------------------------------------------------------------
+# Manager grants a comp admission directly from the board. Inserts a Comp
+# Admission Log audit row, calls the lifecycle helper to occupy the asset,
+# and stamps the resulting Venue Session with comp_flag=1 so the board
+# can render the comp visual indicator on the tile.
+
+
+@frappe.whitelist(methods=["POST"])
+def comp_admission(asset_name: str, reason: str) -> dict:
+	"""Manager+ — grant a comp admission and start a session on `asset_name`.
+
+	Three steps in one transaction:
+	  1. Call `start_session_for_asset` (the existing walk-in lifecycle
+	     helper) to flip the asset Available → Occupied and create a
+	     Venue Session.
+	  2. Stamp the new Venue Session with `comp_flag = 1` so the Asset
+	     Board can render the comp visual indicator (DEC-103).
+	  3. Insert a `Comp Admission Log` audit row tying the session to
+	     the manager and the reason text. `reason_category` defaults to
+	     "Manager Decision" — operators select one of the canonical
+	     categories (Loyalty Card / Promo / Manager Decision / Other) on
+	     the Comp Admission Log form when retroactively editing; from
+	     the board, "Manager Decision" is the unambiguous default.
+
+	Field reuse rationale: the Venue Session DocType already has a
+	`comp_flag` Check field. The spec asked us to add `is_comp` if
+	missing — `comp_flag` is the equivalent and pre-exists on every
+	Hamilton site, so no Custom Field migration is required. See
+	DEC-103 for the field-naming decision.
+
+	Role gate: System Manager / Hamilton Admin / Hamilton Manager. The
+	JS hides the Comp button from Operators; this server check is
+	defense in depth.
+	"""
+	if not _is_manager_or_admin_user():
+		frappe.throw(
+			_("Comp admission requires Hamilton Manager or Hamilton Admin role."),
+			frappe.PermissionError,
+		)
+	if not asset_name:
+		frappe.throw(_("asset_name is required."))
+	if not reason or not str(reason).strip():
+		frappe.throw(_("Reason is required for a comp admission."))
+
+	from hamilton_erp.lifecycle import start_session_for_asset
+
+	# Step 1 — start the session via the lifecycle helper. This handles
+	# the Available → Occupied transition, the asset_status_lock, and
+	# the audit-log Asset Status Log row in one call.
+	session_name = start_session_for_asset(
+		asset_name, operator=frappe.session.user
+	)
+
+	# Step 2 — stamp the session as comp. We use db.set_value rather
+	# than reloading the doc + save() because session creation already
+	# committed the row; a second save() would re-trigger the venue
+	# session validate chain unnecessarily and risks a TimestampMismatch
+	# under concurrent ticks. db.set_value with update_modified=False
+	# is the documented way to flip a single flag post-insert.
+	frappe.db.set_value(
+		"Venue Session", session_name, "comp_flag", 1,
+		update_modified=False,
+	)
+
+	# Step 3 — Comp Admission Log audit row. permlevel:1 on comp_value
+	# means the row must be inserted with elevated permissions; comp_value
+	# itself is left None here because the Phase 2 admission_item link is
+	# not available from the board (no admission item is sold on a comp).
+	# `reason_note` carries the manager's reason text; `reason_category`
+	# defaults to "Manager Decision".
+	log = frappe.get_doc({
+		"doctype": "Comp Admission Log",
+		"venue_session": session_name,
+		"operator": frappe.session.user,
+		"timestamp": now_datetime(),
+		"reason_category": "Manager Decision",
+		"reason_note": str(reason).strip(),
+	})
+	log.insert(ignore_permissions=True)
+
+	return {
+		"status": "ok",
+		"session": session_name,
+		"comp_admission_log": log.name,
+		"asset_name": asset_name,
 	}
