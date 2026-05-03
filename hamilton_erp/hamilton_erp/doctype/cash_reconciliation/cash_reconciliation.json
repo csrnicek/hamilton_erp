@@ -111,7 +111,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Variance Flag",
-   "options": "\nClean\nPossible Theft or Error\nOperator Mis-declared",
+   "options": "\nClean\nPossible Theft or Error\nOperator Mis-declared\nMulti-source Variance",
    "read_only": 1
   },
   {

@@ -3,18 +3,44 @@ from frappe import _
 from frappe.model.document import Document
 from frappe.utils import flt, now_datetime
 
-# Variance tolerance: 2% of the larger amount, with a $1.00 minimum floor.
-# A flat $0.05 tolerance is too strict for real cash handling — a single
-# mis-counted bill would flag a $500 drop as non-Clean.
-_VARIANCE_TOLERANCE_PCT = 0.02
-_VARIANCE_TOLERANCE_MIN = 1.00
+# Variance tolerance defaults: 2% of the larger amount, with a $1.00 minimum
+# floor. A flat $0.05 tolerance is too strict for real cash handling — a
+# single mis-counted bill would flag a $500 drop as non-Clean. Both values
+# are now configurable per venue via Hamilton Settings (F3.5 / DEC-068);
+# the constants below are used only as fallbacks when Settings is missing
+# or when either field is blank.
+_VARIANCE_TOLERANCE_PCT_DEFAULT = 0.02
+_VARIANCE_TOLERANCE_MIN_DEFAULT = 1.00
+
+
+def _get_variance_tolerance() -> tuple[float, float]:
+	"""Read the variance tolerance from Hamilton Settings.
+
+	Returns (percent_as_fraction, minimum_dollars). The percent stored in
+	Settings is a Percent field (e.g. 2.0 means 2%); we convert to a
+	fraction (0.02) so callers don't need to know the storage shape.
+
+	Falls back to the module-level defaults when Settings is missing or
+	either field is blank — keeps the fresh-install / migrate-pending path
+	working, and stays robust to operator-cleared values.
+	"""
+	try:
+		settings = frappe.get_cached_doc("Hamilton Settings", "Hamilton Settings")
+	except frappe.DoesNotExistError:
+		return _VARIANCE_TOLERANCE_PCT_DEFAULT, _VARIANCE_TOLERANCE_MIN_DEFAULT
+	pct_raw = settings.get("cash_variance_tolerance_percent")
+	min_raw = settings.get("cash_variance_tolerance_minimum")
+	pct = (flt(pct_raw) / 100.0) if pct_raw else _VARIANCE_TOLERANCE_PCT_DEFAULT
+	minimum = flt(min_raw) if min_raw else _VARIANCE_TOLERANCE_MIN_DEFAULT
+	return pct, minimum
 
 
 def _within_tolerance(a: float, b: float) -> bool:
 	"""Return True if |a - b| is within the configured percentage tolerance."""
+	pct, minimum = _get_variance_tolerance()
 	diff = abs(a - b)
-	threshold = max(abs(a), abs(b)) * _VARIANCE_TOLERANCE_PCT
-	return diff <= max(threshold, _VARIANCE_TOLERANCE_MIN)
+	threshold = max(abs(a), abs(b)) * pct
+	return diff <= max(threshold, minimum)
 
 
 class CashReconciliation(Document):
@@ -142,8 +168,17 @@ class CashReconciliation(Document):
 			# money is missing from the envelope after it was dropped
 			self.variance_flag = "Possible Theft or Error"
 		else:
-			# None agree — operator declared wrong amount and cash is missing
-			self.variance_flag = "Operator Mis-declared"
+			# F3.8 / DEC-068: when none of the three values agree, the
+			# fault is genuinely ambiguous — could be operator misdeclaration,
+			# theft, POS error, or any combination. The previous label
+			# "Operator Mis-declared" pre-judged the operator as the bad
+			# actor; "Multi-source Variance" describes the data shape
+			# (multiple sources disagree) without naming a cause. The
+			# specific-attribution case (manager+system agree, operator
+			# differs) is unchanged above and still labels "Operator
+			# Mis-declared" because that case IS specifically operator
+			# misdeclaration.
+			self.variance_flag = "Multi-source Variance"
 
 	def _mark_drop_reconciled(self):
 		"""Update the linked Cash Drop as reconciled."""

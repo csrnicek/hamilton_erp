@@ -1318,6 +1318,57 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 		self.assertIn(".catch(", body,
 			"Confirm handler must catch errors and leave cart intact.")
 
+	def test_js_defines_round_to_nickel_helper(self):
+		"""F1.4 polish: client-side nickel rounding helper exists.
+
+		Mirrors the server-side
+		``frappe.utils.round_based_on_smallest_currency_fraction`` applied
+		to grand_total in submit_retail_sale. Without this, the cart
+		drawer + cash modal preview the unrounded total while the server
+		charges the rounded amount.
+		"""
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"function roundToNickel(value)", src,
+			"asset_board.js must define roundToNickel(value) helper for F1.4 polish.",
+		)
+		self.assertIn(
+			"Math.round(value * 20) / 20", src,
+			"roundToNickel body must use the canonical 0.05 rounding formula.",
+		)
+
+	def test_js_drawer_summary_total_uses_round_to_nickel(self):
+		"""F1.4: drawer summary must show the rounded total — what the
+		server will actually charge for cash payments."""
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"roundToNickel(this._cart_total()).toFixed(2)", src,
+			"Drawer summary must use roundToNickel(this._cart_total()) "
+			"for F1.4 polish — operator's preview must match server's "
+			"rounded charge.",
+		)
+
+	def test_js_cash_modal_due_uses_round_to_nickel(self):
+		"""F1.4: the Confirm-gate `due` variable inside the cash modal's
+		input handler must be rounded so an operator who types the actual
+		rounded amount (e.g. $7.90 on a $7.91 cart) gets Confirm enabled.
+		"""
+		import re
+		with open(self._js_path()) as f:
+			src = f.read()
+		match = re.search(
+			r"_open_cash_payment_modal\(\)\s*\{(.+?)\n\t\}\s*\n",
+			src, re.DOTALL,
+		)
+		body = match.group(1)
+		self.assertIn(
+			"const due = roundToNickel(this._cart_total())", body,
+			"Cash modal Confirm gate must compute due via "
+			"roundToNickel(this._cart_total()) — F1.4 polish.",
+		)
+
 
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.

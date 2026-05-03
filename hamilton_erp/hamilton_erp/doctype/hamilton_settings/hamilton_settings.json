@@ -21,7 +21,11 @@
   "section_asset_board",
   "show_waitlist_tab",
   "column_break_asset_board",
-  "show_other_tab"
+  "show_other_tab",
+  "section_cash_recon",
+  "cash_variance_tolerance_percent",
+  "column_break_cash_recon",
+  "cash_variance_tolerance_minimum"
  ],
  "fields": [
   {
@@ -119,6 +123,29 @@
    "fieldname": "show_other_tab",
    "fieldtype": "Check",
    "label": "Show Other Tab"
+  },
+  {
+   "fieldname": "section_cash_recon",
+   "fieldtype": "Section Break",
+   "label": "Cash Reconciliation Tolerance"
+  },
+  {
+   "default": "2.0",
+   "description": "Variance tolerance as a percentage of the larger amount in the three-way comparison. Lower values flag smaller variances; raise this when high-volume cash days produce noisy false positives. Default 2.0% per the original variance contract — see decisions_log.md amendment 2026-05-03 (DEC-068).",
+   "fieldname": "cash_variance_tolerance_percent",
+   "fieldtype": "Percent",
+   "label": "Cash Variance Tolerance (%)"
+  },
+  {
+   "fieldname": "column_break_cash_recon",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "1.00",
+   "description": "Minimum variance tolerance floor in dollars. The effective tolerance for any reconciliation is max(percent * larger_amount, minimum). A flat $0.05 floor is too strict for real cash handling — a single mis-counted bill would flag a $500 drop as non-Clean. Default $1.00.",
+   "fieldname": "cash_variance_tolerance_minimum",
+   "fieldtype": "Currency",
+   "label": "Cash Variance Tolerance Minimum ($)"
   }
  ],
  "index_web_pages_for_search": 0,
