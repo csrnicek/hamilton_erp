@@ -1095,6 +1095,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/api.py`: imported `rate_limit` from `frappe.rate_limiter`, decorated `get_asset_board_data`. No schema change.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.1; DEC-074 (mutating-endpoint rate limits, on unmerged feature branch); skill `frappe-impl-whitelisted` (rate_limit guidance).
+## Amendment 2026-05-04 — DEC-080: Pin Phase-2 authorization design for `assign_asset_to_session` (audit F2.3)
+
+**Decision.** When `assign_asset_to_session` is un-disabled in Phase 2, the authorization gate MUST verify that the calling user is either (a) the `owner` of the linked Sales Invoice (the operator who recorded the cart) or (b) a member of `HAMILTON_ADMIN_ROLES` (Hamilton Manager or System Manager). The current `frappe.has_permission("Venue Asset", "write", throw=True)` check is necessary but insufficient — every Hamilton Operator already holds `Venue Asset/write`, so without the SI-owner check any operator could attach any asset to any pending SI.
+
+**Why.** The endpoint is wired-but-disabled today (returns `phase_1_disabled` after a logged no-op). The role-gate model that survives into Phase 2 must defend against operator-A submitting a cart, walking away, then operator-B (also an Operator) hijacking the assignment to a different room. The owner-or-admin check is the minimum business-logic gate. Document it now so the Phase-2 implementer doesn't ship the body without the gate.
+
+**What changed.** Documentation only — no code change. The Phase-2 implementation will add the check before invoking `start_session_for_asset`, alongside any other Phase-2 checks (asset Available, SI not yet linked, etc.). DEC-080 added.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F2.3; DEC-005 (blind cash / role gates); skill `frappe-impl-whitelisted` (wired-but-disabled surfaces); skill `frappe-core-permissions` (defense in depth beyond DocType perms).
+
 ## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
 
 **Decision.** `_create_session`'s UniqueValidationError handler now checks both `exc.args[-1]` (the underlying MariaDB IntegrityError, which carries the locale-stable key name) and the legacy `str(exc)` substring as a fallback. The retry only fires when the collision is on `session_number`.
