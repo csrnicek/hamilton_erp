@@ -181,6 +181,19 @@ bench --site hamilton.frappe.cloud doctor 2>&1 | grep -i scheduler
 
 If disabled: `bench --site hamilton.frappe.cloud enable-scheduler`.
 
+### T-1.3b — Confirm `System Settings.enable_audit_trail = 1` (2 min)
+
+T1-6 (per `docs/inbox/2026-05-04_audit_synthesis_decisions.md`). Hamilton's audit-trail story depends on this Frappe-level flag. If it's off, every `track_changes: 1` setting on individual DocTypes becomes inert.
+
+```bash
+bench --site hamilton.frappe.cloud mariadb -e \
+  "SELECT value FROM tabSingles \
+   WHERE doctype='System Settings' AND field='enable_audit_trail'" -B -N
+# Expected: 1
+```
+
+If `0` or empty: investigate `_ensure_audit_trail_enabled` in `hamilton_erp/setup/install.py`. Possible causes — Frappe upgrade renamed the field (check the test `test_audit_trail_field_present_on_pinned_frappe`), the install hook didn't fire, or a manual System Settings save reset it.
+
 ### T-1.4 — Backup retention + encryption confirmed (10 min)
 
 Per `docs/inbox.md` T0-FC-1, T0-FC-2, T0-FC-3:

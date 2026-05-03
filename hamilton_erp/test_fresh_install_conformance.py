@@ -359,6 +359,73 @@ class TestSystemSettingsHardening(IntegrationTestCase):
 			"System Settings.enable_audit_trail=0 — _ensure_audit_trail_enabled regression",
 		)
 
+	def test_track_changes_enabled_on_all_auditable_hamilton_doctypes(self):
+		"""T1-6: every Hamilton-owned operational DocType has `track_changes: 1`.
+
+		**Implementation note re T1-6 spec.** The audit synthesis (T1-6 in
+		docs/inbox/2026-05-04_audit_synthesis_decisions.md) called for asserting
+		`System Settings.enable_audit_trail == 1`. **Investigation while writing
+		this test revealed that field does not exist on Frappe v16.14.0** — the
+		field is only present on older Frappe builds (the install hook
+		_ensure_audit_trail_enabled at install.py:46-69 silently no-ops on v16).
+		So the literal spec asserts a field that isn't there.
+
+		What we ACTUALLY rely on for audit trail in v16 is per-DocType
+		`track_changes: 1` (which writes to `tabVersion`). That's the v16-era
+		mechanism. This test pins it: every Hamilton-owned operational
+		DocType must declare `track_changes: 1` on its meta. The exception
+		is Asset Status Log itself, which IS the audit log — tracking changes
+		on the audit log is circular and intentionally off (`track_changes: 0`).
+
+		If this test fails: someone added a new Hamilton DocType without
+		`track_changes: 1`, OR removed `track_changes` from an existing one.
+		The audit-trail invariant is broken; investigate before merging.
+
+		Surfaced as a side-finding for Chris: install.py:46-69
+		`_ensure_audit_trail_enabled` is targeting a field that does not exist
+		on v16. It is a no-op. The function should either be deleted (the v16
+		audit mechanism is per-DocType track_changes, which we now pin here)
+		or rewritten to target whatever v16's equivalent is (if any exists).
+		See the audit-synthesis-decisions follow-up note.
+		"""
+		# Per-DocType track_changes coverage is the v16 audit mechanism.
+		# Asset Status Log is the audit log itself — tracking changes on it
+		# would be circular and is intentionally off.
+		AUDITABLE_DOCTYPES = [
+			"Cash Drop",
+			"Cash Reconciliation",
+			"Comp Admission Log",
+			"Hamilton Board Correction",
+			"Hamilton Settings",
+			"Shift Record",
+			"Venue Asset",
+			"Venue Session",
+		]
+		EXPECTED_TRACK_CHANGES_OFF = {"Asset Status Log"}
+
+		missing = []
+		for doctype in AUDITABLE_DOCTYPES:
+			meta = frappe.get_meta(doctype)
+			if not meta.track_changes:
+				missing.append(doctype)
+		self.assertEqual(
+			missing, [],
+			f"Hamilton DocTypes missing track_changes=1: {missing}. "
+			"This breaks the v16 audit-trail invariant — every change to these "
+			"DocTypes should land in tabVersion. See "
+			"docs/inbox/2026-05-04_audit_synthesis_decisions.md T1-6.",
+		)
+
+		# Sanity: Asset Status Log MUST stay track_changes=0 (it IS the audit log).
+		for doctype in EXPECTED_TRACK_CHANGES_OFF:
+			meta = frappe.get_meta(doctype)
+			self.assertFalse(
+				meta.track_changes,
+				f"{doctype} has track_changes=1, but it IS the audit log. "
+				"Tracking changes on the audit log is circular. "
+				"Set track_changes: 0 in {doctype}.json.",
+			)
+
 	def test_setup_complete_healed(self):
 		"""Installed Application rows for frappe + erpnext must show is_setup_complete=1.
 
