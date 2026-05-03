@@ -181,9 +181,19 @@ class CashReconciliation(Document):
 			self.variance_flag = "Multi-source Variance"
 
 	def _mark_drop_reconciled(self):
-		"""Update the linked Cash Drop as reconciled."""
-		frappe.db.set_value(
-			"Cash Drop",
-			self.cash_drop,
-			{"reconciled": 1, "reconciliation": self.name},
-		)
+		"""Update the linked Cash Drop as reconciled.
+
+		T3-1: use the Document API instead of frappe.db.set_value. The
+		bypass-the-controller pattern was acceptable when CashDrop had
+		no validate body that needed to fire post-reconciliation, but
+		track_changes is enabled on Cash Drop and a direct DB write
+		skips the audit-trail capture. Going through .save() restores
+		the audit trail, fires any future doc_events, and re-runs
+		validate (currently a no-op for the reconciled / reconciliation
+		fields, but cheap insurance against a future controller change
+		that adds a guard the direct write would silently bypass).
+		"""
+		drop = frappe.get_doc("Cash Drop", self.cash_drop)
+		drop.reconciled = 1
+		drop.reconciliation = self.name
+		drop.save(ignore_permissions=True)
