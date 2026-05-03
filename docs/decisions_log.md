@@ -1168,6 +1168,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.2; skill `tob-sharp-edges` (i18n-fragile error matching).
 
+## Amendment 2026-05-04 — DEC-091: Keep return-0 fallback in `_db_max_seq_for_prefix`; add Phase-2 Notification rule (audit S4.3)
+
+**Decision.** `_db_max_seq_for_prefix` continues to log + return 0 on a malformed `session_number`. We do NOT raise `frappe.ValidationError` here because the existing test `TestMalformedSessionNumberDBFallback` pins the return-0 contract and the retry loop + UNIQUE constraint cover correctness. The audit's "missed Error Log row" concern is addressed by adding (Phase 2) a Notification rule that pages on the first occurrence of `Error Log.title = "Malformed session_number in DB"`.
+
+**Why.** Audit S4.3 flagged the silent fallback. Two options on the table: (a) raise after logging, (b) add a Notification rule. Option (a) breaks the existing test contract and would block the cold-Redis assignment path the helper exists to recover from. Option (b) preserves the recovery path AND surfaces the corruption signal on first occurrence. Inline comment expanded to reference the planned Notification rule so a future operator stumbling on the code can see the alerting plan.
+
+**What changed.** Inline comment in `_db_max_seq_for_prefix` extended to reference DEC-091 and the planned Notification rule. No behaviour change. Notification rule itself lands in a Phase-2 fixture follow-up.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.3; existing test `test_checklist_complete.py::TestMalformedSessionNumberDBFallback`; skill `frappe-core-notifications`.
+
 ## Amendment 2026-05-04 — DEC-092: Supply-chain audit via bench-venv `pip-audit` (audit S4.4)
 
 **Decision.** `[project] dependencies` stays empty. Frappe/ERPNext continue to be declared in `[tool.bench.frappe-dependencies]`. The supply-chain audit signal will come from a CI step that runs `pip list --format=json` from inside the bench venv and pipes the result into `pip-audit`. Implementation lands in a Phase-2 CI follow-up; this DEC pins the design.

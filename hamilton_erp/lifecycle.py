@@ -658,6 +658,14 @@ def _db_max_seq_for_prefix(prefix: str) -> int:
 		# Log via frappe.log_error so production operators can see the bad
 		# row in the Error Log doctype — silent fallback would otherwise
 		# mask a data-integrity issue indefinitely.
+		#
+		# DEC-091 / S4.3: a single Error Log entry is easy to miss. The
+		# follow-up Phase-2 work is to add a Notification rule (or a
+		# scheduler-driven scan) that pages on the first occurrence of
+		# `title="Malformed session_number in DB"`. We keep the return-0
+		# path here so steady-state assignment is never blocked by a
+		# legacy bad row; the retry loop + UNIQUE constraint cover
+		# correctness while the alert covers visibility.
 		frappe.log_error(
 			message=(
 				f"_db_max_seq_for_prefix: malformed session_number "
