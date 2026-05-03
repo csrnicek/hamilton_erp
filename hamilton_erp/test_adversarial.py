@@ -776,9 +776,136 @@ class TestFamilyD_InputValidationAttacks(IntegrationTestCase):
 
 
 # ===========================================================================
-# FAMILY E — Bulk Operation Attacks
+# FAMILY E — Lifecycle Rollback Contract (T1-7)
 # ===========================================================================
+#
+# Per docs/inbox/2026-05-04_audit_synthesis_decisions.md T1-7. The
+# lifecycle module's contract (lifecycle.py:113-127, 308-318, 430-442)
+# is: when an inner function raises mid-way, the lifecycle entry-point
+# MUST NOT swallow the exception. The exception must propagate to the
+# caller's transaction boundary so request-level rollback cleans up
+# any partial state (the Venue Session insert that happened inside the
+# lock before the raising call).
+#
+# A future contributor that wraps a lifecycle call in `try: ... except:
+# pass` would silently break this. These tests pin the contract by
+# monkey-patching the inner function to raise and asserting the
+# exception propagates out the lifecycle entry-point.
 
+
+class TestFamilyE_LifecycleRollbackContract(IntegrationTestCase):
+	"""T1-7: lifecycle entry points must propagate inner-function
+	exceptions, never swallow them.
+
+	The actual orphan-prevention is provided by the caller's
+	transaction boundary (the request transaction in production, the
+	IntegrationTestCase tearDown rollback in tests). What the lifecycle
+	itself owes its callers is exception-propagation. Tests pin that.
+	"""
+
+	IGNORE_TEST_RECORD_DEPENDENCIES = ["Company", "Venue Session"]
+
+	def setUp(self):
+		_ensure_walkin_customer()
+		self.asset = _make_asset(prefix="E-RB")
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	# E01 — start_session propagates _set_asset_status exceptions
+	def test_e01_start_session_propagates_set_asset_status_exceptions(self):
+		"""start_session_for_asset MUST raise when _set_asset_status raises.
+
+		If this test fails, a contributor has wrapped the inner call in
+		try/except. That breaks the no-catch-and-continue contract at
+		lifecycle.py:113-127. Partial state (Venue Session inserted, asset
+		status not flipped) would commit on an HTTP request boundary that
+		didn't see the exception.
+		"""
+		attack_id = "E01"
+		try:
+			original = lifecycle._set_asset_status
+
+			def boom(*a, **kw):
+				raise frappe.ValidationError("T1-7 simulated CAS failure (E01)")
+
+			lifecycle._set_asset_status = boom
+			try:
+				with self.assertRaises(frappe.ValidationError):
+					lifecycle.start_session_for_asset(
+						self.asset.name, operator="Administrator"
+					)
+			finally:
+				lifecycle._set_asset_status = original
+			_log_pass(attack_id)
+		except Exception as e:
+			_log_crash(attack_id, e)
+			raise
+
+	# E02 — vacate_session propagates _set_asset_status exceptions
+	def test_e02_vacate_session_propagates_set_asset_status_exceptions(self):
+		"""vacate_session MUST raise when _set_asset_status raises.
+
+		Same contract as E01, applied to the vacate path
+		(lifecycle.py:308-318). Inside the asset lock, _close_current_session
+		runs BEFORE _set_asset_status. A swallowed exception here would
+		commit a half-vacated state (session marked Completed, asset still
+		Occupied).
+		"""
+		attack_id = "E02"
+		try:
+			_walk_to_occupied(self.asset.name)
+			original = lifecycle._set_asset_status
+
+			def boom(*a, **kw):
+				raise frappe.ValidationError("T1-7 simulated CAS failure (E02)")
+
+			lifecycle._set_asset_status = boom
+			try:
+				with self.assertRaises(frappe.ValidationError):
+					lifecycle.vacate_session(
+						self.asset.name,
+						operator="Administrator",
+						vacate_method="Key Return",
+					)
+			finally:
+				lifecycle._set_asset_status = original
+			_log_pass(attack_id)
+		except Exception as e:
+			_log_crash(attack_id, e)
+			raise
+
+	# E03 — set_asset_out_of_service propagates _set_asset_status exceptions
+	def test_e03_set_oos_propagates_set_asset_status_exceptions(self):
+		"""set_asset_out_of_service MUST raise when _set_asset_status raises.
+
+		Same contract as E01/E02, applied to the OOS path
+		(lifecycle.py:430-442). When previous == Occupied,
+		_close_current_session runs BEFORE _set_asset_status. A swallowed
+		exception here would commit a half-OOS'd state.
+		"""
+		attack_id = "E03"
+		try:
+			_walk_to_occupied(self.asset.name)
+			original = lifecycle._set_asset_status
+
+			def boom(*a, **kw):
+				raise frappe.ValidationError("T1-7 simulated CAS failure (E03)")
+
+			lifecycle._set_asset_status = boom
+			try:
+				with self.assertRaises(frappe.ValidationError):
+					lifecycle.set_asset_out_of_service(
+						self.asset.name,
+						operator="Administrator",
+						reason="Plumbing",
+					)
+			finally:
+				lifecycle._set_asset_status = original
+			_log_pass(attack_id)
+		except Exception as e:
+			_log_crash(attack_id, e)
+			raise
 
 
 class TestFamilyF_Phase2Financial(IntegrationTestCase):
@@ -865,6 +992,7 @@ def load_tests(loader, tests, pattern):
 		TestFamilyB_ConcurrencyAndLockAttacks,
 		TestFamilyC_SessionSequenceAttacks,
 		TestFamilyD_InputValidationAttacks,
+		TestFamilyE_LifecycleRollbackContract,
 		TestFamilyF_Phase2Financial,
 	]
 	for cls in test_classes:
