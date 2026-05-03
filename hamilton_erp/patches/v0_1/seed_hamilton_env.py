@@ -25,27 +25,28 @@ HAMILTON_RETAIL_ITEM_GROUP = "Drink/Food"
 # Each entry pairs the SKU with its QBO-mirrored income account (per
 # Amendment 2026-04-30 (b)). Beverages → 4260 Beverage; food → 4210 Food.
 HAMILTON_RETAIL_ITEMS = [
-	{"item_code": "WAT-500", "item_name": "Water 500ml",       "rate": 3.50, "income_account_base": "4260 Beverage"},
-	{"item_code": "GAT-500", "item_name": "Sports Drink 500ml","rate": 5.00, "income_account_base": "4260 Beverage"},
-	{"item_code": "BAR-PROT","item_name": "Protein Bar",       "rate": 4.00, "income_account_base": "4210 Food"},
-	{"item_code": "BAR-ENRG","item_name": "Energy Bar",        "rate": 4.50, "income_account_base": "4210 Food"},
+	{"item_code": "WAT-500", "item_name": "Water 500ml",       "rate": 3.50, "income_account_base": "4260 Beverage", "opening_stock": 100},
+	{"item_code": "GAT-500", "item_name": "Sports Drink 500ml","rate": 5.00, "income_account_base": "4260 Beverage", "opening_stock": 50},
+	{"item_code": "BAR-PROT","item_name": "Protein Bar",       "rate": 4.00, "income_account_base": "4210 Food",     "opening_stock": 50},
+	{"item_code": "BAR-ENRG","item_name": "Energy Bar",        "rate": 4.50, "income_account_base": "4210 Food",     "opening_stock": 50},
 ]
+# Legacy single-default constant — superseded 2026-05-03 by per-item
+# opening_stock keys above. Kept exported for backward-compat with any
+# external scripts that imported it.
 HAMILTON_RETAIL_INITIAL_STOCK_QTY = 24
 
 
 def _ensure_retail_items():
-	"""Seed Hamilton's V9.1 retail catalogue: 1 Item Group + 4 sample Items.
-
-	Inventory (initial stock count) is NOT seeded by this patch — Stock
-	Entries are venue-specific data that belongs in the venue's own stocking
-	flow, not in committed code. Hamilton's stocking is done manually via
-	`bench --site … console` after first install (or via the Frappe Cloud
-	Desk UI). The amendment doc lists the verification step.
+	"""Seed Hamilton's V9.1 retail catalogue: 1 Item Group + 4 sample Items
+	+ realistic opening stock so a fresh install is ready to sell.
 
 	Item Defaults wiring (added 2026-04-30) maps each SKU to its income
-	account, the Hamilton warehouse, and the Hamilton cost center. This
-	depends on ``hamilton_erp.setup.install._ensure_hamilton_accounting``
-	having run first (it does — install.py orders the seeds correctly).
+	account, the Hamilton warehouse, and the Hamilton cost center.
+	Opening stock seeding (added 2026-05-03) inserts a Material Receipt
+	Stock Entry for each Item per the per-item ``opening_stock`` key in
+	HAMILTON_RETAIL_ITEMS — Water 500ml × 100, Sports Drink 500ml × 50,
+	Protein Bar × 50, Energy Bar × 50. Idempotent: only seeds when the
+	Bin's actual_qty for the item is <= 0.
 	"""
 	# Item Group
 	if not frappe.db.exists("Item Group", HAMILTON_RETAIL_ITEM_GROUP):
@@ -74,6 +75,7 @@ def _ensure_retail_items():
 			}).insert(ignore_permissions=True)
 
 	_ensure_retail_item_defaults()
+	_ensure_retail_initial_stock()
 
 
 def _ensure_retail_item_defaults():
@@ -153,6 +155,87 @@ def _ensure_retail_item_defaults():
 		else:
 			item.append("item_defaults", target)
 			item.save(ignore_permissions=True)
+
+
+def _ensure_retail_initial_stock():
+	"""Seed opening stock for the retail items so a fresh install is
+	ready to sell on day one.
+
+	Per-item quantities live in HAMILTON_RETAIL_ITEMS' ``opening_stock``
+	key:
+	  - WAT-500 (Water 500ml)        × 100
+	  - GAT-500 (Sports Drink 500ml) × 50
+	  - BAR-PROT (Protein Bar)       × 50
+	  - BAR-ENRG (Energy Bar)        × 50
+
+	Idempotent: only seeds when Bin.actual_qty for the item-warehouse
+	pair is <= 0. Re-running on a partially-stocked install is a no-op
+	for items that already have inventory.
+
+	Skips silently when prerequisites (Hamilton company, warehouse,
+	Mode of Payment, etc.) aren't seeded yet — the install order makes
+	that case impossible in fresh installs, but on partial migrate
+	state we'd rather no-op than crash. Same skip-on-prereqs-missing
+	pattern as ``_ensure_retail_item_defaults`` above.
+	"""
+	from hamilton_erp.setup.install import HAMILTON_WAREHOUSE_BASE
+
+	# Resolve company using the same fallback ladder as the defaults helper.
+	company = frappe.conf.get("hamilton_company")
+	if not company or not frappe.db.exists("Company", company):
+		for candidate in ("Club Hamilton", "Hamilton", "Hamilton Club"):
+			if frappe.db.exists("Company", candidate):
+				company = candidate
+				break
+	if not company:
+		matches = frappe.get_all(
+			"Company",
+			filters={"company_name": ["like", "%Hamilton%"]},
+			fields=["name"],
+			limit=1,
+		)
+		if matches:
+			company = matches[0]["name"]
+	if not company:
+		return
+
+	abbr = frappe.db.get_value("Company", company, "abbr")
+	warehouse = f"{HAMILTON_WAREHOUSE_BASE} - {abbr}"
+	if not frappe.db.exists("Warehouse", warehouse):
+		return
+
+	for spec in HAMILTON_RETAIL_ITEMS:
+		opening = float(spec.get("opening_stock") or 0)
+		if opening <= 0:
+			continue
+		item_code = spec["item_code"]
+		if not frappe.db.exists("Item", item_code):
+			continue
+		current_qty = float(frappe.db.get_value(
+			"Bin",
+			{"item_code": item_code, "warehouse": warehouse},
+			"actual_qty",
+		) or 0)
+		if current_qty > 0:
+			# Already stocked — idempotent skip.
+			continue
+		# Seed via Material Receipt Stock Entry. basic_rate=0 keeps the
+		# valuation at zero on the seed entry; the standard_rate on the
+		# Item drives selling price, not this opening valuation.
+		se = frappe.new_doc("Stock Entry")
+		se.update({
+			"company": company,
+			"stock_entry_type": "Material Receipt",
+			"purpose": "Material Receipt",
+		})
+		se.append("items", {
+			"item_code": item_code,
+			"qty": opening,
+			"t_warehouse": warehouse,
+			"basic_rate": 0,
+		})
+		se.insert(ignore_permissions=True)
+		se.submit()
 
 
 def _ensure_walkin_customer():
