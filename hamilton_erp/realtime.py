@@ -69,9 +69,40 @@ def publish_status_change(
 		)
 	else:
 		row["session_start"] = None
-	frappe.publish_realtime(
-		"hamilton_asset_status_changed", row, after_commit=True
-	)
+	# NEW-2 per docs/inbox/2026-05-04_audit_synthesis_decisions.md: wrap the
+	# publish in try/except so a transient Frappe Cloud realtime / socketio
+	# hiccup cannot turn the operator's response payload into a stack trace.
+	# The DB has already committed (the lifecycle caller routed us here AFTER
+	# the lock + after_commit), so the right behaviour on publish failure is
+	# to log + continue. The Asset Board's polling fallback heals the
+	# divergence on the next refresh.
+	#
+	# The nested try around log_error is defensive: log_error's own post-save
+	# hook calls publish_realtime (Frappe's notify_update on the new Error Log
+	# row). If the realtime infra is down, that nested publish ALSO fails. In
+	# that case fall back to the process logger so the asset_name lands
+	# somewhere greppable in bench logs.
+	try:
+		frappe.publish_realtime(
+			"hamilton_asset_status_changed", row, after_commit=True
+		)
+	except Exception:
+		try:
+			frappe.log_error(
+				title="publish_status_change: publish_realtime failed",
+				message=(
+					f"asset_name={asset_name!r} previous_status={previous_status!r}\n\n"
+					f"{frappe.get_traceback()}"
+				),
+			)
+		except Exception:
+			# Last-resort fallback — process logger doesn't touch the DB or
+			# the realtime infra, so it works even when both are unhealthy.
+			frappe.logger().warning(
+				f"publish_status_change: both publish_realtime and "
+				f"log_error failed for asset_name={asset_name!r} "
+				f"previous_status={previous_status!r}"
+			)
 
 
 # publish_board_refresh was REMOVED 2026-04-29 (DEC-054 reversed). Bulk

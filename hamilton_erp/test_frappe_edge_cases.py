@@ -391,6 +391,34 @@ class TestRealtimeEdgeCases(IntegrationTestCase):
 				               vacate_method="Key Return")
 			mock_pub.assert_not_called()
 
+	def test_publish_status_change_swallows_publish_realtime_exceptions(self):
+		"""NEW-2 (per docs/inbox/2026-05-04_audit_synthesis_decisions.md).
+
+		If frappe.publish_realtime raises (Frappe Cloud realtime hiccup,
+		Redis socketio outage, etc.), publish_status_change must catch it,
+		log via frappe.log_error, and return None. The DB has already
+		committed; the operator response payload should not become a stack
+		trace because the realtime queue had a transient fault.
+
+		Asset Board's polling fallback heals the resulting stale tile on
+		the next refresh.
+		"""
+		from hamilton_erp.realtime import publish_status_change
+
+		# Drive the asset into an Occupied state so publish_status_change
+		# has a real row to read.
+		start_session_for_asset(self.asset.name, operator=OPERATOR)
+
+		with patch("frappe.publish_realtime", side_effect=RuntimeError(
+			"NEW-2 simulated Frappe Cloud realtime outage"
+		)):
+			# Must NOT raise — the wrap converts the exception to a
+			# log_error and returns.
+			result = publish_status_change(
+				self.asset.name, previous_status="Available"
+			)
+			self.assertIsNone(result)
+
 # ===========================================================================
 # Audit 2026-04-11 — Group I: VenueSession controller gaps
 # ===========================================================================
