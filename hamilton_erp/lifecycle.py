@@ -381,6 +381,15 @@ def _set_vacated_timestamp(asset_name: str) -> None:
 	# already flipped it), so VenueAsset.validate's transition check is
 	# a no-op and before_save's hamilton_last_status_change update
 	# correctly does NOT fire.
+	#
+	# DEC-076 / F6.1: this helper is invoked from INSIDE the
+	# `asset_status_lock` block in vacate_session (the call site is
+	# indented under the `with` context — see line ~335). The status
+	# transition and the last_vacated_at write therefore share the same
+	# lock contract; no post-lock window exists. The Frappe skills audit
+	# 2026-05-04 raised this as a soft-spot based on a misread of the
+	# indentation; this comment pins the invariant so a future refactor
+	# does not accidentally hoist the call out of the `with` block.
 	asset = frappe.get_doc("Venue Asset", asset_name)
 	asset.last_vacated_at = frappe.utils.now_datetime()
 	asset.save(ignore_permissions=True)
@@ -418,6 +427,12 @@ def mark_asset_clean(asset_name: str, *, operator: str) -> None:
 def _set_cleaned_timestamp(asset_name: str) -> None:
 	# T3-1: see _set_vacated_timestamp above for the rationale. Same
 	# Document-API rewrite — track_changes audit trail + hooks fire.
+	#
+	# DEC-076 / F6.1: like _set_vacated_timestamp, this helper is invoked
+	# from INSIDE the `asset_status_lock` block in mark_asset_clean and
+	# return_asset_to_service. The audit's flagged "outside-the-lock"
+	# concern is a misread of the indentation; the call sites are
+	# indented under the `with` context. Comment pins the invariant.
 	asset = frappe.get_doc("Venue Asset", asset_name)
 	asset.last_cleaned_at = frappe.utils.now_datetime()
 	asset.save(ignore_permissions=True)

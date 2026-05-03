@@ -1157,6 +1157,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/realtime.py::publish_status_change` pops `current_session` from the payload after `session_start` enrichment. JS update to consume server-confirmed `current_session` from the polled refresh is a follow-up (no breakage today; the JS does not read the field off the realtime event).
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S2.1; skill `frappe-impl-ui-components` (realtime scoping); R-007 (PII permlevel migration).
+## Amendment 2026-05-04 — DEC-076: Timestamp helpers verified inside the asset lock (audit F6.1)
+
+**Decision.** `_set_vacated_timestamp` and `_set_cleaned_timestamp` are confirmed to run INSIDE the `asset_status_lock` block of their callers (`vacate_session`, `mark_asset_clean`, `return_asset_to_service`). No code change to the contract; inline comments added on both helpers to pin the invariant against future refactor.
+
+**Why.** The Frappe skills audit 2026-05-04 (F6.1) flagged the helpers as called outside the lock. Re-checking the indentation in `lifecycle.py` shows both call sites are tab-indented under the `with asset_status_lock(...)` context manager — the helpers run before the `with` block exits, so the status transition and the timestamp write share the same lock contract. The audit was a misread. We document the verification here and add inline comments so future audits / refactors don't re-raise it.
+
+**What changed.** Comment blocks added on `_set_vacated_timestamp` (lifecycle.py ~line 368) and `_set_cleaned_timestamp` (~line 409) explicitly stating the helpers run inside the lock and reference DEC-076.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F6.1; DEC-019 (three-layer locking); skill `frappe-impl-controllers` (locking guidance).
 
 ## Amendment 2026-05-04 — DEC-080: Pin Phase-2 authorization design for `assign_asset_to_session` (audit F2.3)
 
