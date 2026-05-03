@@ -893,4 +893,39 @@ In Hamilton ERP specifically: `Venue Asset.session_start` (via the joined Venue 
 - DEC-071 in `docs/decisions_log.md` (the design decision)
 - `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js::parseFrappeDatetime` (the helper)
 - 2026-05-03 Asset Board walkthrough (the originating finding)
+## LL-039 — A whitelisted endpoint that mutates state needs an idempotency contract before it ships, not after
+
+**What happened.** `hamilton_erp.api.submit_retail_sale` shipped in V9.1 Phase 2 as a state-mutating whitelisted endpoint (creates + submits a Sales Invoice, decrements stock, records cash). The cart UI deliberately did NOT clear the cart on error so the operator could retry — `asset_board.js:710` had the explicit comment `// Cart intentionally NOT cleared — operator can retry.` Combined with no idempotency contract on the server, a network drop *post-commit but pre-response* let an operator double-charge by re-tapping Confirm. The audit synthesis (`docs/inbox/2026-05-04_audit_synthesis_decisions.md` T0-1) classified this as a launch-blocker because the failure mode is a category of error the cashier can't see, can't recover from, and produces accounting + stock-ledger discrepancies that only surface at end-of-shift reconciliation.
+
+**Lesson.** Any whitelisted endpoint whose body has *side effects on durable state* — DB writes, payments, stock moves, external API calls — needs an idempotency contract designed in at the same time as the endpoint. Side-effect endpoints are categorically different from read endpoints: a read can be repeated freely, a side-effect cannot. The default for "what happens if this runs twice?" must be answered before the endpoint ships, not after a near-miss surfaces in audit.
+
+**The "but the client won't retry" rationalization is wrong.** The retry can be:
+- The operator tapping Confirm a second time after a "Sale failed" toast (the actual T0-1 scenario).
+- A browser auto-retry on a flaky connection.
+- A stuck network packet that gets re-delivered after our timeout.
+- A future client (mobile, third-party POS) that doesn't share the current cart's behavior.
+
+The server cannot rely on client behavior to enforce safety on its own state.
+
+**The pattern shipped (DEC-067).**
+
+1. Endpoint accepts a `client_request_id` parameter (UUID generated client-side, once per logical transaction — in our case, once per modal-open).
+2. **Fast path:** if a record exists with that token, return the original response *without re-running the side effect*.
+3. **Tail-write:** after the side effect succeeds, persist the token → result mapping with a unique constraint on the token.
+4. **Race tail:** if the unique constraint fires (concurrent retry beat us), the loser's transaction rolls back its side effect, the operator retries, the fast path returns the winner's payload.
+5. **Retention:** the idempotency table is GC'd on a schedule longer than the operational retry window but short enough to keep table size bounded.
+
+**Endpoints that should be audited for this lesson.** Any Hamilton-owned `@frappe.whitelist` endpoint that mutates durable state. As of 2026-05-03 the inventory:
+
+- `submit_retail_sale` — fixed by T0-1 / DEC-067.
+- `assign_asset_to_session` — currently a logged no-op stub (T1-1 PR #166); when it lands as a real implementation, it needs the same idempotency contract before merge.
+- `start_walk_in_session`, `vacate_asset`, `clean_asset`, `set_asset_oos`, `return_asset_from_oos` — currently each writes one or more rows to `Asset Status Log` and updates `Venue Asset.current_status`. The double-tap exposure here is much smaller (the writes are idempotent at the *outcome* level — the asset is in the same status either way), but a strict reading of the lesson would say each should accept and dedupe on a `client_request_id` for full hygiene.
+- `submit_admin_correction` (DEC-066, PR #170) — writes to `Hamilton Board Correction` and may mutate the target row. Hamilton Admin only; click rate is "once a quarter when something needs correcting." Practical exposure low; future-PR hygiene improvement.
+
+**What's pinned now.** PR shipping T0-1 / DEC-067 adds `TestSubmitRetailSaleIdempotency` to `test_retail_sales_invoice.py` with four contract tests covering the same-token deduplication, distinct-token-distinct-SI invariant, no-token passthrough, and idempotency-row-links-to-first-SI invariant.
+
+**Cross-references:**
+- DEC-067 in `docs/decisions_log.md` (the design decision)
+- T0-1 in `docs/inbox/2026-05-04_audit_synthesis_decisions.md` (the originating audit finding)
+- PR shipping the implementation
 

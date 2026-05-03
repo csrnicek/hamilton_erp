@@ -82,8 +82,15 @@ doc_events = {
 
 # ---------------------------------------------------------------------------
 # Scheduler events
-# No scheduled jobs registered. The Phase 1 stub `check_overtime_sessions`
-# was a no-op `pass` body firing every 15 minutes (96×/day) and contributed
-# only "Success" rows to `tabScheduled Job Log`. Removed in pre-Task-25
-# cleanup. Phase 2 reintroduces a real overtime job (or whatever supersedes
-# it) with a wrapping try/except + Error Log per Tier-1 audit requirements.
+# `purge_old_idempotency_records` (daily) — deletes Cash Sale Idempotency
+# rows older than 24h. The DocType caches client_request_id → SI mappings
+# for the T0-1 retail-sale idempotency contract; the retention window is
+# operationally bounded by shift length, so 24h is generous. Wraps in
+# try/except + Error Log per the Tier-1 audit requirement that scheduled
+# jobs surface failures rather than silently logging "Success".
+
+scheduler_events = {
+	"daily": [
+		"hamilton_erp.api.purge_old_idempotency_records",
+	],
+}

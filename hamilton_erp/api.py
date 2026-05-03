@@ -2,7 +2,7 @@ import json
 
 import frappe
 from frappe import _
-from frappe.utils import flt
+from frappe.utils import flt, now_datetime
 
 # ---------------------------------------------------------------------------
 # Sales Invoice doc_event hook (wired in hooks.py)
@@ -433,7 +433,12 @@ def _check_retail_sale_permission():
 
 
 @frappe.whitelist(methods=["POST"])
-def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> dict:
+def submit_retail_sale(
+	items,
+	cash_received,
+	payment_method: str = "Cash",
+	client_request_id: str | None = None,
+) -> dict:
 	"""Create + submit a POS Sales Invoice from the cart drawer.
 
 	Called by ``_open_cash_payment_modal`` in asset_board.js when the
@@ -508,6 +513,22 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 	    integration) ships separately.
 	"""
 	_check_retail_sale_permission()
+
+	# T0-1 idempotency fast path. Operator's network drops between server
+	# commit and client response; their cart did not auto-clear so they
+	# tap Confirm again. Same client_request_id (UUID generated at first
+	# Confirm tap) → return the original Sales Invoice's payload without
+	# creating a second SI / second cash payment line / second stock
+	# decrement. The unique constraint on Cash Sale Idempotency closes the
+	# narrow concurrent-retry race after this fast path.
+	if client_request_id:
+		cached_si = frappe.db.get_value(
+			"Cash Sale Idempotency",
+			{"client_request_id": client_request_id},
+			"sales_invoice",
+		)
+		if cached_si:
+			return _build_retail_sale_response(cached_si, payment_method)
 
 	if payment_method not in HAMILTON_PAYMENT_METHODS:
 		frappe.throw(_(
@@ -706,6 +727,19 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 			si.db_set("owner", real_user, update_modified=False)
 		si.submit()
 
+		# T0-1 idempotency record. The unique constraint on
+		# `client_request_id` is the durable enforcement: two concurrent
+		# requests that both passed the fast-path exists() check race here,
+		# and the loser's insert raises UniqueValidationError. Throwing
+		# rolls back the loser's SI submission; the operator retries with
+		# the same token and the fast path returns the winner's payload.
+		if client_request_id:
+			frappe.get_doc({
+				"doctype": "Cash Sale Idempotency",
+				"client_request_id": client_request_id,
+				"sales_invoice": si.name,
+			}).insert(ignore_permissions=True)
+
 		return {
 			"sales_invoice": si.name,
 			"grand_total": grand_total,
@@ -716,3 +750,51 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 	finally:
 		frappe.flags.ignore_permissions = original_ignore_perms
 		frappe.set_user(real_user)
+
+
+def _build_retail_sale_response(sales_invoice: str, payment_method: str) -> dict:
+	# Reconstruct the submit_retail_sale response payload from a
+	# previously-submitted Sales Invoice. Used by the T0-1 idempotency
+	# fast path so a retried request returns the same shape as the original.
+	si = frappe.get_doc("Sales Invoice", sales_invoice)
+	apply_rounding = _should_round_to_nickel(payment_method)
+	grand_total = flt(si.grand_total)
+	amount_due = (
+		flt(si.rounded_total)
+		if (apply_rounding and si.rounded_total)
+		else grand_total
+	)
+	rounding_adjustment = flt(si.rounding_adjustment) if apply_rounding else 0.0
+	change = flt(si.change_amount)
+	return {
+		"sales_invoice": si.name,
+		"grand_total": grand_total,
+		"rounded_total": amount_due,
+		"rounding_adjustment": rounding_adjustment,
+		"change": change,
+	}
+
+
+def purge_old_idempotency_records():
+	"""Daily scheduler job — delete Cash Sale Idempotency records older than 24h.
+
+	The retention window must outlive the operational network-retry window
+	(seconds to minutes) but stays short to keep the table small. 24h is
+	the same window operators reconcile their shift in, so any retry that
+	is still relevant to a same-shift operator falls inside it.
+
+	Wraps in a try/except + Error Log per the Tier-1 audit requirement that
+	scheduled jobs surface failures rather than silently logging "Success".
+	"""
+	from frappe.utils import add_to_date
+
+	try:
+		cutoff = add_to_date(now_datetime(), hours=-24)
+		frappe.db.delete("Cash Sale Idempotency", {"created_at": ["<", cutoff]})
+		frappe.db.commit()
+	except Exception:
+		frappe.log_error(
+			title="purge_old_idempotency_records failed",
+			message=frappe.get_traceback(),
+		)
+		raise

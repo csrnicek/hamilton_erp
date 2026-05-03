@@ -1019,6 +1019,139 @@ class TestCanadianCashRounding(IntegrationTestCase):
 			"survives the Card-flow implementation in Phase 2 next.")
 
 
+class TestSubmitRetailSaleIdempotency(IntegrationTestCase):
+	"""T0-1 — idempotency token on submit_retail_sale.
+
+	Failure mode being prevented: network drop after server commit but
+	before client receives the response. Operator's cart is intentionally
+	NOT cleared on error (so they don't lose work), so they tap Confirm
+	again. Without the token, the second call creates a second SI, double
+	stock decrement, double cash payment line. With the token, the second
+	call finds the cached idempotency record and returns the original SI's
+	payload.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.company = _hamilton_company()
+		if not cls.company:
+			return
+		cls.abbr = frappe.db.get_value("Company", cls.company, "abbr")
+		cls.warehouse = f"{HAMILTON_WAREHOUSE_BASE} - {cls.abbr}"
+
+	def setUp(self):
+		super().setUp()
+		if not _hamilton_company():
+			self.skipTest("Hamilton company not seeded.")
+		self._seed_stock("WAT-500", 24)
+
+	def _seed_stock(self, item_code: str, qty: float):
+		if not frappe.db.exists("Item", item_code):
+			self.skipTest(f"Item {item_code} not seeded.")
+		se = frappe.new_doc("Stock Entry")
+		se.update({
+			"company": self.company,
+			"stock_entry_type": "Material Receipt",
+			"purpose": "Material Receipt",
+		})
+		se.append("items", {
+			"item_code": item_code,
+			"qty": qty,
+			"t_warehouse": self.warehouse,
+			"basic_rate": 1.00,
+		})
+		se.insert(ignore_permissions=True)
+		se.submit()
+
+	def _get_stock(self, item_code: str) -> float:
+		row = frappe.db.get_value(
+			"Bin",
+			{"item_code": item_code, "warehouse": self.warehouse},
+			"actual_qty",
+		)
+		return float(row or 0)
+
+	def test_idempotent_same_request_id_returns_same_si(self):
+		"""Two calls with the same client_request_id must return the same SI."""
+		token = "test-uuid-same-id-001"
+		stock_before = self._get_stock("WAT-500")
+
+		first = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+			client_request_id=token,
+		)
+		stock_after_first = self._get_stock("WAT-500")
+		self.assertAlmostEqual(stock_before - stock_after_first, 2.0)
+
+		second = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 2, "unit_price": 3.50}],
+			cash_received=20.00,
+			client_request_id=token,
+		)
+		# Second call returns the SAME SI — no new invoice created.
+		self.assertEqual(first["sales_invoice"], second["sales_invoice"])
+		# Stock has NOT been decremented twice.
+		stock_after_second = self._get_stock("WAT-500")
+		self.assertAlmostEqual(stock_after_first, stock_after_second)
+		# Response payload is shape-stable across the retry.
+		self.assertAlmostEqual(first["grand_total"], second["grand_total"])
+		self.assertAlmostEqual(first["rounded_total"], second["rounded_total"])
+		self.assertAlmostEqual(first["change"], second["change"])
+
+	def test_different_request_ids_create_two_separate_sis(self):
+		"""Two distinct UUIDs must create two distinct sales."""
+		first = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=10.00,
+			client_request_id="test-uuid-distinct-A",
+		)
+		second = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=10.00,
+			client_request_id="test-uuid-distinct-B",
+		)
+		self.assertNotEqual(first["sales_invoice"], second["sales_invoice"])
+
+	def test_no_request_id_passthrough_unchanged_behavior(self):
+		"""Backward compatibility — calls without client_request_id bypass
+		the idempotency layer entirely. Pin that the parameter is genuinely
+		optional and legacy callers behave exactly as before.
+		"""
+		first = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=10.00,
+		)
+		second = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=10.00,
+		)
+		self.assertNotEqual(first["sales_invoice"], second["sales_invoice"])
+		rows = frappe.get_all(
+			"Cash Sale Idempotency",
+			filters={"sales_invoice": ["in", [first["sales_invoice"], second["sales_invoice"]]]},
+			fields=["name"],
+		)
+		self.assertEqual(rows, [])
+
+	def test_idempotency_record_links_to_first_si(self):
+		"""The Cash Sale Idempotency row written on first call must point
+		at the original SI."""
+		token = "test-uuid-link-check-002"
+		first = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=10.00,
+			client_request_id=token,
+		)
+		linked = frappe.db.get_value(
+			"Cash Sale Idempotency",
+			{"client_request_id": token},
+			"sales_invoice",
+		)
+		self.assertEqual(linked, first["sales_invoice"])
+
+
 def tearDownModule():
 	"""Restore dev state after destructive tests in this module."""
 	from hamilton_erp.test_helpers import restore_dev_state
