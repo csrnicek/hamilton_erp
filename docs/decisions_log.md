@@ -849,6 +849,59 @@ Quantities live as the `opening_stock` key on each entry in `HAMILTON_RETAIL_ITE
 
 ---
 
+## Amendment 2026-05-03 — DEC-072: Frappe Claude Skill Package adopted alongside Context7
+
+**Numbering note.** DEC-066 through DEC-071 are documented on still-open feature branches (PRs #170, #171, #172, #174, #178, #179) that haven't merged to main yet. DEC-072 is registered here on its own docs PR; the lower-numbered DECs land when their PRs merge.
+
+**Decision.** Install the Frappe Claude Skill Package (`OpenAEC-Foundation/Frappe_Claude_Skill_Package`, 60 deterministic skills, MIT) as personal skills at `~/.claude/skills/frappe-*`. Reference it from `CLAUDE.md` under Frappe v16 Conventions. Use **alongside** the existing Context7 tool, not as a replacement.
+
+**Why.** A 2026-05-03 evaluation prompted by the inbox queue ("Pre-DC: evaluate Frappe Claude Skill Package") tested whether the skill package meaningfully improves output quality over Context7 on a real Hamilton scenario.
+
+**Test prompt.** "When should I use `frappe.db.set_value` vs `frappe.get_doc().save()` in a controller? I need to update a flag field on a related Cash Drop after a Cash Reconciliation submits — specifically the `reconciled` boolean and a `reconciliation` link. The Cash Drop has `track_changes=1` and a `validate` hook." This is the exact bug-class T3-1 (PR #175) just fixed.
+
+**Context7 answer.** Mechanically describes both methods. States `set_value` "bypasses DocType validations and signals." Doesn't volunteer that `track_changes` is bypassed. Doesn't make a recommendation for the user's scenario. Tone: API reference.
+
+**Skill package answer (`frappe-core-database` SKILL.md + anti-patterns reference).** Decision tree: *"With validations + hooks → `frappe.get_doc().save()`. Direct DB (no hooks) → `frappe.db.set_value()` or `doc.db_set()`."* Anti-pattern #7 makes the rule explicit: *"`db_set`/`set_value` is acceptable ONLY for: hidden fields, counters, timestamps, performance-critical background jobs."* For Hamilton's scenario (operational flag, audit-relevant via `track_changes`, on a controller-validated DocType), the answer is unambiguous: ORM path. The skill catches the exact lesson Hamilton learned the hard way during T3-1.
+
+**Verdict.** Additive, not redundant.
+
+- **Context7** — what does this method do? (API reference, live, generic)
+- **Skill package** — when SHOULD I use which method? (decision trees, anti-patterns, v14/v15/v16 differences)
+
+The two layers don't overlap. Context7 stays for "show me the latest signature for `frappe.X.Y`." Skills handle "I'm about to write a controller — flag the gotchas before I code."
+
+**Coverage spot-check against bugs Hamilton hit during 2026-05-02/03:**
+
+| Hamilton bug | Skill that catches it |
+|---|---|
+| T3-1: `db.set_value` bypasses `track_changes` | `frappe-core-database` anti-pattern #7 |
+| T0-4 / DEC-070: `get_doc_before_save() is None` defensive bypass | `frappe-syntax-controllers` lifecycle methods |
+| T1-5: `UniqueValidationError` race on concurrent submit | `frappe-impl-controllers` flags + concurrency |
+| T0-1 / DEC-067: idempotency on `@frappe.whitelist` endpoints | `frappe-impl-whitelisted` workflows |
+| LL-040: `new Date(frappe_datetime_string)` timezone trap | Not directly covered — JS-side trap. Skills focus on server-side patterns. `frappe-syntax-clientscripts` is the closest neighbour. |
+
+**Boundaries / what's intentionally not duplicated.**
+
+The skill package documents *generic Frappe patterns*. Hamilton's `decisions_log.md` / `lessons_learned.md` document *Hamilton-specific decisions* (DEC-005 blind cash, DEC-019 three-layer locking, etc.). These are different layers — generic Frappe doesn't override Hamilton conventions; Hamilton conventions don't try to teach generic Frappe. No content was copied between repos.
+
+**What changed.**
+
+- `~/.claude/skills/frappe-*` — 60 skill folders installed (personal skills, MIT, drop-in copy from `skills/source/` flattened).
+- `CLAUDE.md` — Frappe v16 Conventions section now lists the skill package as the first source to consult.
+- `docs/inbox.md` — "Pre-DC: evaluate Frappe Claude Skill Package" entry removed (this DEC closes it).
+
+**Reversibility.** Trivial. To remove: `rm -rf ~/.claude/skills/frappe-*`, revert the CLAUDE.md change, and add a note here. Skills don't write to the repo, modify settings, or alter Claude Code's harness configuration — they're just markdown files Claude Code auto-discovers.
+
+**Update cadence.** No automated update. The upstream repo is active (last commit 2026-04-01); periodically check `git log` and pull fresh skill content if a meaningful release lands. Don't auto-update — review changes first to avoid drift surprises.
+
+**References.**
+- https://github.com/OpenAEC-Foundation/Frappe_Claude_Skill_Package — upstream
+- `~/.claude/skills/frappe-core-database/` — example skill used in the test prompt
+- T3-1 (PR #175) — the Hamilton bug whose decision tree the skills would have surfaced proactively
+- `docs/inbox.md` — closed entry that triggered this evaluation
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
