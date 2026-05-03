@@ -805,6 +805,35 @@ The reviewer's concern (recorded in `docs/inbox.md` 2026-05-03 cleanup follow-up
 
 ---
 
+## Amendment 2026-05-03 — DEC-071: Asset Board UI walkthrough fixes (findings #1–#5)
+
+Five UI findings surfaced during a 2026-05-03 Asset Board walkthrough. Each shipped as its own PR; collected here as a single design decision because they all sharpen the operator-side rendering contract.
+
+**Finding #1 — Negative elapsed time on new sessions ("-29m elapsed" on a session 1 minute old).**
+Root cause: Frappe stores Datetime fields as UTC strings without a timezone suffix (`"2026-05-03 18:31:00"`). The browser parsing `new Date("2026-05-03 18:31:00")` interprets the string as *local* time on Chrome, so an operator outside UTC sees a negative-offset interpretation of "now minus session_start". A fresh session in EST showed -29m because the local interpretation pushed the session into the future.
+Fix: a top-level `parseFrappeDatetime(str)` helper in `asset_board.js` that explicitly converts the Frappe string to ISO 8601 UTC (`"2026-05-03T18:31:00Z"`). All `new Date(asset.session_start)` / `new Date(asset.hamilton_last_status_change)` / `new Date(a.last_vacated_at)` call sites updated to use it. Same root-cause class fixed everywhere it appeared.
+Captured as LL-040 so future code that consumes Frappe datetimes via JSON inherits the lesson.
+
+**Finding #2 — Red retail tiles on out-of-stock SKUs.**
+Red is the danger/OOS color used everywhere else on the board (Occupied = red border). Reusing it for "out of stock" retail tiles overloaded the signal. Fix: a new `hamilton-retail-oos` CSS class with grey background + grey border, and an `OUT OF STOCK` label rendered directly in the tile body when `stock <= 0`. Distinct from any asset state.
+
+**Finding #3 — SKU code on retail tiles ("BAR-ENRG0").**
+Operators don't sell by SKU — they sell by product name + price. The SKU was rendering in the top-left of every retail tile (`hamilton-retail-code`). Fix: removed the SKU span from `_render_retail_tile`. Stock count moves to the position the SKU vacated. SKU is still on the Item DocType for backend traceability and remains in the cart drawer line items if needed.
+
+**Finding #4 — "Out of stock" toast small / fades fast.**
+With finding #2 putting `OUT OF STOCK` directly on the tile, the toast became redundant duplicate signal. Fix: removed the toast from the click handler. Tap on an OOS tile is now a silent no-op — the tile already says what's wrong, so a 2-second flash of small red text in the corner adds noise without information.
+
+**Finding #5 — No stock seeded on fresh install.**
+`seed_hamilton_env._ensure_retail_items` documented that "inventory is NOT seeded by this patch" and left stocking to a manual `bench --site … console` step after install. In practice, fresh installs were unusable: every retail tile rendered as OOS until someone remembered to run a Stock Entry. Fix: `_ensure_retail_initial_stock()` runs after `_ensure_retail_item_defaults` and seeds `HAMILTON_RETAIL_INITIAL_STOCK_QTY` (24) units of each retail item via a Material Receipt Stock Entry. Idempotent — only seeds when the Bin's `actual_qty` is `<= 0`. Skips silently when company / warehouse / item-defaults aren't yet seeded (matches the existing skip-on-prereqs-missing pattern in the surrounding code).
+
+**References.**
+- LL-040 — the Frappe datetime → JS Date timezone trap (parseFrappeDatetime contract)
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — parseFrappeDatetime helper, _render_retail_tile, click handler
+- `hamilton_erp/public/css/asset_board.css` — `.hamilton-retail-oos` class
+- `hamilton_erp/patches/v0_1/seed_hamilton_env.py::_ensure_retail_initial_stock`
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
