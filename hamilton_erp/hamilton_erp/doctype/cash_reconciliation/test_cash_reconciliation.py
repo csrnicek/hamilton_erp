@@ -7,11 +7,29 @@ class TestCashReconciliation(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
+	def _make_shift(self, operator: str = "Administrator", status: str = "Open") -> object:
+		# T1-4 (this PR): Cash Drop now validates that shift_record is set,
+		# that the linked Shift Record is Open, and that its operator
+		# matches the drop's. Mirror of the helper in test_cash_drop.py
+		# so reconciliation tests can build a valid drop fixture.
+		return frappe.get_doc(
+			{
+				"doctype": "Shift Record",
+				"operator": operator,
+				"shift_date": today(),
+				"status": status,
+				"shift_start": now_datetime(),
+				"float_expected": 300,
+			}
+		).insert(ignore_permissions=True)
+
 	def _make_drop(self, declared: float = 100.0) -> object:
+		shift = self._make_shift()
 		return frappe.get_doc(
 			{
 				"doctype": "Cash Drop",
 				"operator": "Administrator",
+				"shift_record": shift.name,
 				"shift_date": today(),
 				"shift_identifier": "Evening",
 				"drop_type": "Mid-Shift",
