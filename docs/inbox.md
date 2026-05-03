@@ -6,16 +6,6 @@ Fix two CI failures — commit to existing PR branches, do not open new PRs:
 1. **PR #122**: `tip_pull_currency` returns "CAD" instead of reading `frappe.conf.anvil_currency` — find where it gets set and wire it through. Run failing test to confirm.
 2. **PR #123**: `_ensure_test_item()` in `test_zero_value_invoice.py` missing `stock_uom` on Item fixture — add `stock_uom = "Nos"` before insert. Run failing tests to confirm.
 
-## Cleanup follow-up — `_ensure_audit_trail_enabled` dead hook
-
-Per **LL-038** (lessons_learned.md, 2026-05-03). `hamilton_erp/setup/install.py:46-69` targets `System Settings.enable_audit_trail`, a field that does not exist on Frappe v16.14.0. The hook silently no-ops on every install. The v16 audit mechanism is per-DocType `track_changes: 1`, regression-pinned by PR #161.
-
-**Two options for the cleanup PR (not urgent — pick one when convenient):**
-
-1. **Delete the hook.** The pin in `test_fresh_install_conformance.py::test_track_changes_enabled_on_all_auditable_hamilton_doctypes` covers the actual mechanism. The install hook adds nothing.
-2. **Make the hook fail-loud instead of fail-silent.** Replace `if not meta.has_field(...): return` with `frappe.throw(...)`. Future Frappe upgrades that re-introduce the field would be auto-detected; failures would surface immediately.
-
-Either is small. Schedule alongside the next supervised migrate window (or as a standalone docs/code PR — no migrate required). Not a launch blocker.
 
 ## 2026-05-01 — Phase 2 hardware research delivered
 
