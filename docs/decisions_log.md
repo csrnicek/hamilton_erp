@@ -1177,6 +1177,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** Documentation only — DEC-082 added pinning the design. The Phase-1.5 follow-up PR will land the DocType JSON, controller, fixtures, hook into `submit_retail_sale`, and `bench migrate` window.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.2; DEC-005 (blind cash); DEC-066 (Hamilton Board Correction pattern); DEC-077 (db_set on owner accept); skill `frappe-syntax-doctypes`.
+## Amendment 2026-05-04 — DEC-087: Accept `app_include_css` for the Asset Board CSS (audit F3.1)
+
+**Decision.** `asset_board.css` continues to load via `app_include_css` in `hooks.py`. We do not move it to `page_css` (per the existing inline comment in hooks.py: page-level CSS includes were removed in v15) or to `doctype_js` (the Asset Board is a Frappe Page, not a DocType view). The CSS is selector-scoped to `.hamilton-asset-board` / `.hamilton-loading`, so it does not bleed into other pages.
+
+**Why.** The audit F3.1 flagged this as bundle-size hygiene, not a defect ("Marginal — the CSS file is small"). Moving to a page-scoped include in v15+ requires either inlining the CSS in the Page record's JS via a `<style>` block or shipping the CSS as a route-resolved asset, both of which trade clean-source-tree for a marginal-bytes win. Phase 2 will revisit if multiple per-page CSS bundles begin to compound.
+
+**What changed.** Documentation only. The existing hooks.py comment is preserved.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F3.1; skill `frappe-syntax-hooks` (asset scoping); existing comment in `hamilton_erp/hooks.py:13-17`.
 
 ## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
 
