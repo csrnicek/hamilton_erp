@@ -6,6 +6,28 @@ Fix two CI failures — commit to existing PR branches, do not open new PRs:
 1. **PR #122**: `tip_pull_currency` returns "CAD" instead of reading `frappe.conf.anvil_currency` — find where it gets set and wire it through. Run failing test to confirm.
 2. **PR #123**: `_ensure_test_item()` in `test_zero_value_invoice.py` missing `stock_uom` on Item fixture — add `stock_uom = "Nos"` before insert. Run failing tests to confirm.
 
+<<<<<<< HEAD
+=======
+## Cleanup follow-up — `_ensure_audit_trail_enabled` dead hook
+
+Per **LL-038** (lessons_learned.md, 2026-05-03). `hamilton_erp/setup/install.py:46-69` targets `System Settings.enable_audit_trail`, a field that does not exist on Frappe v16.14.0. The hook silently no-ops on every install. The v16 audit mechanism is per-DocType `track_changes: 1`, regression-pinned by PR #161.
+
+**Two options for the cleanup PR (not urgent — pick one when convenient):**
+
+1. **Delete the hook.** The pin in `test_fresh_install_conformance.py::test_track_changes_enabled_on_all_auditable_hamilton_doctypes` covers the actual mechanism. The install hook adds nothing.
+2. **Make the hook fail-loud instead of fail-silent.** Replace `if not meta.has_field(...): return` with `frappe.throw(...)`. Future Frappe upgrades that re-introduce the field would be auto-detected; failures would surface immediately.
+
+Either is small. Schedule alongside the next supervised migrate window (or as a standalone docs/code PR — no migrate required). Not a launch blocker.
+### Code-quality follow-ups from morning review of PRs #165–#169 (2026-05-03)
+
+Three observations surfaced during the read-only review of the audit-synthesis PRs. None block launch; tracked here so they don't get forgotten.
+
+- **N+1 read in `submit_retail_sale` admission gate (PR #166)** — the admission check (`Comp Admission Log` lookup gating retail) runs `frappe.db.get_value(...)` per cart line. For a cart with N items that's N round trips to `tabComp Admission Log`. Optimization, not a bug. Fix: hoist the lookup before the loop, or batch via `frappe.db.get_all(... fields=[...], filters={...}, order_by="timestamp desc", limit=1)`. Low priority — Phase 1 carts are typically 1–3 items so the cost is invisible today; revisit if cart sizes grow.
+
+- **f-string + implicit-concat + `.format()` mixing in `assign_asset_to_session` warning log (PR #166)** — the deprecation-warning line mixes f-string substitution, implicit string concatenation, and a trailing `.format()`. Functionally OK for the current arg shapes (all strings), but fragile: if any arg becomes `None` or a non-`str`, the implicit concat path silently produces ambiguous output. Fix: collapse to a single f-string. Trivial.
+
+- **`get_doc_before_save() is None` defensive bypass in Cash Drop guards (PR #168)** — both `_validate_immutable_after_first_save` and `_validate_immutable_after_reconciliation` start with `if get_doc_before_save() is None: return`. The intent is "skip during initial insert when no prior version exists." Risk: if a future Frappe minor changes the semantics of `get_doc_before_save` (e.g. returns an empty Document instead of None on insert), the guards silently no-op and the immutability invariant breaks. Fix: pin the bypass to an explicit `if self.is_new(): return` instead, which uses the documented public API. Schedule with the Phase 3 bench-migrate window.
+>>>>>>> 6727e34 (feat(DEC-066): admin-correction endpoint + Cash Recon on_cancel handler)
 
 ## 2026-05-01 — Phase 2 hardware research delivered
 
