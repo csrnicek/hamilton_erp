@@ -332,12 +332,16 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 
 @frappe.whitelist(methods=["POST"])
 def start_walk_in_session(asset_name: str) -> dict:
-	"""Assign a walk-in session to an Available asset. Available → Occupied."""
+	"""Assign a walk-in session to an Available asset. Available → Occupied.
+
+	Returns the unified `{"status": "ok", ...}` envelope per DEC-085. The
+	`session` key carries the new session name for clients that need it.
+	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
 	from hamilton_erp.lifecycle import start_session_for_asset
 
 	session_name = start_session_for_asset(asset_name, operator=frappe.session.user)
-	return {"session": session_name}
+	return {"status": "ok", "session": session_name}
 
 
 @frappe.whitelist(methods=["POST"])
