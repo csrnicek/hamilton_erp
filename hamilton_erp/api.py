@@ -406,6 +406,41 @@ def _is_admin_user() -> bool:
 	return "System Manager" in roles or "Hamilton Admin" in roles
 
 
+# Frappe fieldtypes that need numeric coercion before being assigned
+# to a Document field. Whitelisted endpoints receive everything as
+# strings on the wire; downstream validators do numeric comparisons
+# (e.g. `if self.declared_amount < 0`) which TypeError on a string.
+_NUMERIC_FIELDTYPES_FLOAT = {"Currency", "Float", "Percent"}
+_NUMERIC_FIELDTYPES_INT = {"Int", "Check"}
+
+
+def _coerce_field_value(doc, fieldname: str, value):
+	"""Coerce `value` to the Python type the field expects.
+
+	Resolves the field's Frappe fieldtype from `doc.meta` and converts:
+	  * Currency / Float / Percent → frappe.utils.flt(value)
+	  * Int / Check                → frappe.utils.cint(value)
+	  * everything else (Data, Text, Select, Link, Datetime, …) → str(value)
+
+	Returns the value unchanged if `value is None` so caller-supplied
+	None gets stored as None (not "None"). Returns `value` as-is on an
+	unknown fieldname so the caller's downstream `set` raises a clearer
+	error than this helper would.
+	"""
+	if value is None:
+		return None
+	df = doc.meta.get_field(fieldname)
+	if df is None:
+		return value
+	from frappe.utils import cint
+	if df.fieldtype in _NUMERIC_FIELDTYPES_FLOAT:
+		return flt(value)
+	if df.fieldtype in _NUMERIC_FIELDTYPES_INT:
+		return cint(value)
+	# Data / Text / Select / Link / Datetime / Date / Time — keep as str.
+	return str(value)
+
+
 @frappe.whitelist(methods=["POST"])
 def submit_admin_correction(
 	target_doctype: str,
@@ -501,7 +536,13 @@ def submit_admin_correction(
 
 	flag_attr = _MUTABLE_TARGETS[target_doctype]
 	target_doc = frappe.get_doc(target_doctype, target_name)
-	target_doc.set(target_field, new_value)
+	# Coerce new_value to the field's Python type before setting. The
+	# endpoint receives new_value as a string over the wire (whitelisted
+	# POST), but downstream validators expect numeric types where the field
+	# is Currency / Float / Int / Check. Without this, e.g. CashDrop's
+	# `_validate_declared_amount` does `self.declared_amount < 0` and hits
+	# `TypeError: '<' not supported between instances of 'str' and 'int'`.
+	target_doc.set(target_field, _coerce_field_value(target_doc, target_field, new_value))
 	prior_flag = getattr(frappe.flags, flag_attr, False) if flag_attr else None
 	try:
 		if flag_attr:
