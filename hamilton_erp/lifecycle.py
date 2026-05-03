@@ -196,7 +196,16 @@ def _create_session(asset_name: str, *, operator: str, customer: str) -> str:
 			# constraint), silently retrying 3 times would mask the real
 			# error. Re-raise without touching message_log so the real toast
 			# reaches the client.
-			if "session_number" not in str(exc):
+			#
+			# DEC-090 / S4.2: prefer the locale-stable underlying MariaDB
+			# error string ("Duplicate entry ... for key 'session_number'")
+			# over the translated user-facing message. exc.args carries the
+			# DocType, name, and the original IntegrityError. The key-name
+			# match works in any frappe.lang. Fall back to the legacy
+			# substring check on the translated str(exc) for environments
+			# where the underlying exception isn't reachable.
+			underlying = str(exc.args[-1]) if exc.args else ""
+			if "session_number" not in underlying and "session_number" not in str(exc):
 				raise
 			# Discard the "must be unique" toast left by the failed attempt —
 			# otherwise a successful retry ships it to the client alongside

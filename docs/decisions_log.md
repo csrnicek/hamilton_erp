@@ -1066,6 +1066,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/api.py`: imported `rate_limit` from `frappe.rate_limiter`, decorated `get_asset_board_data`. No schema change.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.1; DEC-074 (mutating-endpoint rate limits, on unmerged feature branch); skill `frappe-impl-whitelisted` (rate_limit guidance).
+## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
+
+**Decision.** `_create_session`'s UniqueValidationError handler now checks both `exc.args[-1]` (the underlying MariaDB IntegrityError, which carries the locale-stable key name) and the legacy `str(exc)` substring as a fallback. The retry only fires when the collision is on `session_number`.
+
+**Why.** Audit S4.2: `if "session_number" not in str(exc)` substring-matches a `frappe._()`-translated message. On a non-en-US locale (`fr` for Quebec/Toronto) the translated text would not contain the literal `session_number`, so a real session_number collision would re-raise instead of retry — exactly the case the loop was built for.
+
+**What changed.** `hamilton_erp/lifecycle.py`: handler reads `exc.args[-1]` (the original IntegrityError → contains "Duplicate entry ... for key 'session_number'", locale-stable) and ORs the legacy match for environments where the underlying exception is wrapped differently. No behaviour change in en-US; correctness preserved across locales.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.2; skill `tob-sharp-edges` (i18n-fragile error matching).
 ## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
 
 **Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.
