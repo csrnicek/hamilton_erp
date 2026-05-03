@@ -117,10 +117,23 @@ def asset_status_lock(asset_name: str, operation: str) -> Iterator[dict]:
 		try:
 			token_now = cache.get(key)
 			if token_now != token.encode():
-				frappe.logger().warning(
+				# T3-5 operational monitoring: TTL expiry during a critical
+				# section is the load/perf signal worth surfacing — it means
+				# a Hamilton operation took longer than LOCK_TTL_MS to
+				# complete. Log to BOTH the rotating site log (cheap, dev-
+				# friendly) AND the Error Log DocType (durable, queryable
+				# from Desk → Error Log filtered on "Asset lock TTL expired").
+				# RUNBOOK.md §4.4 is the operator-facing playbook.
+				message = (
 					f"asset_status_lock: Redis TTL expired during critical section "
 					f"for {key} — lock was held by another caller by release time. "
-					f"MariaDB FOR UPDATE preserved data integrity."
+					f"MariaDB FOR UPDATE preserved data integrity. "
+					f"operation={operation} asset={asset_name}"
+				)
+				frappe.logger().warning(message)
+				frappe.log_error(
+					title="Asset lock TTL expired",
+					message=message,
 				)
 		except Exception as exc:
 			frappe.logger().warning(
