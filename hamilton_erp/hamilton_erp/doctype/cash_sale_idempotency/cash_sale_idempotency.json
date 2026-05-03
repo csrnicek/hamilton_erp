@@ -8,7 +8,8 @@
  "field_order": [
   "client_request_id",
   "sales_invoice",
-  "created_at"
+  "created_at",
+  "response_payload"
  ],
  "fields": [
   {
@@ -38,6 +39,12 @@
    "in_list_view": 1,
    "label": "Created At",
    "reqd": 1
+  },
+  {
+   "description": "JSON snapshot of the original submit_retail_sale response payload (sales_invoice, grand_total, rounded_total, rounding_adjustment, change). On idempotent retry the endpoint returns this verbatim — Sales Invoice's persisted change_amount is recomputed by ERPNext after submit and cannot be reconstructed from the SI alone.",
+   "fieldname": "response_payload",
+   "fieldtype": "Long Text",
+   "label": "Response Payload (JSON)"
   }
  ],
  "index_web_pages_for_search": 0,

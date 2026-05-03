@@ -522,13 +522,23 @@ def submit_retail_sale(
 	# decrement. The unique constraint on Cash Sale Idempotency closes the
 	# narrow concurrent-retry race after this fast path.
 	if client_request_id:
-		cached_si = frappe.db.get_value(
+		cached = frappe.db.get_value(
 			"Cash Sale Idempotency",
 			{"client_request_id": client_request_id},
-			"sales_invoice",
+			["sales_invoice", "response_payload"],
+			as_dict=True,
 		)
-		if cached_si:
-			return _build_retail_sale_response(cached_si, payment_method)
+		if cached:
+			# Return the original response payload verbatim if we stored
+			# it on the original call. Reconstructing from the Sales
+			# Invoice alone fails for `change` because ERPNext recomputes
+			# `change_amount = paid_amount - amount_due` after submit, so
+			# the SI has change_amount=0 even when the customer received
+			# real change. Older records (pre-response_payload field)
+			# fall back to the SI-reconstruction path.
+			if cached.get("response_payload"):
+				return json.loads(cached["response_payload"])
+			return _build_retail_sale_response(cached["sales_invoice"], payment_method)
 
 	if payment_method not in HAMILTON_PAYMENT_METHODS:
 		frappe.throw(_(
@@ -727,26 +737,34 @@ def submit_retail_sale(
 			si.db_set("owner", real_user, update_modified=False)
 		si.submit()
 
-		# T0-1 idempotency record. The unique constraint on
-		# `client_request_id` is the durable enforcement: two concurrent
-		# requests that both passed the fast-path exists() check race here,
-		# and the loser's insert raises UniqueValidationError. Throwing
-		# rolls back the loser's SI submission; the operator retries with
-		# the same token and the fast path returns the winner's payload.
-		if client_request_id:
-			frappe.get_doc({
-				"doctype": "Cash Sale Idempotency",
-				"client_request_id": client_request_id,
-				"sales_invoice": si.name,
-			}).insert(ignore_permissions=True)
-
-		return {
+		response = {
 			"sales_invoice": si.name,
 			"grand_total": grand_total,
 			"rounded_total": amount_due,
 			"rounding_adjustment": rounding_adjustment,
 			"change": change,
 		}
+
+		# T0-1 idempotency record. The unique constraint on
+		# `client_request_id` is the durable enforcement: two concurrent
+		# requests that both passed the fast-path exists() check race here,
+		# and the loser's insert raises UniqueValidationError. Throwing
+		# rolls back the loser's SI submission; the operator retries with
+		# the same token and the fast path returns the winner's payload.
+		#
+		# response_payload stashes the verbatim response so retries return
+		# byte-identical values for `change`. Reconstructing change from
+		# the SI alone fails because ERPNext recomputes change_amount
+		# after submit (paid_amount == amount_due → change_amount = 0).
+		if client_request_id:
+			frappe.get_doc({
+				"doctype": "Cash Sale Idempotency",
+				"client_request_id": client_request_id,
+				"sales_invoice": si.name,
+				"response_payload": json.dumps(response),
+			}).insert(ignore_permissions=True)
+
+		return response
 	finally:
 		frappe.flags.ignore_permissions = original_ignore_perms
 		frappe.set_user(real_user)
