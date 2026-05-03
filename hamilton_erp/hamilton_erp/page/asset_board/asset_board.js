@@ -1040,10 +1040,20 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				if (!item_code) return;
 				const stock = Number($tile.data("stock") || 0);
 				if (stock <= 0) {
-					// Finding #2/#3 (DEC-071): the tile already shows
-					// "OUT OF STOCK" in place of the price (and the tile
-					// is grey, not red), so a tap-only toast was
-					// redundant noise. Silent no-op — operator already knows.
+					// DEC-100 — OOS retail tile is the entry point for the
+					// Manager+ restock overlay. Operators see a transient
+					// "Manager required" toast (3 s auto-dismiss) instead of
+					// the overlay; the toast doesn't block the rest of the
+					// board. Role check is JS-gated for UX + server-gated in
+					// restock_item() for defense in depth.
+					if (this._is_manager_or_admin()) {
+						this.show_restock_overlay(item_code);
+					} else {
+						frappe.show_alert(
+							{ message: __("Manager required to restock"), indicator: "orange" },
+							3,
+						);
+					}
 					return;
 				}
 				this._cart_add(item_code);
@@ -1988,6 +1998,54 @@ hamilton_erp.AssetBoard = class AssetBoard {
 					this._update_tab_badges();
 				} catch (e) {
 					// Server error surfaced as toast.
+				}
+			},
+		});
+		dialog.show();
+	}
+
+	// DEC-100 — Manager / Admin role check, JS-side. Mirrors the server
+	// guard in api._is_manager_or_admin_user. System Manager always wins;
+	// Hamilton Admin / Manager are the venue roles.
+	_is_manager_or_admin() {
+		const roles = (frappe.user_roles || []);
+		return roles.includes("System Manager")
+			|| roles.includes("Hamilton Admin")
+			|| roles.includes("Hamilton Manager");
+	}
+
+	// DEC-100 — Restock overlay. Quantity input + Confirm. On submit, calls
+	// restock_item which inserts a Material Receipt Stock Entry. The board
+	// is refreshed so the OOS tile flips back to in-stock immediately.
+	show_restock_overlay(item_code) {
+		const item = (this.items || []).find((it) => it.item_code === item_code);
+		const label = item ? `${item.item_code} — ${item.item_name || ""}` : item_code;
+		const dialog = new frappe.ui.Dialog({
+			title: __("Restock {0}", [label]),
+			fields: [
+				{
+					fieldname: "qty",
+					label: __("Quantity"),
+					fieldtype: "Float",
+					reqd: 1,
+					default: 12,
+					description: __("Units to add to inventory."),
+				},
+			],
+			primary_action_label: __("Restock"),
+			primary_action: async (values) => {
+				try {
+					await frappe.call({
+						method: "hamilton_erp.api.restock_item",
+						args: { item_code, qty: values.qty },
+					});
+					dialog.hide();
+					frappe.show_alert({ message: __("Restocked"), indicator: "green" });
+					// Refresh the board so the tile state + stock count update.
+					await this.fetch_board();
+					this.render_active_tab();
+				} catch (e) {
+					// frappe.call surfaces server errors as toasts.
 				}
 			},
 		});

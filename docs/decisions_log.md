@@ -1332,6 +1332,30 @@ The alternative — a distinct fill colour — was rejected because it would bre
 - ERPNext issue [#51946](https://github.com/frappe/erpnext/issues/51946).
 - `docs/research/merchant_processor_comparison.md` — Fiserv-vs-alternatives.
 - `HAMILTON_LAUNCH_PLAYBOOK.md` → "Dependencies" section, checkbox now ticked.
+## Amendment 2026-05-03 — DEC-100: Restock OOS retail tiles from the Asset Board (Manager+)
+
+**Decision.** Tapping an out-of-stock retail tile opens a Manager-only Restock overlay. Confirming inserts a Material Receipt Stock Entry that mirrors the seed/install pattern and the board refreshes so the tile flips back to in-stock.
+
+**Why a role gate.** Stock corrections are a manager-level decision: they touch the cost-of-goods ledger and bypass the normal purchase-receipt path that ties stock movement to a purchase invoice. Operators should not be able to silently zero out a variance by re-stocking the system to match physical count — that hides shrinkage. Hamilton Manager + Hamilton Admin (+ System Manager via convention) get the action; Operators see a 3-second toast saying "Manager required to restock."
+
+**Mechanism — re-using the seed pattern.** `_seed_stock` in `test_retail_sales_invoice.py` and the install path both use a Stock Entry with `stock_entry_type="Material Receipt"` to seed Bin counts. Restocks at runtime use the exact same shape. Reasons:
+1. The Stock Entry Type already exists on every Hamilton site (the install/setup path creates it). No new Stock Entry Type to seed.
+2. The accounting wiring (cost center, expense account) is already valid for Material Receipt entries — no chart-of-accounts changes.
+3. Operators understand "we just received a case of water" as the mental model. That maps to Material Receipt.
+
+The alternative — Stock Reconciliation — would be a more accurate audit shape (it explicitly says "physical count vs system"), but Stock Reconciliation has stricter posting rules and the install path doesn't seed it. Defer to Phase 2 if the audit team requests the upgrade.
+
+**Defense in depth.** The JS overlay is hidden for Operators; the server endpoint `restock_item` re-checks the role and throws `frappe.PermissionError` if the caller doesn't have Manager+. The toast on the JS side is UX only — it MUST not be the only barrier.
+
+**What changed.**
+- `hamilton_erp/api.py` — new `restock_item(item_code, qty)` endpoint + `_is_manager_or_admin_user` and `_resolve_hamilton_company` helpers.
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — OOS retail tile click now branches on role: Manager+ → `show_restock_overlay()`; Operator → 3-second toast. Two new helpers `_is_manager_or_admin` and `show_restock_overlay`.
+- `hamilton_erp/test_asset_board_rendering.py` — substring contract tests under `TestRestockOverlayContract`.
+- `hamilton_erp/test_restock_item.py` — round-trip tests for the endpoint.
+
+**Migrate flag.** None.
+
+**References.** `_seed_stock` pattern in `hamilton_erp/test_retail_sales_invoice.py:342` and `hamilton_erp/setup/install.py` (Material Receipt Stock Entry Type seeding); DEC-099 (operator gating); audit F2.2 (the previous OOS no-op this replaces).
 ## Amendment 2026-05-03 — DEC-105: Multi-venue Fiserv adapter — config-driven CA / USA routing
 
 **Decision.** Hamilton's custom Fiserv card adapter (per DEC-096, since `frappe/payments` is omitted) ships as **one adapter class with two driver implementations**, selected at runtime by a per-site `frappe.conf.fiserv_region` value (`"CA"` or `"US"`) carried in `site_config.json`. App-level code calls `adapter.authorize(...)`, `adapter.capture(...)`, `adapter.void(...)`, `adapter.refund(...)`, `adapter.get_status(...)` and never branches on region.

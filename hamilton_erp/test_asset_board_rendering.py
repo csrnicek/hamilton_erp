@@ -1727,6 +1727,51 @@ class TestShiftManagementContract(IntegrationTestCase):
 		)
 
 
+
+
+class TestRestockOverlayContract(IntegrationTestCase):
+	"""DEC-100 — guard the OOS retail tile → Manager Restock overlay surface."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	def test_js_defines_show_restock_overlay(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"show_restock_overlay", source,
+			"show_restock_overlay() missing — DEC-100 requires the Manager+ "
+			"restock entry point on the OOS retail tile.",
+		)
+
+	def test_js_role_gate_on_oos_retail_tile(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_is_manager_or_admin", source,
+			"OOS retail tile branch must check _is_manager_or_admin per DEC-100.",
+		)
+
+	def test_js_operator_sees_manager_required_toast(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"Manager required to restock", source,
+			"Operator-fallback toast text missing — DEC-100 contract.",
+		)
+
+	def test_js_calls_restock_item_endpoint(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton_erp.api.restock_item", source,
+			"Restock overlay must call restock_item per DEC-100.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
