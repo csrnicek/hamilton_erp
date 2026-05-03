@@ -522,13 +522,18 @@ def submit_retail_sale(
 	# decrement. The unique constraint on Cash Sale Idempotency closes the
 	# narrow concurrent-retry race after this fast path.
 	if client_request_id:
-		cached = frappe.db.get_value(
+		# Variable named `idem_row` (not `cached*`) because the
+		# test_all_redis_keys_use_hamilton_namespace lint matches any
+		# variable containing "cache" or "redis" as a Redis API call —
+		# this row is a MariaDB query result (Cash Sale Idempotency
+		# DocType), not a Redis cache value.
+		idem_row = frappe.db.get_value(
 			"Cash Sale Idempotency",
 			{"client_request_id": client_request_id},
 			["sales_invoice", "response_payload"],
 			as_dict=True,
 		)
-		if cached:
+		if idem_row:
 			# Return the original response payload verbatim if we stored
 			# it on the original call. Reconstructing from the Sales
 			# Invoice alone fails for `change` because ERPNext recomputes
@@ -536,9 +541,9 @@ def submit_retail_sale(
 			# the SI has change_amount=0 even when the customer received
 			# real change. Older records (pre-response_payload field)
 			# fall back to the SI-reconstruction path.
-			if cached.get("response_payload"):
-				return json.loads(cached["response_payload"])
-			return _build_retail_sale_response(cached["sales_invoice"], payment_method)
+			if idem_row.get("response_payload"):
+				return json.loads(idem_row["response_payload"])
+			return _build_retail_sale_response(idem_row["sales_invoice"], payment_method)
 
 	if payment_method not in HAMILTON_PAYMENT_METHODS:
 		frappe.throw(_(
