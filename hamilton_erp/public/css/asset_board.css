@@ -950,6 +950,36 @@
 }
 .hamilton-retail-tile { position: relative; }
 
+/* Out-of-stock retail tiles (finding #2 / DEC-071): grey, distinct from
+   any asset state. Red was previously reused for retail OOS but
+   conflated with Occupied (red) elsewhere on the board. */
+.hamilton-retail-oos {
+	background: #1a1a1a;
+	border-color: #555;
+	color: #888;
+}
+.hamilton-retail-oos .hamilton-retail-name,
+.hamilton-retail-oos .hamilton-retail-price,
+.hamilton-retail-oos .hamilton-retail-stock,
+.hamilton-retail-oos .hamilton-retail-code {
+	color: #888;
+}
+.hamilton-retail-oos-label {
+	position: absolute;
+	top: 50%;
+	left: 50%;
+	transform: translate(-50%, -50%) rotate(-8deg);
+	background: rgba(34, 34, 34, 0.92);
+	color: #d4d4d4;
+	font-size: 11px;
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	padding: 3px 7px;
+	border: 1px solid #555;
+	border-radius: 4px;
+	pointer-events: none;
+}
+
 /* Cash payment modal (V9.1-D12). */
 .hamilton-cash-modal .hamilton-cash-received {
 	width: 100%;

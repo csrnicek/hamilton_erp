@@ -451,13 +451,16 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	_render_retail_tile(item) {
-		// Stock state palette per V9.1-D6:
+		// Stock state palette (finding #2 / DEC-071):
 		//   in stock (>=4) → green (matches asset Available)
 		//   low (1-3)      → amber (matches asset Dirty)
-		//   out (0)        → red   (matches asset Occupied)
+		//   out (0)        → grey  (hamilton-retail-oos — distinct from any
+		//                            asset state; red was previously reused
+		//                            but conflicted with Occupied)
 		const stock = Number(item.stock || 0);
+		const out_of_stock = stock <= 0;
 		let state_cls = "hamilton-status-available";
-		if (stock <= 0) state_cls = "hamilton-status-occupied";
+		if (out_of_stock) state_cls = "hamilton-retail-oos";
 		else if (stock <= 3) state_cls = "hamilton-status-dirty";
 
 		const price = (Number(item.standard_rate) || 0).toFixed(2);
@@ -467,6 +470,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const in_cart = this._cart_qty_for(item.item_code);
 		const cart_pill = in_cart > 0
 			? `<span class="hamilton-retail-incart">${__("In cart")} ${in_cart}</span>`
+			: "";
+		// Finding #2 / #4 (DEC-071): OUT OF STOCK rendered directly on the
+		// tile makes the constraint visible without any tap, replacing the
+		// previous tap-only toast.
+		const oos_label = out_of_stock
+			? `<div class="hamilton-retail-oos-label">${__("OUT OF STOCK")}</div>`
 			: "";
 		return `
 			<div class="hamilton-tile hamilton-retail-tile ${state_cls}"
@@ -478,6 +487,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				</div>
 				<div class="hamilton-retail-name">${frappe.utils.escape_html(item.item_name || "")}</div>
 				<div class="hamilton-retail-price">$${price}</div>
+				${oos_label}
 				${cart_pill}
 			</div>
 		`;
