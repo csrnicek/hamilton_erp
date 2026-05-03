@@ -723,6 +723,38 @@ Added `Multi-source Variance` to the `variance_flag` Select options in `cash_rec
 - `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js::roundToNickel`
 - `hamilton_erp/hamilton_erp/doctype/cash_reconciliation/cash_reconciliation.py::_get_variance_tolerance`
 - `hamilton_erp/hamilton_erp/doctype/hamilton_settings/hamilton_settings.json` — new fields
+## Amendment 2026-05-03 — DEC-069: T0-2 Path B — hard-disable Cash Reconciliation variance classification until Phase 3
+
+**Decision.** `_set_variance_flag` short-circuits unconditionally to `variance_flag = "Pending Phase 3"` and `variance_amount = actual_count - system_expected` (NEW-1 bundled). The three-way classifier (Clean / Possible Theft or Error / Operator Mis-declared) is not invoked at Phase 1. Managers reconcile cash physically per the manual procedure documented in `HAMILTON_LAUNCH_PLAYBOOK.md` #3 and `RUNBOOK.md` §7.2 (manager counts envelope, matches declared amount on printed label, signs paper). Path A (the real `system_expected` calculation) ships in Phase 3 as part of the Cash Reconciliation redesign documented in `docs/design/cash_reconciliation_phase3.md`.
+
+**Why.** `_calculate_system_expected` is a Phase 3 placeholder hardcoded to 0. The previous classifier ran every reconciliation against `system = 0` and produced a false-positive variance flag on every drop with non-zero cash — see R-011 in `docs/risk_register.md` for the full failure characterization. Mitigation pre-DEC-069 was operator training to *ignore* the flag, which is a process risk that decays under shift fatigue and operator turnover.
+
+The audit synthesis (`docs/inbox/2026-05-04_audit_synthesis_decisions.md`) classified this as a launch BLOCKER conditional on the Phase 1 scope decision (Path A vs Path B). Path B was selected because (a) Cash Reconciliation is *not* in the Phase 1 launch scope, (b) the manual reconciliation procedure is operationally identical to what managers do today on paper at other venues, and (c) Path A's full implementation has its own rollout and validation requirements that don't fit the launch window.
+
+**Mechanism.**
+
+1. `cash_reconciliation.json` — `"Pending Phase 3"` added to the `variance_flag` Select options (alongside the existing four). Bundle into the Phase 3 migrate window.
+2. `cash_reconciliation.py::_set_variance_flag` — body replaced with two assignments: `self.variance_amount = flt(self.actual_count) - flt(self.system_expected)` and `self.variance_flag = "Pending Phase 3"`. The previous three-way logic is gone, not commented out — restoring it requires reverting this DEC explicitly.
+3. `cash_reconciliation.js::refresh` — adds an orange dashboard headline on the form referencing `HAMILTON_LAUNCH_PLAYBOOK.md` #3 and `RUNBOOK.md` §7.2, so a manager opening a Cash Reconciliation today knows what they're seeing and where the manual procedure lives.
+4. `RUNBOOK.md` §7.2 — explicit manual reconciliation steps + the closed-deferred note for R-011.
+5. `HAMILTON_LAUNCH_PLAYBOOK.md` #3 — pinned to the manual procedure as the Phase 1 rule.
+
+**NEW-1 bundled.** The audit found that `variance_amount` was never written, so the form's Currency field was empty even after reveal. NEW-1 fixes this with one line: `self.variance_amount = flt(self.actual_count) - flt(self.system_expected)`. Until Phase 3 the value equals `actual_count` (since `system_expected = 0`) — but the same line continues to work correctly against the real calculation when Phase 3 lands. Bundling NEW-1 here keeps `_set_variance_flag` as the one place that owns reveal-time field writes.
+
+**Tests.** `test_t0_2_path_b_variance_flag_pending_phase_3_for_any_inputs` in `test_cash_reconciliation.py` pins the contract: four representative input shapes that previously produced each of the four legacy classifications all resolve to `"Pending Phase 3"`, and `variance_amount` is non-zero where `actual_count` is non-zero. A future regression that re-enables the classifier without also delivering the real `system_expected` calculator surfaces here.
+
+**STOP.** `bench migrate` REQUIRED — Select option change. Bundle into the Phase 3 migrate window (alongside DEC-066 / DEC-067 / DEC-068 / T0-4 + T1-4).
+
+**Closing R-011.** The watch-points in R-011 ("manager onboarding must explicitly state ignore variance flag", "Phase 3 implementation must include real system_expected calculator first", "manager attrition reactivates the false-alarm pattern") are superseded by Path B: the flag now reads "Pending Phase 3" by code, not by training. R-011 status flips to **Closed (deferred to Phase 3)**.
+
+**Reversal cost.** Reverting Path B requires (a) restoring the three-way classifier body in `_set_variance_flag`, (b) ensuring `_calculate_system_expected` is no longer a placeholder (or accepting the false-positive flag pattern again), and (c) removing the dashboard headline from the JS. Path A then becomes the natural reversal target — the path forward, not back to the broken classifier.
+
+**References.**
+- `docs/inbox/2026-05-04_audit_synthesis_decisions.md` T0-2 Path B
+- `docs/risk_register.md` R-011
+- `docs/design/cash_reconciliation_phase3.md` (Phase 3 redesign target)
+- `hamilton_erp/hamilton_erp/doctype/cash_reconciliation/cash_reconciliation.py::_set_variance_flag`
+- `hamilton_erp/hamilton_erp/doctype/cash_reconciliation/cash_reconciliation.js::refresh`
 
 ---
 

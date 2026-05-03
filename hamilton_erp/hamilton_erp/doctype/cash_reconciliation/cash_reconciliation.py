@@ -129,56 +129,31 @@ class CashReconciliation(Document):
 		self.system_expected = flt(0)
 
 	def _set_variance_flag(self):
-		"""Apply the three-way variance rule per build spec §7.7.
+		"""T0-2 Path B / DEC-069: classification short-circuited until Phase 3.
 
-		Three-way comparison:
-		  manager = what the manager physically counted (ground truth)
-		  operator = what the operator declared when dropping the envelope
-		  system = what the POS recorded as cash transactions
+		The original three-way variance rule (Clean / Possible Theft or Error
+		/ Operator Mis-declared) depends on `system_expected` being a real
+		number computed from POS Sales Invoice cash payment lines for the
+		shift period. `_calculate_system_expected` is a Phase 3 placeholder
+		that hardcodes 0, so the classifier ran every reconciliation against
+		`system = 0` and produced a false-positive variance flag on EVERY
+		drop with non-zero cash. R-011 in `docs/risk_register.md`.
 
-		  Clean:                  all three agree within tolerance
-		  Possible Theft/Error:   manager ≈ operator but system differs
-		                          (cash matches declaration but POS expected different)
-		  Also Possible T/E:      system ≈ operator but manager found less
-		                          (POS and operator agree, but cash is physically missing)
-		  Operator Mis-declared:  manager ≈ system but operator declared wrong amount
-		                          (physical count matches POS, operator was inaccurate)
+		Until Phase 3 ships the real calculation, the flag is set to
+		`"Pending Phase 3"` regardless of inputs and the three-way rule is
+		not invoked. Managers reconcile cash physically per the manual
+		procedure in `docs/HAMILTON_LAUNCH_PLAYBOOK.md` #3 +
+		`docs/RUNBOOK.md` §7.2 (manager counts envelope, matches
+		declared_amount on the printed label, signs paper).
+
+		NEW-1 bundled: `variance_amount` is still computed (so the manager
+		sees a meaningful number, not $0.00) — it's just `actual_count -
+		system_expected`, which until Phase 3 equals `actual_count - 0 =
+		actual_count`. After Phase 3, the same line continues to work
+		against the real system_expected.
 		"""
-		operator = flt(self.operator_declared)
-		manager = flt(self.actual_count)
-		system = flt(self.system_expected)
-
-		manager_matches_operator = _within_tolerance(manager, operator)
-		manager_matches_system = _within_tolerance(manager, system)
-		system_matches_operator = _within_tolerance(system, operator)
-
-		if manager_matches_operator and manager_matches_system:
-			# All three agree — normal outcome
-			self.variance_flag = "Clean"
-		elif manager_matches_operator and not manager_matches_system:
-			# Manager and operator agree what was in the envelope, but POS
-			# expected a different amount — unrecorded transaction or theft
-			self.variance_flag = "Possible Theft or Error"
-		elif not manager_matches_operator and manager_matches_system:
-			# Manager count matches POS expectation, but operator declared
-			# a different amount — operator mis-declared
-			self.variance_flag = "Operator Mis-declared"
-		elif system_matches_operator:
-			# POS and operator agree, but manager physically found less cash —
-			# money is missing from the envelope after it was dropped
-			self.variance_flag = "Possible Theft or Error"
-		else:
-			# F3.8 / DEC-068: when none of the three values agree, the
-			# fault is genuinely ambiguous — could be operator misdeclaration,
-			# theft, POS error, or any combination. The previous label
-			# "Operator Mis-declared" pre-judged the operator as the bad
-			# actor; "Multi-source Variance" describes the data shape
-			# (multiple sources disagree) without naming a cause. The
-			# specific-attribution case (manager+system agree, operator
-			# differs) is unchanged above and still labels "Operator
-			# Mis-declared" because that case IS specifically operator
-			# misdeclaration.
-			self.variance_flag = "Multi-source Variance"
+		self.variance_amount = flt(self.actual_count) - flt(self.system_expected)
+		self.variance_flag = "Pending Phase 3"
 
 	def _mark_drop_reconciled(self):
 		"""Update the linked Cash Drop as reconciled."""
