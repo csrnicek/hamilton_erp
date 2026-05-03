@@ -1158,6 +1158,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F2.3; DEC-005 (blind cash / role gates); skill `frappe-impl-whitelisted` (wired-but-disabled surfaces); skill `frappe-core-permissions` (defense in depth beyond DocType perms).
 
+## Amendment 2026-05-04 — DEC-082: Pin design for cart elevation audit log (audit S3.2)
+
+**Decision.** A dedicated immutable audit log row will be inserted before the `si.insert()` call in `submit_retail_sale` to record each `Administrator` elevation. The row will live on a new lightweight DocType `Hamilton Cart Audit Log` with fields: `real_user` (Link → User), `pos_profile` (Link), `cart_total` (Currency), `payment_method` (Data), `timestamp` (Datetime), `sales_invoice` (Link, populated post-submit). Operator role read-only; no role gets delete; track_changes=1. Implementation deferred to a dedicated PR because the new DocType + permissions + tests + migrate window is too large for an in-scope audit-PR.
+
+**Why.** Today's elevation audit trail is the SI `remarks` line ("Recorded via cart by {user}") plus the `db_set("owner", real_user)` override. Both are mutable by System Manager and the SI's `creation` / `modified_by` columns point at `Administrator`. A dispute about who rang up an invoice has no immutable first-party signal. The new log row solves the forensic gap and lets us tighten DEC-077's "accept" position. Pattern aligns with DEC-066 (Hamilton Board Correction) — same shape: dedicated log doctype, operator-elevated write, no operator delete.
+
+**What changed.** Documentation only — DEC-082 added pinning the design. The Phase-1.5 follow-up PR will land the DocType JSON, controller, fixtures, hook into `submit_retail_sale`, and `bench migrate` window.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.2; DEC-005 (blind cash); DEC-066 (Hamilton Board Correction pattern); DEC-077 (db_set on owner accept); skill `frappe-syntax-doctypes`.
+
 ## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
 
 **Decision.** `_create_session`'s UniqueValidationError handler now checks both `exc.args[-1]` (the underlying MariaDB IntegrityError, which carries the locale-stable key name) and the legacy `str(exc)` substring as a fallback. The retry only fires when the collision is on `session_number`.
