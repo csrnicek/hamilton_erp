@@ -323,20 +323,26 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const oos = attention.filter((a) => a._watch === "oos");
 		let html = "";
 
-		// Group overtime tiles by category
+		// Finding #4 (DEC-071): group overtime tiles into the same buckets
+		// as the tab bar (Lockers, Single, Double, VIP, GH Room) and emit
+		// sections in that exact order — operators scan the Watch tab
+		// left-to-right matching the muscle memory of the tab bar above.
+		// Previous implementation grouped by raw asset_tier and rendered
+		// in arbitrary insertion order, which produced "Deluxe Single"
+		// before "Single Standard" (both belong under "Single") and put
+		// Lockers wherever they happened to show up.
 		if (overtime.length > 0) {
-			const groups = {};
-			for (const a of overtime) {
-				const cat = a.asset_tier || a.asset_category;
-				if (!groups[cat]) groups[cat] = [];
-				groups[cat].push(a);
-			}
-			for (const [cat, items] of Object.entries(groups)) {
+			const asset_tabs_in_order = this.tabs.filter(
+				(t) => !t.watch && !t.placeholder && !t.retail && typeof t.filter === "function"
+			);
+			for (const tab of asset_tabs_in_order) {
+				const items = overtime.filter(tab.filter);
+				if (items.length === 0) continue;
 				items.sort(this._sort_by_occupied_time);
 				html += `
 					<div class="hamilton-section">
 						<div class="hamilton-section-header">
-							<span class="hamilton-section-label">${frappe.utils.escape_html(cat)}</span>
+							<span class="hamilton-section-label">${frappe.utils.escape_html(tab.label)}</span>
 							<span class="hamilton-section-count">${items.length}</span>
 						</div>
 						<div class="hamilton-tile-grid">
