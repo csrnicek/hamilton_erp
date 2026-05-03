@@ -706,6 +706,112 @@ class TestCompAdmissionLogValueMasking(IntegrationTestCase):
 		)
 
 
+class TestCompAdmissionLogRuntimeMasking(IntegrationTestCase):
+	"""COMP-RUNTIME (per docs/inbox/2026-05-04_audit_synthesis_decisions.md).
+
+	Companion to TestCompAdmissionLogValueMasking above. That class
+	parses the JSON statically — it confirms the schema is correct.
+	**This class confirms the runtime layer actually enforces the
+	configured permlevel.** Static-correct + runtime-enforces = the
+	full guarantee.
+
+	Why both: a static-correct schema doesn't catch a Frappe-version
+	regression where the runtime layer stops applying permlevel for
+	some reason (Frappe upgrade, custom extension, etc.). The runtime
+	check exercises ``frappe.get_meta(...).get_permlevel_access("read")``
+	with ``frappe.set_user`` set to a Hamilton-Operator-only and
+	Hamilton-Manager-only user respectively, and asserts the permlevel
+	access lists match what the schema declares.
+
+	If this test fails: the static JSON looks right, but at runtime
+	either Operator can read permlevel-1 fields (security regression)
+	OR Manager cannot (reviewability regression). Either is a real
+	bug; investigate Frappe's permission resolver before merging.
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		# Operator-only test user
+		cls.operator_email = "comp-runtime-operator-test@example.com"
+		if not frappe.db.exists("User", cls.operator_email):
+			frappe.get_doc({
+				"doctype": "User",
+				"email": cls.operator_email,
+				"first_name": "OpRuntimeTest",
+				"send_welcome_email": 0,
+				"enabled": 1,
+				"roles": [{"role": "Hamilton Operator"}],
+			}).insert(ignore_permissions=True)
+		# Manager-only test user
+		cls.manager_email = "comp-runtime-manager-test@example.com"
+		if not frappe.db.exists("User", cls.manager_email):
+			frappe.get_doc({
+				"doctype": "User",
+				"email": cls.manager_email,
+				"first_name": "MgrRuntimeTest",
+				"send_welcome_email": 0,
+				"enabled": 1,
+				"roles": [{"role": "Hamilton Manager"}],
+			}).insert(ignore_permissions=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		for email in (getattr(cls, "operator_email", None), getattr(cls, "manager_email", None)):
+			if email and frappe.db.exists("User", email):
+				frappe.delete_doc("User", email, ignore_permissions=True, force=True)
+		super().tearDownClass()
+
+	def setUp(self):
+		# Frappe's meta cache is per-user; clearing ensures the role-switch
+		# below re-resolves permlevel access for the new user.
+		frappe.clear_cache()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.clear_cache()
+
+	def test_operator_runtime_lacks_permlevel_1_read(self):
+		"""Hamilton Operator session must NOT have permlevel-1 read on
+		Comp Admission Log at runtime.
+
+		This is the security invariant. Static check is in
+		TestCompAdmissionLogValueMasking.test_operator_does_not_have_permlevel_1_read.
+		"""
+		frappe.set_user(self.operator_email)
+		meta = frappe.get_meta("Comp Admission Log")
+		allowed_levels = meta.get_permlevel_access("read")
+		self.assertNotIn(
+			1, allowed_levels,
+			"Hamilton Operator has permlevel-1 read access to Comp "
+			"Admission Log at runtime. The schema declares permlevel: 1 "
+			"on comp_value to hide it from operators; the runtime "
+			"resolver is not honoring that. Operator's allowed permlevel "
+			f"set: {allowed_levels}. Investigate frappe.permissions and "
+			"the perm-grid before merging.",
+		)
+
+	def test_manager_runtime_has_permlevel_1_read(self):
+		"""Hamilton Manager session MUST have permlevel-1 read on
+		Comp Admission Log at runtime.
+
+		Without this, comp_value is invisible to the very role authorized
+		to review it. Static check is in
+		TestCompAdmissionLogValueMasking.test_managers_have_permlevel_1_read.
+		"""
+		frappe.set_user(self.manager_email)
+		meta = frappe.get_meta("Comp Admission Log")
+		allowed_levels = meta.get_permlevel_access("read")
+		self.assertIn(
+			1, allowed_levels,
+			"Hamilton Manager LACKS permlevel-1 read access to Comp "
+			"Admission Log at runtime. Managers must see comp_value to "
+			"review compensated admissions. Manager's allowed permlevel "
+			f"set: {allowed_levels}. Investigate the perm-grid for a "
+			"missing permlevel-1 row on Hamilton Manager before merging.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
