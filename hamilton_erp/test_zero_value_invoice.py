@@ -105,6 +105,15 @@ class TestZeroValueInvoiceSubmission(IntegrationTestCase):
 		si.update({
 			"customer": customer,
 			"company": "Club Hamilton",  # Hamilton's seeded company; no global default is set on test_site
+			# Pin currency explicitly. Without this, ERPNext's set_missing_values
+			# may resolve currency from the "Standard Selling" Price List (an
+			# ERPNext test fixture in INR), which then mismatches the CAD
+			# Debtors account on Hamilton's COA and produces:
+			#   "Party Account Debtors - CH currency (CAD) and document
+			#    currency (INR) should be same"
+			# Setting currency on the SI directly bypasses Price List
+			# inference for this test fixture.
+			"currency": "CAD",
 			"posting_date": today(),
 			"due_date": today(),
 		})
