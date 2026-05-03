@@ -1226,6 +1226,31 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.4; LL-006 (frappe-dependencies correctness); skill `tob-supply-chain-risk-auditor`.
 
+## Amendment 2026-05-04 — DEC-096: T0-FC-9 — Path A: omit `frappe/payments` from Hamilton production
+
+**Decision.** Hamilton ERP production deploys WITHOUT `frappe/payments` installed. Hamilton's card-payment flow (Phase 2 next) uses a custom Fiserv merchant adapter that does not depend on Frappe's `Payment Gateway` DocType, `Payment Entry` workflow, or any other artifact `frappe/payments` provides.
+
+**Why this came up.** ERPNext issue [#51946](https://github.com/frappe/erpnext/issues/51946) — "Payment Gateway Doctype not present in version-16" — has been open since 2026-01-21 with no fix as of 2026-04-30. CI workaround installs `frappe/payments@develop` so `IntegrationTestCase.setUpClass`'s recursive Link-field walk can resolve `Payment Gateway` (6 Hamilton doctype tests transitively link via User → ERPNext links). The production question: install the develop branch (mirror CI) OR omit (assume Hamilton's runtime never references Payment Gateway).
+
+**Why Path A (omit) is the right call.**
+
+1. **Hamilton runtime never imports `payments`.** A 2026-04-28 production-code reality check confirmed `hamilton_erp/` has zero `from payments` / `import payments` references; nothing reads or writes `Payment Gateway`. The CI dependency is a test-harness fixture, not a runtime dependency.
+2. **Phase 2 next iteration uses a custom merchant adapter.** The card-flow design (per `docs/research/merchant_processor_comparison.md` and `docs/inbox.md` 2026-04-30 hardware backlog) is a Fiserv-direct adapter with EMV capture. It records to Sales Invoice via the existing POS path — not via Frappe's Payment Entry / Payment Gateway plumbing.
+3. **`develop` branch is not production-grade.** Frappe's own convention (per Hamilton's "Production version pinning" rule in CLAUDE.md) is "tagged minor only, never branch HEAD or develop." Mirroring CI's `develop` install in production violates that rule. Waiting for `frappe/payments@version-16` (Path C) blocks an unknown-duration upstream cut.
+
+**What this commits us to.**
+
+- Hamilton's production bench config (`apps.txt` / Frappe Cloud install spec) lists `frappe` + `erpnext` + `hamilton_erp`. **NOT** `payments`.
+- The Fiserv adapter, when it ships, must NOT introduce a runtime dependency on `Payment Gateway`. If a future review of the adapter shows it leans on Frappe's payment plumbing, this DEC must be reversed and the install added.
+- CI continues to install `frappe/payments@develop` for the IntegrationTestCase setUpClass workaround. This is documented in `.github/workflows/tests.yml` and is a test-only requirement.
+
+**Reversal cost.** If Phase 2 changes architecture and needs `Payment Gateway`, one bench install + one site migrate. Frappe Cloud bench definitions are cheap to update; the constraint is the upstream `version-16` branch availability.
+
+**References.**
+- T0-FC-9 in `docs/inbox.md` 2026-04-30 Frappe Cloud production prep section.
+- ERPNext issue [#51946](https://github.com/frappe/erpnext/issues/51946).
+- `docs/research/merchant_processor_comparison.md` — Fiserv-vs-alternatives.
+- `HAMILTON_LAUNCH_PLAYBOOK.md` → "Dependencies" section, checkbox now ticked.
 ## Amendment 2026-05-03 — DEC-105: Multi-venue Fiserv adapter — config-driven CA / USA routing
 
 **Decision.** Hamilton's custom Fiserv card adapter (per DEC-096, since `frappe/payments` is omitted) ships as **one adapter class with two driver implementations**, selected at runtime by a per-site `frappe.conf.fiserv_region` value (`"CA"` or `"US"`) carried in `site_config.json`. App-level code calls `adapter.authorize(...)`, `adapter.capture(...)`, `adapter.void(...)`, `adapter.refund(...)`, `adapter.get_status(...)` and never branches on region.
