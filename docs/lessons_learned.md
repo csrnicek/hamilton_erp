@@ -801,3 +801,47 @@ A separate `brew services redis` had been running on `127.0.0.1:6379` for months
 
 If a project ever needs a separate Redis (different DB, isolated dev env), spin it up on a non-default port (e.g. 6380) and document it in that project's CLAUDE.md — never reclaim 6379.
 
+---
+
+## LL-038 — Verify install-hook target fields exist on the pinned framework version, not just in design intent
+
+**Date discovered:** 2026-05-03 (during T1-6 implementation, per `docs/inbox/2026-05-04_audit_synthesis_decisions.md`).
+
+**The finding.** `hamilton_erp/setup/install.py:46-69` defines `_ensure_audit_trail_enabled()`, which is supposed to flip `System Settings.enable_audit_trail = 1` after every install/migrate. The intent (per `task_25_checklist.md` Task 25 item 3, marked DONE) was to centrally enable Frappe's tamper-evident audit log so every Hamilton DocType change after handoff is automatically traceable.
+
+**The reality.** **The field `enable_audit_trail` does not exist on Frappe v16.14.0**. Verified two ways:
+- `frappe.get_meta("System Settings").has_field("enable_audit_trail")` returns `False`.
+- `grep enable_audit_trail apps/frappe/` returns zero hits across the entire pinned Frappe repo.
+
+The hook's defensive branch (`if not meta.has_field("enable_audit_trail"): logger.info(...); return`) silently no-ops on every install. The `frappe.logger().info` it emits never bubbles up to anyone. Hamilton has been running with `_ensure_audit_trail_enabled` doing literally nothing for the entire app lifetime — the whole hook is dead code.
+
+**What actually carries audit coverage on v16.** Per-DocType `track_changes: 1`. Frappe v15+ removed any global "enable audit trail" master flag and made it strictly per-DocType. Hamilton's `track_changes: 1` settings on `Cash Drop`, `Cash Reconciliation`, `Comp Admission Log`, `Hamilton Board Correction`, `Hamilton Settings`, `Shift Record`, `Venue Asset`, `Venue Session` (8 of 9 operational DocTypes) ARE working — every save writes a `tabVersion` row. `Asset Status Log` is correctly `track_changes: 0` because it IS the audit log.
+
+**What the lesson is.** Four independent reviewers (Claude.ai chat, ChatGPT, Claude Code self-audit, Claude Code verification — including this author twice) read the install hook, read the Task 25 checklist, read the decisions docs, and trusted the hook's stated intent without checking whether the target field exists in the running Frappe schema. Word-by-word verification missed it because the question "does Frappe v16 actually have this field?" was never asked. Each reviewer assumed the prior reviewer had checked.
+
+**Rule for the future.** When an install hook says "ensure X is enabled," verify X actually exists on the pinned framework version BEFORE trusting the hook does anything. Five-second check:
+
+```python
+# In a bench console session, against the actual pinned Frappe:
+frappe.get_meta("<DocType>").has_field("<field>")
+# Or grep the framework source:
+grep -rn "<field_name>" apps/frappe/ apps/erpnext/
+```
+
+If the field doesn't exist, the hook is dead code regardless of how thoroughly its docstring describes the intent. The same lens applies to any code that depends on a framework-side field: a defensive `if hasattr(...)` or `if meta.has_field(...)` that silently skips on `False` is a code smell — it can hide a missing prereq forever.
+
+**What's pinned now.** PR #161 (T1-6 per the audit synthesis) added `test_track_changes_enabled_on_all_auditable_hamilton_doctypes` to `test_fresh_install_conformance.py`. That test asserts the v16 audit mechanism (per-DocType `track_changes`) is actually configured on every Hamilton operational DocType. Future PRs that add a new Hamilton DocType must extend that test's `AUDITABLE_DOCTYPES` list, or the regression-pin breaks.
+
+**Cleanup follow-up (not urgent).** `_ensure_audit_trail_enabled` in `setup/install.py:46-69` is dead code. Two options for a future cleanup PR:
+
+1. **Delete it.** The v16 mechanism is per-DocType `track_changes`, regression-pinned by PR #161. The install hook adds nothing.
+2. **Rewrite it to verify.** Replace the no-op defensive skip with a hard `frappe.throw` if `enable_audit_trail` is missing. That way a future Frappe upgrade that re-introduces the field would be detected, AND a future Frappe upgrade that broke the field would surface as a loud install failure.
+
+Either is small; neither is a launch blocker. Worth opening as a docs/inbox follow-up for cleanup-PR scheduling.
+
+**Cross-references:**
+- `docs/inbox/2026-05-04_audit_synthesis_decisions.md` T1-6 (the item that surfaced this)
+- PR #161 (the regression pin shipped 2026-05-03)
+- `hamilton_erp/setup/install.py:46-69` (the dead hook)
+- `task_25_checklist.md` Task 25 item 3 (the design-intent claim that turned out to be partially wrong)
+
