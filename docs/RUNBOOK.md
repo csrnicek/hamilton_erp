@@ -178,6 +178,30 @@ inspect.getsource(VenueSession.before_insert)
 
 ---
 
+### 4.4 — Lock TTL expiry during critical section (perf signal)
+
+**Symptom:** Operators occasionally hit `LockContentionError` on transitions; or a transition succeeds but data feels "stuck" briefly. Manager goes looking.
+
+**Where it shows up:** Desk → Error Log (`/app/error-log`) → filter `error` field on `"Asset lock TTL expired"`. Each entry includes the asset name, operation (`assign` / `vacate` / `clean` / `oos` / `return`), and a confirmation that MariaDB `FOR UPDATE` preserved data integrity.
+
+**What it means:** A Hamilton lifecycle critical section took longer than `LOCK_TTL_MS` (15 s) to complete. The Redis advisory lock expired *during* the operation, which means another caller could in principle have acquired the same key — but the MariaDB row-level `SELECT ... FOR UPDATE` inside the lock body serialized the actual DB write, so data is consistent. The Error Log entry is a **load/perf signal**, not a corruption alert.
+
+**What to do:**
+
+1. **Spot-check vs. systemic.** Open Error Log, filter on title `"Asset lock TTL expired"`. One entry per week → ignore. One per hour → systemic; investigate.
+2. **Find the slow operation.** Each entry tags the `operation`. If most entries are the same operation (e.g. `assign`), look at what's slow inside that lifecycle path.
+3. **Common causes:**
+   - Frappe Cloud DB CPU saturated → check the Frappe Cloud dashboard.
+   - A `before_save` / `validate` hook on `Venue Asset` doing too much work → check the relevant doctype controller.
+   - Redis service degraded — `bench --site SITE doctor` and check `redis-cli ping`.
+4. **Acute mitigation (do NOT ship without Chris's approval):** raising `LOCK_TTL_MS` in `hamilton_erp/locks.py`. This masks the symptom rather than fixing the cause. Only consider if the slow operation is genuinely correct work the system needs to do (e.g., a Phase 2 enrichment that queries an external API).
+
+**Test plan:** the Error Log assertion is implicit — if Error Log fills up with this title, the cause needs root-causing. There is no "alarm threshold" — operators check Error Log during shift review, Chris reviews at end-of-week.
+
+**Related code:** `hamilton_erp/locks.py::asset_status_lock` — the warning is in the `finally` block after the Redis token check.
+
+---
+
 ## 5. Infrastructure Health
 
 ### 5.1 — Bench process won't start
