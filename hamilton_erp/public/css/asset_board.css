@@ -965,3 +965,37 @@
 	font-weight: 700;
 	color: #4ade80;
 }
+
+/* DEC-101 — Overtime alert banner ----------------------------------- */
+.hamilton-overtime-banner {
+	background: #b91c1c;
+	color: #fff;
+	font-weight: 600;
+	padding: 10px 16px;
+	cursor: pointer;
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	border-bottom: 2px solid #7f1d1d;
+	user-select: none;
+	animation: hamilton-overtime-banner-pulse 1.6s ease-in-out infinite;
+}
+.hamilton-overtime-banner:hover {
+	background: #991b1b;
+}
+.hamilton-overtime-banner-icon {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	border-radius: 50%;
+	background: #fee2e2;
+	color: #b91c1c;
+	font-weight: 700;
+	font-size: 16px;
+}
+@keyframes hamilton-overtime-banner-pulse {
+	0%, 100% { box-shadow: 0 0 0 0 rgba(185, 28, 28, 0.0); }
+	50% { box-shadow: 0 0 0 6px rgba(185, 28, 28, 0.18); }
+}
