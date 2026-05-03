@@ -941,6 +941,18 @@ The skill package documents *generic Frappe patterns*. Hamilton's `decisions_log
 
 ---
 
+## Amendment 2026-05-04 — DEC-077: Accept `db_set("owner", ...)` post-submit on Sales Invoice (audit F1.1)
+
+**Decision.** The `db_set("owner", real_user, update_modified=False)` call in `submit_retail_sale` (api.py ~706) stays as-is. We deliberately accept that the ownership rewrite does not produce a `tabVersion` row; the `Sales Invoice.remarks` line ("Recorded via cart by {user}") and the doctype's `track_changes` history on the remarks field together provide the durable audit trail.
+
+**Why.** The alternative — `frappe.get_doc("Sales Invoice", si.name).save()` after the owner flip — would re-trigger ERPNext's heavy post-submit validation chain (taxes, GL re-post, payment matching) on a document that is already in the desired state. The cost / risk of that path is much higher than the audit-trail benefit of one extra `tabVersion` row, especially given (a) the cart elevation is already audit-tracked via S3.2's planned dedicated log row (DEC-082) and (b) the remarks-line edits are themselves track_changes-captured. Phase-2 upgrade path: introduce a dedicated tracked Custom Field `cart_recorded_by` (Link → User) on Sales Invoice and `db_set` to it instead of overloading `owner`. Defer until Phase 2 to avoid a Custom Field migration in Phase 1.
+
+**What changed.** Documentation only — no code change in this PR. DEC-077 added.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F1.1; DEC-005 (blind cash); DEC-067 (idempotency); planned DEC-082 / S3.2 (dedicated cart elevation audit log); skill `frappe-core-database` (db_set anti-pattern #7).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
