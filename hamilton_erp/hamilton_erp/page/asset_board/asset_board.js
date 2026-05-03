@@ -79,6 +79,14 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		// sub-buttons instead of the parent. Reset on overlay close.
 		this.vacate_subs_open = false;
 		this.overtime_interval = null;
+		// DEC-101 — Overtime alert state. `overtime_seen` tracks asset names
+		// that were already overtime on the previous tick so the audible beep
+		// only fires on the not-overtime → overtime transition (not on every
+		// 15-second re-render of the same overtime tile). `overtime_audio_ctx`
+		// is lazy-initialized on first beep so the AudioContext start gate
+		// (browsers require a user-gesture to unlock audio) is respected.
+		this.overtime_seen = new Set();
+		this.overtime_audio_ctx = null;
 		this.clock_interval = null;
 		// V9.1 cart state (Phase 2 retail UX, supersedes V9.1-D7).
 		// Each line: {item_code, item_name, qty, unit_price}. Unit price
@@ -1404,12 +1412,113 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	// V9_CANONICAL_MOCKUP.html.
 	start_overtime_ticker() {
 		this.overtime_interval = setInterval(() => {
-			// Skip during expanded overlay — the source-tile dim + overlay
-			// would be wiped by a re-render and recreated mid-interaction.
+			// DEC-101 — Detect overtime transitions BEFORE re-rendering. We
+			// run this even when the overlay is open so the audible beep and
+			// banner can fire while the operator is mid-interaction.
+			this._detect_overtime_transitions();
+			this._update_overtime_banner();
+			// Skip the tab re-render during expanded overlay — the source-tile
+			// dim + overlay would be wiped and recreated mid-interaction.
 			if (this.expanded_asset) return;
 			this.render_active_tab();
 			this._update_tab_badges();
 		}, LIVE_TICK_MS);
+	}
+
+	// DEC-101 — On every live-tick, find assets that JUST transitioned
+	// from not-overtime to overtime and fire the audible beep once.
+	// `overtime_seen` carries forward the set of names already alerted
+	// so we don't re-beep on every tick.
+	_detect_overtime_transitions() {
+		const current = new Set();
+		for (const a of (this.assets || [])) {
+			if (this._compute_time_status(a) === "overtime") {
+				current.add(a.name);
+			}
+		}
+		let new_overtime = false;
+		for (const name of current) {
+			if (!this.overtime_seen.has(name)) {
+				new_overtime = true;
+				break;
+			}
+		}
+		if (new_overtime) {
+			this._play_overtime_beep();
+		}
+		this.overtime_seen = current;
+	}
+
+	// DEC-101 — Short tone via WebAudio. No bundled mp3, no network
+	// fetch: a 220 ms 880 Hz square envelope generated on demand. The
+	// AudioContext is created lazily on the first beep because browsers
+	// gate AudioContext.start() on a user-gesture; calling new
+	// AudioContext() inside a setInterval before the user has clicked
+	// anywhere on the page surfaces a console warning. By the time
+	// overtime fires, the operator has already loaded the page (which
+	// counts as a navigation gesture) but in defensive practice we wrap
+	// in try/catch so a denied AudioContext doesn't break the ticker.
+	_play_overtime_beep() {
+		try {
+			if (!this.overtime_audio_ctx) {
+				const Ctor = window.AudioContext || window.webkitAudioContext;
+				if (!Ctor) return;
+				this.overtime_audio_ctx = new Ctor();
+			}
+			const ctx = this.overtime_audio_ctx;
+			const osc = ctx.createOscillator();
+			const gain = ctx.createGain();
+			osc.type = "square";
+			osc.frequency.value = 880;
+			gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+			gain.gain.exponentialRampToValueAtTime(0.15, ctx.currentTime + 0.01);
+			gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.22);
+			osc.connect(gain).connect(ctx.destination);
+			osc.start();
+			osc.stop(ctx.currentTime + 0.22);
+		} catch (e) {
+			// Audio is best-effort; the banner is the persistent signal.
+		}
+	}
+
+	// DEC-101 — Persistent banner rendered above the tab bar whenever any
+	// asset is overtime. Stays visible across tab switches; the only way
+	// to clear it is to act on the underlying assets (vacate, mark clean,
+	// etc.) so they leave the overtime state. Tapping the banner switches
+	// to the Watch tab.
+	_update_overtime_banner() {
+		const overtime_count = (this.assets || []).filter(
+			(a) => this._compute_time_status(a) === "overtime"
+		).length;
+		let $banner = this.wrapper.find(".hamilton-overtime-banner");
+		if (overtime_count === 0) {
+			$banner.remove();
+			return;
+		}
+		const label = overtime_count === 1
+			? __("1 asset overtime — vacate or extend")
+			: __("{0} assets overtime — vacate or extend", [overtime_count]);
+		if (!$banner.length) {
+			// Insert just above the tab bar.
+			const $tabbar = this.wrapper.find(".hamilton-tab-bar");
+			if (!$tabbar.length) return;
+			$tabbar.before(`<div class="hamilton-overtime-banner" role="alert"></div>`);
+			$banner = this.wrapper.find(".hamilton-overtime-banner");
+			// Clicking the banner jumps to the Watch tab. Operators cannot
+			// dismiss it without acting on at least one overtime asset; the
+			// banner removes itself on the next tick when overtime_count
+			// hits zero.
+			$banner.on("click", () => {
+				if (this.active_tab !== "watch") {
+					this.active_tab = "watch";
+					this.collapse_expanded();
+					this.wrapper.find(".hamilton-tab").removeClass("active");
+					this.wrapper.find('.hamilton-tab[data-tab="watch"]').addClass("active");
+					this.render_active_tab();
+				}
+			});
+		}
+		$banner.html(`<span class="hamilton-overtime-banner-icon">!</span> ${frappe.utils.escape_html(label)}`);
 	}
 
 	// ── Header clock ────────────────────────────────────────

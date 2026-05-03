@@ -1370,6 +1370,72 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 		)
 
 
+class TestOvertimeAlertContract(IntegrationTestCase):
+	"""DEC-101 — guard the audible + persistent overtime alert surface."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path("hamilton_erp", "public", "css", "asset_board.css")
+
+	def test_js_defines_detect_overtime_transitions(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_detect_overtime_transitions", source,
+			"Transition detector missing — DEC-101 requires beep on "
+			"not-overtime → overtime transitions only.",
+		)
+
+	def test_js_defines_play_overtime_beep(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_play_overtime_beep", source,
+			"Audible beep helper missing — DEC-101.",
+		)
+
+	def test_js_uses_audio_context(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"AudioContext", source,
+			"Beep must use WebAudio AudioContext per DEC-101 (no "
+			"bundled mp3, no network fetch).",
+		)
+
+	def test_js_defines_update_overtime_banner(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_update_overtime_banner", source,
+			"Persistent banner missing — DEC-101.",
+		)
+
+	def test_js_banner_jumps_to_watch_tab(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		# The banner click handler sets active_tab = 'watch'. If a refactor
+		# removes the click handler or changes the target tab, this fires.
+		self.assertIn(
+			"this.active_tab = \"watch\"", source,
+			"Banner click must jump to the Watch tab per DEC-101.",
+		)
+
+	def test_css_defines_overtime_banner_class(self):
+		with open(self._css_path()) as f:
+			source = f.read()
+		self.assertIn(
+			".hamilton-overtime-banner", source,
+			".hamilton-overtime-banner styling missing — DEC-101.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

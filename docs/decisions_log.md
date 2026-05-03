@@ -953,6 +953,29 @@ The skill package documents *generic Frappe patterns*. Hamilton's `decisions_log
 
 ---
 
+## Amendment 2026-05-03 — DEC-101: Audible + persistent overtime alert
+
+**Decision.** When ANY asset transitions from not-overtime to overtime, the Asset Board (a) plays a short tone via WebAudio and (b) renders a persistent red banner at the top of the board. The banner stays visible regardless of tab and clears only when ALL overtime assets are resolved. Tapping the banner jumps to the Watch tab.
+
+**Why audible + persistent.** The Watch tab badge alone is a passive signal — operators only see it if they happen to look at the tab bar. Overtime is a cash-handling deadline (the operator must vacate or extend); a missed transition silently extends the customer's stay without billing. The tone fires the operator's attention even when they're at the door or in the cart drawer; the banner persists so a momentary glance away doesn't lose the signal. Combined, they meet "real signal" rather than "checkable status."
+
+**Why operator cannot dismiss without action — design rationale (rejected alternative).** A "dismiss" button on the banner was considered and rejected. The rationale for "dismissible" was operator agency — they shouldn't have to look at the banner if they're already aware. The rationale for "not dismissible" was the failure mode: an operator dismisses the banner, then forgets, and the overtime quietly persists into another shift. The cost of an annoying-but-unmissable banner is much smaller than the cost of a silently-aged overtime that sits past the cash-drop deadline. The banner is the cheap insurance; the operator can act on the asset (vacate / mark clean / extend) and the banner clears itself on the next 15-second tick.
+
+**Audio mechanism.** No bundled mp3, no network fetch. A short (220 ms) 880 Hz square envelope is generated on demand via WebAudio (`AudioContext` + `OscillatorNode`). The context is created lazily on the first beep so the browser's autoplay-gate user-gesture requirement is naturally satisfied (by then the operator has already navigated to the page). Failure modes (denied AudioContext, unsupported browser) are caught silently — the visual banner is the durable signal; audio is best-effort.
+
+**Detection mechanism — name-set transition.** On every live-tick (15 s, the existing cadence), the JS computes the current set of overtime asset names and compares to the previous tick's set. Only NEW members of the set trigger the beep. This avoids re-beeping every 15 seconds for the same overtime asset (which would push the operator to mute their tab — the worst outcome).
+
+**What changed.**
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — new methods `_detect_overtime_transitions`, `_play_overtime_beep`, `_update_overtime_banner`. Constructor now initializes `overtime_seen` (Set) and `overtime_audio_ctx` (lazy). Live-tick now calls the detector and banner updater on every tick (banner update runs even when the overlay is open; tab re-render does not).
+- `hamilton_erp/public/css/asset_board.css` — `.hamilton-overtime-banner` styling with a subtle pulse animation.
+- `hamilton_erp/test_asset_board_rendering.py` — substring contract tests.
+
+**Migrate flag.** None.
+
+**References.** Existing `_compute_time_status` returning `"overtime"` (asset_board.js:402). DEC-071 Watch tab grouping. Live-tick cadence `LIVE_TICK_MS = 15000`.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
