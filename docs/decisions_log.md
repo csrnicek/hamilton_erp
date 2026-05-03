@@ -1307,6 +1307,15 @@ The alternative — a distinct fill colour — was rejected because it would bre
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.4; LL-006 (frappe-dependencies correctness); skill `tob-supply-chain-risk-auditor`.
 
+## Amendment 2026-05-04 — DEC-093: Bound `on_sales_invoice_submit` to Hamilton POS Profile (audit S5.1)
+
+**Decision.** `on_sales_invoice_submit` short-circuits on every Sales Invoice whose `pos_profile != HAMILTON_POS_PROFILE`. Non-Hamilton submits (manual desk insert, import, future ERPNext flow) now pay only one attribute read instead of running the admission-item child-row scan.
+
+**Why.** Audit S5.1 flagged the global `doc_events` registration as scoping noise plus a future-coupling risk: any child row with `hamilton_is_admission` truthy (e.g. introduced by a different app or a fixtures import) would have fired the realtime publish to whoever submitted the invoice. The POS Profile gate is a tight boundary — Hamilton's cart already always sets `pos_profile: HAMILTON_POS_PROFILE`, so the change is non-breaking.
+
+**What changed.** `hamilton_erp/api.py::on_sales_invoice_submit` adds `if getattr(doc, "pos_profile", None) != HAMILTON_POS_PROFILE: return` before the admission-item check. Existing tests are skipped (Phase 2 not yet implemented), so no test churn.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S5.1; skill `tob-entry-point-analyzer` (event-handler scope); `submit_retail_sale` cart constructor (sets pos_profile: HAMILTON_POS_PROFILE).
 ## Amendment 2026-05-04 — DEC-096: T0-FC-9 — Path A: omit `frappe/payments` from Hamilton production
 
 **Decision.** Hamilton ERP production deploys WITHOUT `frappe/payments` installed. Hamilton's card-payment flow (Phase 2 next) uses a custom Fiserv merchant adapter that does not depend on Frappe's `Payment Gateway` DocType, `Payment Entry` workflow, or any other artifact `frappe/payments` provides.

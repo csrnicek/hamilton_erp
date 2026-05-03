@@ -64,6 +64,16 @@ def on_sales_invoice_submit(doc, method):
 	Realtime payload contract — event: "show_asset_assignment", payload:
 	{"invoice": str, "category": "Room"|"Locker", "is_comp": bool}.
 	"""
+	# DEC-093 / S5.1: scope the hook to Hamilton's POS surface. The doc_events
+	# registration is global to Sales Invoice, so any submit anywhere in the
+	# bench (manual desk insert, import, future ERPNext flow) runs this hook.
+	# Bounding to pos_profile == HAMILTON_POS_PROFILE keeps every non-Hamilton
+	# submit at constant cost (one attribute read) and prevents future
+	# child-row drift from firing the realtime publish to non-Hamilton
+	# operators. Resolved lazily because HAMILTON_POS_PROFILE is defined
+	# further down the module.
+	if getattr(doc, "pos_profile", None) != HAMILTON_POS_PROFILE:
+		return
 	if not doc.has_admission_item():
 		return
 
