@@ -845,3 +845,52 @@ Either is small; neither is a launch blocker. Worth opening as a docs/inbox foll
 - `hamilton_erp/setup/install.py:46-69` (the dead hook)
 - `task_25_checklist.md` Task 25 item 3 (the design-intent claim that turned out to be partially wrong)
 
+---
+
+## LL-040 — Frappe datetime strings are UTC-without-suffix; `new Date(str)` parses them ambiguously
+
+**What happened.** A 2026-05-03 Asset Board walkthrough showed `"-29m elapsed"` on a session that had started 1 minute earlier. Root cause: `asset_board.js` was calling `new Date(asset.session_start)` directly on the value Frappe's API returned — `"2026-05-03 18:31:00"` — which Chrome interprets as **local time**, not UTC. For an operator outside UTC, this pushed the session_start into the future and produced negative elapsed-minute math.
+
+The same pattern was duplicated in seven call sites across the file: `session_start`, `hamilton_last_status_change`, `last_vacated_at` were all being parsed via `new Date(...)` and all silently misrendered when the operator's timezone differed from UTC.
+
+**Lesson.** Frappe stores Datetime fields as UTC strings without a timezone suffix:
+
+```
+"2026-05-03 18:31:00"   ← Frappe's wire format (UTC, no suffix)
+"2026-05-03T18:31:00Z"  ← ISO 8601 UTC with explicit Z
+```
+
+`new Date(str)` is consistent only on the second form. The first form is parsed:
+- **Chrome / Edge / Node:** as local time. Most browsers do this.
+- **Safari (older):** sometimes returns `Invalid Date`.
+- **Firefox:** as local time, but with a deprecation warning in some versions.
+
+The lesson generalizes: **never pass a Frappe datetime field directly to `new Date()` in client-side JavaScript.** Always normalize first.
+
+**The pattern shipped in DEC-071.**
+
+```js
+function parseFrappeDatetime(str) {
+    if (!str) return null;
+    return new Date(str.replace(" ", "T") + "Z");
+}
+```
+
+Top-level helper in `asset_board.js`. Every site that previously did `new Date(asset.SOMETHING)` for a Frappe datetime field now goes through this helper. Returns `null` for nullish inputs so callers can short-circuit cleanly.
+
+**Why not use `frappe.datetime.str_to_obj()`?** Frappe's helper exists and is mostly correct, but on a Frappe Page (vs. a Form view) the `frappe.datetime` namespace is loaded only after the page bundle resolves. The 4-line `parseFrappeDatetime` is dependency-free and avoids that timing trap.
+
+**What's pinned now.** No regression test directly — JS unit tests in this repo are source-substring contracts (see `test_asset_board_rendering.py::TestV91RetailCartUXStub`). A future PR could pin "every elapsed-time computation in `asset_board.js` flows through `parseFrappeDatetime`" via a substring assertion. For now, the smell is small enough that code review catches it: any `new Date(...something_that_looks_like_a_field_name...)` is suspect.
+
+**Endpoints / fields that should be audited under this lesson.** Anything that:
+
+1. Is a `frappe.utils.now_datetime()` / `frappe.utils.nowdate()` / Datetime / Date field on a DocType, AND
+2. Is returned by a whitelisted endpoint AND consumed by client-side code that does timezone-sensitive math (elapsed, sort by recency, "X minutes ago" rendering).
+
+In Hamilton ERP specifically: `Venue Asset.session_start` (via the joined Venue Session), `Venue Asset.last_vacated_at`, `Venue Asset.last_cleaned_at`, `Venue Asset.hamilton_last_status_change`, and any future Phase 2 timestamp surfacing on the board. All currently fixed by DEC-071.
+
+**Cross-references:**
+- DEC-071 in `docs/decisions_log.md` (the design decision)
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js::parseFrappeDatetime` (the helper)
+- 2026-05-03 Asset Board walkthrough (the originating finding)
+

@@ -17,6 +17,18 @@ const LIVE_TICK_MS = 15000;
 // onboards, this becomes a per-venue config in site_config.json.
 const HST_RATE = 0.13;
 
+// Frappe stores Datetime fields as UTC strings without a timezone suffix
+// (e.g. "2026-05-03 18:31:00"). Browsers parse those ambiguously — Chrome
+// treats them as local time, which produces negative elapsed-minute math
+// when the operator's timezone differs from UTC. Convert to ISO 8601 UTC
+// explicitly before constructing a Date so all elapsed/remaining math is
+// timezone-correct. Returns null for nullish inputs so callers can
+// short-circuit. See LL-040 / DEC-071.
+function parseFrappeDatetime(str) {
+	if (!str) return null;
+	return new Date(str.replace(" ", "T") + "Z");
+}
+
 // F1.4 polish — Canadian penny-elimination rule (2013): cash totals round
 // to the nearest 0.05. Mirrors the server-side
 // frappe.utils.round_based_on_smallest_currency_fraction call applied to
@@ -384,7 +396,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	_compute_time_status(asset) {
 		if (asset.status !== "Occupied" || !asset.session_start) return null;
 		const now = new Date();
-		const elapsed_min = (now - new Date(asset.session_start)) / 60000;
+		const elapsed_min = (now - parseFrappeDatetime(asset.session_start)) / 60000;
 		const stay = asset.expected_stay_duration || 360;
 		const remaining = stay - elapsed_min;
 		if (remaining <= 0) return "overtime";
@@ -419,17 +431,17 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		//   normal    → no text (keeps board quiet)
 		let time_html = "";
 		if (ts === "countdown") {
-			const elapsed_min = (new Date() - new Date(asset.session_start)) / 60000;
+			const elapsed_min = (new Date() - parseFrappeDatetime(asset.session_start)) / 60000;
 			const stay = asset.expected_stay_duration || 360;
 			const remaining = Math.max(0, Math.floor(stay - elapsed_min));
 			time_html = `<div class="hamilton-tile-time hamilton-countdown">${this._format_minutes(remaining)} left</div>`;
 		} else if (ts === "overtime") {
-			const elapsed_min = (new Date() - new Date(asset.session_start)) / 60000;
+			const elapsed_min = (new Date() - parseFrappeDatetime(asset.session_start)) / 60000;
 			const stay = asset.expected_stay_duration || 360;
 			const over_by = Math.floor(elapsed_min - stay);
 			time_html = `<div class="hamilton-tile-time">${this._format_minutes(over_by)} late</div>`;
 		} else if (asset.status === "Dirty" && asset.hamilton_last_status_change) {
-			const dirty_at = new Date(asset.hamilton_last_status_change);
+			const dirty_at = parseFrappeDatetime(asset.hamilton_last_status_change);
 			const dirty_min = Math.max(0, Math.floor((new Date() - dirty_at) / 60000));
 			time_html = `<div class="hamilton-tile-time hamilton-dirty-elapsed">${__("Dirty for")} ${this._format_minutes(dirty_min)}</div>`;
 		}
@@ -974,7 +986,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				}
 				let elapsed_html = "";
 				if (asset.session_start) {
-					const elapsed = this._format_elapsed(new Date(asset.session_start));
+					const elapsed = this._format_elapsed(parseFrappeDatetime(asset.session_start));
 					elapsed_html = `<div class="hamilton-guest-elapsed">${frappe.utils.escape_html(elapsed)} ${__("elapsed")}</div>`;
 				}
 				if (guest_name_html || elapsed_html) {
@@ -1231,7 +1243,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		// the caller skips rendering the row.
 		if (!asset.hamilton_last_status_change) return null;
 		const now = new Date();
-		const set_at = new Date(asset.hamilton_last_status_change);
+		const set_at = parseFrappeDatetime(asset.hamilton_last_status_change);
 		const ms = now - set_at;
 		if (isNaN(ms) || ms < 0) return null;
 		const days = Math.floor(ms / 86400000);
@@ -1246,7 +1258,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		// match the OOS audit format ("by NAME at HH:MM AM/PM"). Returns
 		// null when the timestamp is missing or unparseable.
 		if (!asset.hamilton_last_status_change) return null;
-		const set_at = new Date(asset.hamilton_last_status_change);
+		const set_at = parseFrappeDatetime(asset.hamilton_last_status_change);
 		if (isNaN(set_at.getTime())) return null;
 		return this._format_time(set_at);
 	}
@@ -1436,18 +1448,18 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		return (a.display_order || 0) - (b.display_order || 0);
 	}
 	_sort_by_dirty_time(a, b) {
-		const ta = a.last_vacated_at ? new Date(a.last_vacated_at) : new Date();
-		const tb = b.last_vacated_at ? new Date(b.last_vacated_at) : new Date();
+		const ta = parseFrappeDatetime(a.last_vacated_at) || new Date();
+		const tb = parseFrappeDatetime(b.last_vacated_at) || new Date();
 		return ta - tb;
 	}
 	_sort_by_occupied_time(a, b) {
-		const ta = a.session_start ? new Date(a.session_start) : new Date();
-		const tb = b.session_start ? new Date(b.session_start) : new Date();
+		const ta = parseFrappeDatetime(a.session_start) || new Date();
+		const tb = parseFrappeDatetime(b.session_start) || new Date();
 		return ta - tb;
 	}
 	_sort_by_oos_time(a, b) {
-		const ta = a.hamilton_last_status_change ? new Date(a.hamilton_last_status_change) : new Date();
-		const tb = b.hamilton_last_status_change ? new Date(b.hamilton_last_status_change) : new Date();
+		const ta = parseFrappeDatetime(a.hamilton_last_status_change) || new Date();
+		const tb = parseFrappeDatetime(b.hamilton_last_status_change) || new Date();
 		return ta - tb;
 	}
 
