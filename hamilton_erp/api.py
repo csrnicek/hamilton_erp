@@ -261,11 +261,44 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	"""Assign a Venue Asset after POS payment is confirmed.
 
 	Creates a Venue Session, links it to the Sales Invoice and the asset,
-	and transitions the asset to Occupied.  Phase 2 implementation.
+	and transitions the asset to Occupied. **Phase 2 implementation; not
+	wired in Phase 1.**
+
+	T1-1 per docs/inbox/2026-05-04_audit_synthesis_decisions.md.
+	Previously this endpoint hard-threw "feature not yet available". The
+	hard-throw left a "paid but unassigned" trap: a Sales Invoice
+	submitted via the standard /app/point-of-sale UI (or a manual Desk
+	insert) with an admission item would fire ``on_sales_invoice_submit``
+	(api.py:13-40), publish the assignment overlay event, and lead the
+	operator to call this endpoint, which would crash. Customer pays;
+	asset never assigned.
+
+	Defense-in-depth response (T1-1):
+	1. submit_retail_sale (above) now rejects admission items at the
+	   cart-validation step. The retail cart can no longer be the source.
+	2. This endpoint becomes a logged no-op rather than a hard throw.
+	   The realtime event still fires (it's downstream of SI submit and
+	   belongs to ERPNext core's hook chain), but calling this from the
+	   overlay returns ``{"status": "phase_1_disabled", ...}`` cleanly
+	   instead of stranding the operator with an exception.
+
+	Phase 2 will replace this body with the real assignment flow.
 	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
-	# Phase 2 not yet built. This endpoint must not be exposed in any UI until Phase 2 ships.
-	frappe.throw(_("This feature is not yet available. Please contact your manager."))
+	frappe.logger().warning(
+		"assign_asset_to_session called in Phase 1 (no-op). "
+		f"sales_invoice={sales_invoice!r} asset_name={asset_name!r} "
+		"caller={caller!r}".format(caller=frappe.session.user)
+	)
+	return {
+		"status": "phase_1_disabled",
+		"message": _(
+			"Asset assignment from POS payment is a Phase 2 feature. "
+			"Use the walk-in Asset Board flow for assignments today."
+		),
+		"sales_invoice": sales_invoice,
+		"asset_name": asset_name,
+	}
 
 
 # Bulk "Mark All Clean" feature was REMOVED 2026-04-29 (DEC-054 reversed).
@@ -529,6 +562,18 @@ def submit_retail_sale(items, cash_received, payment_method: str = "Cash") -> di
 			frappe.throw(_("Invalid cart line: {0}").format(line))
 		if not frappe.db.exists("Item", item_code):
 			frappe.throw(_("Item {0} does not exist").format(item_code))
+		# T1-1 per docs/inbox/2026-05-04_audit_synthesis_decisions.md:
+		# admission items must NOT flow through the retail cart. The cart
+		# UI hides admission items from the retail tabs (UI-layer guard),
+		# but a curious operator opening /app/point-of-sale or a future
+		# API caller could route an admission item here. Server-side
+		# defense-in-depth: reject before any DB write.
+		is_admission = frappe.db.get_value("Item", item_code, "hamilton_is_admission")
+		if is_admission:
+			frappe.throw(_(
+				"Admission items cannot be sold via the retail cart. "
+				"Item {0} is an admission item; use the admission flow."
+			).format(item_code))
 		# Server-side rate authority — fetch Item.standard_rate and reject
 		# mismatches outside a $0.01 tolerance. The rate written to the
 		# Sales Invoice (further down) uses ``rate_by_item``, NOT the

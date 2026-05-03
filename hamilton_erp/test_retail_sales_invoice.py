@@ -590,6 +590,63 @@ class TestSubmitRetailSaleHardening(IntegrationTestCase):
 		self.assertIn("sales_invoice", result)
 
 	# ---------------------------------------------------------------
+	# T1-1 — admission-item server-side gate
+	# (per docs/inbox/2026-05-04_audit_synthesis_decisions.md)
+	# ---------------------------------------------------------------
+
+	def test_submit_retail_sale_rejects_admission_items(self):
+		"""T1-1: admission items must be rejected at cart-validation time.
+
+		The retail UI hides admission items from the cart tabs (UI-layer
+		guard), but ``/app/point-of-sale`` or a future API caller could
+		route an admission item here. The server-side gate is the
+		defense-in-depth layer.
+
+		Setup: create a marker Item with ``hamilton_is_admission=1`` and
+		try to push it through the cart. Expect ValidationError before
+		any DB write.
+		"""
+		marker_code = "T1-1-admission-marker"
+		# Clean up any prior run
+		if frappe.db.exists("Item", marker_code):
+			frappe.delete_doc("Item", marker_code, ignore_permissions=True, force=True)
+		try:
+			frappe.get_doc({
+				"doctype": "Item",
+				"item_code": marker_code,
+				"item_name": "T1-1 admission marker",
+				"item_group": "All Item Groups",
+				"stock_uom": "Nos",
+				"is_stock_item": 0,
+				"hamilton_is_admission": 1,
+				"standard_rate": 10.00,
+			}).insert(ignore_permissions=True)
+
+			with self.assertRaises(frappe.ValidationError) as ctx:
+				submit_retail_sale(
+					items=[{"item_code": marker_code, "qty": 1, "unit_price": 10.00}],
+					cash_received=20.00,
+				)
+			self.assertIn("admission item", str(ctx.exception).lower())
+		finally:
+			if frappe.db.exists("Item", marker_code):
+				frappe.delete_doc("Item", marker_code, ignore_permissions=True, force=True)
+
+	def test_submit_retail_sale_accepts_non_admission_items(self):
+		"""T1-1: ordinary retail items still pass the gate.
+
+		Sanity check that the admission filter does not over-reject.
+		"""
+		# WAT-500 is a known-good retail Item per the test fixture pattern
+		# at test_role_gate_accepts_hamilton_operator above. is_admission
+		# is False / null on it.
+		result = submit_retail_sale(
+			items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+			cash_received=5.00,
+		)
+		self.assertIn("sales_invoice", result)
+
+	# ---------------------------------------------------------------
 	# Issue 2: server-side rate authority. Client-supplied unit_price
 	# is validated against Item.standard_rate; mismatches are rejected.
 	# ---------------------------------------------------------------

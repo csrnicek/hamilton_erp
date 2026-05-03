@@ -274,15 +274,27 @@ class TestAssetBoardAPI(IntegrationTestCase):
 		self.assertEqual(orders, sorted(orders),
 			"Asset board must return rows in display_order ascending")
 
-	def test_H4_assign_asset_to_session_phase2_stub_throws(self):
-		"""assign_asset_to_session is a Phase 2 not-yet-implemented stub.
-		It MUST throw a user-friendly ValidationError — if it silently
-		returns, a POS operator could fire it from the browser console
-		and corrupt session state.
+	def test_H4_assign_asset_to_session_phase2_stub_returns_no_op(self):
+		"""assign_asset_to_session is a Phase 2 stub. Per T1-1 (in
+		docs/inbox/2026-05-04_audit_synthesis_decisions.md) it now returns
+		a logged no-op rather than raising — preventing the "paid but
+		unassigned" trap where a Sales Invoice with an admission item
+		fires the assignment overlay event and the operator gets a hard
+		exception when they tap Assign.
+
+		The defensive layer that previously was this hard-throw is now
+		moved upstream to ``submit_retail_sale``, which rejects admission
+		items at cart-validation time (see
+		test_submit_retail_sale_rejects_admission_items in
+		test_retail_sales_invoice.py).
 		"""
-		with self.assertRaises(frappe.ValidationError):
-			api.assign_asset_to_session(sales_invoice="INV-FAKE",
-			                            asset_name="FAKE-ASSET")
+		result = api.assign_asset_to_session(
+			sales_invoice="INV-FAKE", asset_name="FAKE-ASSET"
+		)
+		self.assertEqual(result.get("status"), "phase_1_disabled")
+		self.assertIn("message", result)
+		self.assertEqual(result.get("sales_invoice"), "INV-FAKE")
+		self.assertEqual(result.get("asset_name"), "FAKE-ASSET")
 
 	def test_H5_board_data_query_count_bounded(self):
 		"""Two-query invariant: assets query + session_start enrichment
