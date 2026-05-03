@@ -802,6 +802,44 @@ The reviewer's concern (recorded in `docs/inbox.md` 2026-05-03 cleanup follow-up
 - `hamilton_erp/hamilton_erp/doctype/cash_drop/cash_drop.py::_validate_immutable_after_reconciliation` (line ~193)
 - DEC-066 — admin-correction endpoint that uses the `frappe.flags.allow_cash_drop_correction` carve-out path the bypass was paired with
 - Audit synthesis morning review of PRs #165–#169 (2026-05-03), originally surfaced in `docs/inbox.md` cleanup follow-ups
+## Amendment 2026-05-03 — DEC-067: T0-1 idempotency on `submit_retail_sale`
+
+**Decision.** `hamilton_erp.api.submit_retail_sale` accepts an optional `client_request_id` parameter; duplicate calls with the same id return the original Sales Invoice's response payload without creating a second SI. Idempotency state is persisted in a new DocType `Cash Sale Idempotency` (one row per token, unique-indexed on `client_request_id`, retention window 24 h via daily scheduler purge).
+
+**Why.** Pre-T0-1 code path: the cart's `_open_cash_payment_modal` did not clear the cart on error and the comment at `asset_board.js:710` was explicit — `// Cart intentionally NOT cleared — operator can retry.` Combined with the lack of an idempotency contract on the server, an operator who saw a "Sale failed" toast after a network drop *post-commit but pre-response* could re-tap Confirm and produce a second SI: double cash payment line, double stock decrement, customer charged twice. Audit-synthesis classified this as a launch BLOCKER — see `docs/inbox/2026-05-04_audit_synthesis_decisions.md` T0-1.
+
+**Mechanism (server).**
+
+1. `submit_retail_sale` accepts `client_request_id: str | None = None`.
+2. **Fast path:** if the id is provided AND a `Cash Sale Idempotency` row exists with that key, the endpoint returns a reconstructed response payload from the linked Sales Invoice via `_build_retail_sale_response()` — no new write.
+3. **Normal path:** the existing SI insert + submit flow runs unchanged.
+4. **Tail:** on success the endpoint inserts a `Cash Sale Idempotency` row linking the token to `si.name`. The unique constraint on `client_request_id` is the durable enforcement against the narrow concurrent-retry race — the loser's insert raises `UniqueValidationError`, rolling back its just-submitted SI; the operator retries and the fast path returns the winner's payload.
+
+**Mechanism (client).** `_open_cash_payment_modal` generates a UUID via `crypto.randomUUID()` *once per modal open* (not per click), captured in a closure variable, and passes it as `client_request_id` on every Confirm tap. Same modal session = same UUID = idempotent retries. New modal open = new UUID = new transaction.
+
+**Why a separate DocType (vs. stuffing the field on Sales Invoice).** The idempotency record lives on its own retention schedule (24 h purge via `purge_old_idempotency_records` daily scheduler job). Sales Invoices are accounting records and must not be deleted; idempotency tokens are operational and should be GC'd aggressively. The unique index is also scoped only to the keys we care about.
+
+**Why the tail-write pattern (vs. claim-key-first).** The spec considered inserting the idempotency row *before* SI creation (claim the key, then write the SI, then update the row with `si.name`). Tradeoff: claim-first prevents duplicate SIs even on the tight race, but requires a two-phase write and an orphan-cleanup path for crashes between claim and SI submit. Tail-write is simpler and the race window is narrower than the claim path's orphan window — the loser's `UniqueValidationError` rolls back its own SI in the same transaction. Acceptable for a Hamilton-scale operator (1–2 cashiers, single venue). Phase 2 may revisit if multi-cashier concurrency becomes the norm.
+
+**Retention.** 24 h, set in `purge_old_idempotency_records`. The window outlives the operational network-retry window (seconds to minutes) and matches the shift-reconciliation window operators work in, so any retry that's still relevant to a same-shift operator falls inside it. Older rows are dead state.
+
+**Permissions.** `Cash Sale Idempotency` has zero role-permission rows (admin-only by absence, System Manager only). The endpoint inserts with `ignore_permissions=True` — same delegated-capability pattern as the `Sales Invoice` write itself.
+
+**Tests.** Four pinning tests in `test_retail_sales_invoice.py::TestSubmitRetailSaleIdempotency`:
+- Same `client_request_id` returns the same SI; stock decrements only once.
+- Two distinct ids produce two distinct SIs.
+- Calls without `client_request_id` work exactly as before; no idempotency rows created.
+- The idempotency row's `sales_invoice` link points at the original SI.
+
+**Operational mitigation that this DEC retires.** The pre-T0-1 advice "train operators that 'Sale failed' might mean 'succeeded but network dropped — verify SI exists in Desk before retrying'" is no longer needed — the cart can retry safely.
+
+**STOP.** `bench migrate` REQUIRED before this DEC's code goes live. New DocType has no rows on the production DB until migrate runs.
+
+**References.**
+- `docs/inbox/2026-05-04_audit_synthesis_decisions.md` T0-1
+- `hamilton_erp/api.py::submit_retail_sale`, `_build_retail_sale_response`, `purge_old_idempotency_records`
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js::_open_cash_payment_modal`
+- `hamilton_erp/hamilton_erp/doctype/cash_sale_idempotency/`
 
 ---
 

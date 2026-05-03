@@ -718,6 +718,16 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		});
 		$modal.on("click", (e) => { if (e.target === $modal[0]) this._close_modals(); });
 		$modal.find(".hamilton-modal-btn-cancel").on("click", () => this._close_modals());
+		// T0-1 idempotency token. Generated ONCE per modal open (not per
+		// click), so a network-drop retry — operator taps Confirm a second
+		// time after the first call appears to fail — sends the same UUID
+		// and the server returns the original Sales Invoice instead of
+		// creating a second one. crypto.randomUUID is supported in every
+		// browser shipping in the past four years; the cart UI never runs
+		// outside that envelope.
+		const client_request_id = (window.crypto && window.crypto.randomUUID)
+			? window.crypto.randomUUID()
+			: null;
 		$modal.find(".hamilton-modal-btn-confirm").on("click", () => {
 			const cash_received = Number($received.val()) || 0;
 			// Snapshot cart before clearing — needed for the API payload
@@ -731,6 +741,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			frappe.xcall("hamilton_erp.api.submit_retail_sale", {
 				items: cart_snapshot,
 				cash_received: cash_received,
+				client_request_id: client_request_id,
 			}).then((result) => {
 				this._close_modals();
 				this._cart_clear();
