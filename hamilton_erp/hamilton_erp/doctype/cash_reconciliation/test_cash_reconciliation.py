@@ -133,121 +133,67 @@ class TestCashReconciliation(IntegrationTestCase):
 		self.assertIn(recon_a.name, str(ctx.exception))
 		self.assertIn("already been reconciled", str(ctx.exception).lower())
 
-	def test_f38_three_way_disagree_uses_multi_source_variance_label(self):
-		"""F3.8 / DEC-068: when none of the three values agree, the label
-		is 'Multi-source Variance', not 'Operator Mis-declared'.
+	# DEC-069: the three classifier-active tests added in DEC-068
+	# (test_f38_three_way_disagree_uses_multi_source_variance_label,
+	#  test_f38_specific_operator_misdeclaration_still_labeled_correctly,
+	#  test_f35_tolerance_reads_from_hamilton_settings_override) were
+	# removed under T0-2 Path B because _set_variance_flag now
+	# short-circuits to "Pending Phase 3" regardless of inputs. Those
+	# tests assumed the three-way classifier was active and would fail
+	# under Path B. They will return when Phase 3 reactivates the
+	# classifier with a real system_expected calculation.
 
-		The previous label pre-judged the operator as the bad actor. The
-		new label describes the data shape (multi-source disagreement)
-		without naming a cause. The specific-attribution case (manager +
-		system agree, operator differs) is unchanged and still labels
-		'Operator Mis-declared' — that case IS specifically operator
-		misdeclaration, so the original label is correct there.
+	def test_t0_2_path_b_variance_flag_pending_phase_3_for_any_inputs(self):
+		"""T0-2 Path B / DEC-069: until Phase 3 ships the real
+		system_expected calculator, variance_flag is unconditionally
+		'Pending Phase 3' regardless of the three-way input shape.
+
+		Pinning four representative input shapes that previously produced
+		each of the four classification outcomes — all must now resolve
+		to 'Pending Phase 3' so a future regression that re-enables the
+		classifier without also delivering the system_expected calculator
+		surfaces immediately.
+
+		variance_amount must still be populated (NEW-1 bundled into Path
+		B) — the manager sees a meaningful number, not $0.00.
 		"""
-		drop = self._make_drop(100.0)
-		recon = frappe.get_doc(
-			{
-				"doctype": "Cash Reconciliation",
-				"cash_drop": drop.name,
-				"manager": "Administrator",
-				# manager=80, operator=100 (drop), system=0 (placeholder
-				# default for Phase 1). With $20 spread and $1.00 minimum
-				# tolerance, none of the three pairwise comparisons match.
-				"actual_count": 80.0,
-				"timestamp": now_datetime(),
-			}
-		).insert(ignore_permissions=True)
-		recon.submit()
-		self.assertEqual(
-			recon.variance_flag,
-			"Multi-source Variance",
-			f"Three-way disagreement should produce 'Multi-source Variance', "
-			f"got {recon.variance_flag!r}.",
-		)
-
-	def test_f38_specific_operator_misdeclaration_still_labeled_correctly(self):
-		"""F3.8 boundary: when manager + system agree and operator differs,
-		the label remains 'Operator Mis-declared' (the specific case).
-
-		Phase 1 system_expected is hardcoded 0 — so we exercise this case
-		by setting actual_count = 0 to match. operator (declared_amount)
-		differs.
-		"""
-		drop = self._make_drop(100.0)
-		recon = frappe.get_doc(
-			{
-				"doctype": "Cash Reconciliation",
-				"cash_drop": drop.name,
-				"manager": "Administrator",
-				# manager=0, system=0 (placeholder), operator=100. Manager
-				# matches system; operator does not. Specific operator-
-				# misdeclaration case.
-				"actual_count": 0.0,
-				"timestamp": now_datetime(),
-			}
-		).insert(ignore_permissions=True)
-		recon.submit()
-		self.assertEqual(
-			recon.variance_flag,
-			"Operator Mis-declared",
-			f"Manager+system agree, operator differs → should still be "
-			f"'Operator Mis-declared' (specific attribution); got "
-			f"{recon.variance_flag!r}.",
-		)
-
-	def test_f35_tolerance_reads_from_hamilton_settings_override(self):
-		"""F3.5 / DEC-068: tightening the variance tolerance via Hamilton
-		Settings makes a previously-Clean reconciliation flag.
-
-		Default tolerance is 2% / $1.00 floor. Set the percent to 0.1%
-		and the minimum to $0.05 — a $50 difference between manager and
-		operator (out of $1000) should now flag instead of falling under
-		the original 2% / $1 envelope.
-		"""
-		from frappe.utils import flt
-
-		settings = frappe.get_doc("Hamilton Settings", "Hamilton Settings")
-		original_pct = settings.cash_variance_tolerance_percent
-		original_min = settings.cash_variance_tolerance_minimum
-		try:
-			settings.cash_variance_tolerance_percent = 0.1
-			settings.cash_variance_tolerance_minimum = 0.05
-			settings.save(ignore_permissions=True)
-			frappe.clear_cache(doctype="Hamilton Settings")
-
-			# Drop $1000 declared, manager counts $999.50 — well under the
-			# default 2%/$1 tolerance ($20/$1 effective floor=$20), so under
-			# defaults this would be Clean. With tightened tolerance
-			# (0.1%/$0.05 → $1 effective vs. $0.50 difference, wait — let me
-			# pick numbers that flip outcome unambiguously). Use $1000 vs
-			# $999.40 → diff=$0.60. Default: max(20, 1) = $20 envelope, well
-			# under → Clean. Tightened: max(1, 0.05) = $1 envelope, 0.60
-			# under → still clean. Tighten further: use diff=$1.50.
-			drop = self._make_drop(1000.0)
+		# Phase 1 system_expected is hardcoded 0; the four cases below
+		# previously produced (Clean / Possible Theft or Error /
+		# Operator Mis-declared / Operator Mis-declared) respectively.
+		cases = [
+			(0.0, 0.0),     # all-zero: previously "Clean"
+			(100.0, 100.0), # manager+operator agree, system=0: previously "Possible Theft or Error"
+			(0.0, 100.0),   # manager+system agree (=0), operator differs: previously "Operator Mis-declared"
+			(75.0, 100.0),  # all three differ: previously "Operator Mis-declared" (catch-all / Multi-source Variance under DEC-068)
+		]
+		for actual, declared in cases:
+			drop = self._make_drop(declared)
 			recon = frappe.get_doc(
 				{
 					"doctype": "Cash Reconciliation",
 					"cash_drop": drop.name,
 					"manager": "Administrator",
-					# manager=$998.50 vs operator=$1000 → diff $1.50.
-					# Default envelope ~$20 → Clean. Tightened envelope $1
-					# → flags (operator-misdeclared, since system=0).
-					"actual_count": 998.50,
+					"actual_count": actual,
 					"timestamp": now_datetime(),
 				}
 			).insert(ignore_permissions=True)
 			recon.submit()
-			# With tightened tolerance, manager and operator no longer
-			# match within tolerance → not "Clean".
-			self.assertNotEqual(
+			self.assertEqual(
 				recon.variance_flag,
-				"Clean",
-				"Tightened tolerance should flag a $1.50 diff that the "
-				"$20 default envelope would have ignored. Settings reads "
-				f"pct={float(flt(0.1))} min={float(flt(0.05))}.",
+				"Pending Phase 3",
+				f"variance_flag must be 'Pending Phase 3' regardless of inputs "
+				f"(manager={actual}, operator={declared}, system=0); got "
+				f"{recon.variance_flag!r}. T0-2 Path B contract.",
 			)
-		finally:
-			settings.cash_variance_tolerance_percent = original_pct
-			settings.cash_variance_tolerance_minimum = original_min
-			settings.save(ignore_permissions=True)
-			frappe.clear_cache(doctype="Hamilton Settings")
+			# variance_amount = actual - system_expected (= actual - 0 in Phase 1)
+			self.assertAlmostEqual(
+				float(recon.variance_amount),
+				actual,
+				places=2,
+				msg=f"variance_amount must equal actual_count - system_expected "
+				f"({actual} - 0 = {actual}); got {recon.variance_amount!r}. "
+				f"NEW-1 bundled into T0-2 Path B.",
+			)
+			# Roll back inside the loop so each case starts fresh
+			# without test-pollution between iterations.
+			frappe.db.rollback()

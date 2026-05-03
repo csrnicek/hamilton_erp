@@ -263,6 +263,29 @@ The new `test_fresh_install_conformance.py` (PR #56, 2026-04-30) uses existence-
 
 ## 7. Cash Control Incidents
 
+### 7.2 — Manual cash reconciliation procedure (Phase 1 — until DEC-069 / R-011 closes)
+
+**Why this exists.** The Cash Reconciliation form's variance classifier is hard-disabled until Phase 3 (DEC-069). The form writes `variance_flag = "Pending Phase 3"` on every reconciliation regardless of inputs, and the dashboard headline on the form says so. Until Phase 3 ships the real `system_expected` calculation, managers reconcile cash *physically*, not via the system's variance flag.
+
+**Standard end-of-shift procedure (manager performs):**
+
+1. Pull each Cash Drop envelope from the safe in `drop_number` order. The printed label on each envelope shows the operator's declared amount + drop number + timestamp + venue.
+2. **Count the envelope** physically. Write the manager-counted amount on a paper reconciliation sheet next to the envelope's drop number.
+3. **Compare the manager-counted amount to the printed declared amount** on the label. They must match.
+   - **If they match (within ±$1 floor):** sign the paper sheet, mark the envelope reconciled. Open Cash Reconciliation in Frappe, enter the `actual_count`, submit. The form will show `variance_flag = "Pending Phase 3"` — **this is expected and not a problem**. The paper signature is the durable record until Phase 3.
+   - **If they don't match:** apply the variance escalation policy from `HAMILTON_LAUNCH_PLAYBOOK.md` #3:
+     - ±$0–$20 → log on the paper sheet and move on. Do not adjust cash or system to match.
+     - ±$20–$100 → call shift manager.
+     - ±$100+ → call Chris.
+4. **Photograph** both the paper sheet and the cash for any non-zero variance. Forensic trail for later review.
+5. **Never** "fix" a variance by adjusting cash or system to match. Log the truth, count again, log the new count.
+
+**What you'll see in Frappe.** An orange dashboard headline at the top of the form referencing this section. The `variance_flag` reads `"Pending Phase 3"`. The `variance_amount` field shows `actual_count - 0` (since `system_expected` is hardcoded 0 in Phase 1) — useful as a number, but the meaningful comparison is manager-counted vs label-declared, not against `system_expected`. The paper sheet is the audit trail.
+
+**What changes when Phase 3 ships.** The classifier comes back online with the real `system_expected` calculation; the dashboard headline goes away; the manual paper sheet becomes optional. Until then: paper is canonical.
+
+---
+
 ### 7.1 — Operator sees expected-cash totals — STOP
 
 **Symptom:** Anywhere in the app, an operator (Hamilton Operator role) can see expected cash totals or variance.

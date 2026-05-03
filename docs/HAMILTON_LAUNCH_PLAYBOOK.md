@@ -111,12 +111,16 @@ Ranked by likelihood × customer-facing impact during the first 48 hours.
 
 **Why this is #3:** Variances WILL happen on opening weekend — staff are nervous, customers give wrong change, the system is new, someone fat-fingers a comp. The risk is not the variance itself; it's how it gets resolved.
 
+**Phase 1 reconciliation rule (until DEC-069 / R-011 closes in Phase 3): paper is canonical.** The Cash Reconciliation form's variance classifier is hard-disabled — `variance_flag` reads `"Pending Phase 3"` regardless of inputs. The system does NOT compute "expected cash." Managers reconcile cash physically against the printed envelope label, sign a paper sheet, and enter the manager-counted `actual_count` into Frappe for the audit record. The dashboard headline on the form points back to this section. Full procedure: `RUNBOOK.md` §7.2.
+
 **Before opening:**
 - Train staff that variances are EXPECTED on opening weekend and there is NO PUNISHMENT for honest reporting
+- Train staff that the form's `variance_flag` ALWAYS reads `"Pending Phase 3"` — this is the contract, not a bug. The flag is not the signal; the manager-vs-label comparison on paper is.
 - Set the variance policy in writing: ±$20 = log and move on; >$20 = call manager; >$100 = call Chris
-- Confirm the cash drop UI captures variance with a reason field, not just "approve". If it doesn't, add it before go-live or accept manual logging in a paper variance log
+- Confirm the printed envelope label is legible and contains all 8 fields per R-012 (venue, date, operator, shift, drop type, drop number, declared amount, timestamp). The label IS the system-of-record for this drop until Phase 3.
 
 **In the moment:**
+- Compare manager-counted cash against the **printed envelope label's declared amount**, not against the form's variance flag.
 - Log the variance, count again, log the new count, photograph the cash and screen, move on.
 - Reconcile in detail Sunday morning when nobody is tired.
 - Never let staff "fix" a variance by adjusting cash or system to match.
