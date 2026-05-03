@@ -49,7 +49,7 @@
    "label": "Session"
   },
   {
-   "description": "Auto-generated. Format: {day}-{month}-{year}---{NNNN}. Resets to 0001 at midnight. UNIQUE KEY: this unique constraint is the retry-loop contract in lifecycle._create_session \u2014 it MUST NOT be dropped. Removing it breaks collision detection and allows duplicate session numbers under Redis cold-start races.",
+   "description": "Human-readable identifier for operators (e.g. SES-2026-05-04-001). Auto-generated. Format: {day}-{month}-{year}---{NNNN}. Resets to 0001 at midnight. The DocType `name` is a hash for URL stability \u2014 see `_create_session` and DEC-056 for the midnight-boundary correctness rationale. UNIQUE KEY: this unique constraint is the retry-loop contract in lifecycle._create_session \u2014 it MUST NOT be dropped. Removing it breaks collision detection and allows duplicate session numbers under Redis cold-start races. See DEC-088.",
    "fieldname": "session_number",
    "fieldtype": "Data",
    "in_list_view": 1,
