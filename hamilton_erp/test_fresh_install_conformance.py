@@ -334,59 +334,42 @@ class TestPermissionScrubs(IntegrationTestCase):
 
 
 # ---------------------------------------------------------------------------
-# System Settings hardening (System Settings changes from _ensure_audit_trail_enabled)
+# System Settings hardening — audit trail (per-DocType track_changes on v16)
 # ---------------------------------------------------------------------------
 
 
 class TestSystemSettingsHardening(IntegrationTestCase):
-	"""Pin the System Settings tweaks install.py performs."""
+	"""Pin the System Settings invariants install.py is responsible for.
 
-	def test_audit_trail_enabled_if_field_present(self):
-		"""System Settings.enable_audit_trail must be 1 if the field exists in this Frappe build.
-
-		Older or stripped-down Frappe builds may not have this field; install.py
-		treats it as a no-op in that case. The test mirrors that defensive
-		check — only assert when the meta has the field.
-		"""
-		meta = frappe.get_meta("System Settings")
-		if not meta.has_field("enable_audit_trail"):
-			self.skipTest(
-				"System Settings.enable_audit_trail not present in this Frappe build"
-			)
-		value = frappe.db.get_single_value("System Settings", "enable_audit_trail")
-		self.assertEqual(
-			int(value or 0), 1,
-			"System Settings.enable_audit_trail=0 — _ensure_audit_trail_enabled regression",
-		)
+	History: a previous test_audit_trail_enabled_if_field_present asserted
+	`System Settings.enable_audit_trail == 1` (v15-era audit gate). That
+	field does not exist on Frappe v16, so the test self-skipped 100% of
+	the time. Removed 2026-05-03 alongside the corresponding install hook
+	(LL-038). The v16 audit mechanism is per-DocType `track_changes`,
+	pinned by `test_track_changes_enabled_on_all_auditable_hamilton_doctypes`
+	below — the only thing this class needs.
+	"""
 
 	def test_track_changes_enabled_on_all_auditable_hamilton_doctypes(self):
 		"""T1-6: every Hamilton-owned operational DocType has `track_changes: 1`.
 
-		**Implementation note re T1-6 spec.** The audit synthesis (T1-6 in
-		docs/inbox/2026-05-04_audit_synthesis_decisions.md) called for asserting
-		`System Settings.enable_audit_trail == 1`. **Investigation while writing
-		this test revealed that field does not exist on Frappe v16.14.0** — the
-		field is only present on older Frappe builds (the install hook
-		_ensure_audit_trail_enabled at install.py:46-69 silently no-ops on v16).
-		So the literal spec asserts a field that isn't there.
-
-		What we ACTUALLY rely on for audit trail in v16 is per-DocType
-		`track_changes: 1` (which writes to `tabVersion`). That's the v16-era
-		mechanism. This test pins it: every Hamilton-owned operational
-		DocType must declare `track_changes: 1` on its meta. The exception
-		is Asset Status Log itself, which IS the audit log — tracking changes
-		on the audit log is circular and intentionally off (`track_changes: 0`).
+		The Frappe v16 audit mechanism is per-DocType `track_changes: 1`
+		(which writes to `tabVersion`). This test pins it: every
+		Hamilton-owned operational DocType must declare `track_changes: 1`
+		on its meta. The exception is Asset Status Log itself, which IS
+		the audit log — tracking changes on the audit log is circular and
+		intentionally off (`track_changes: 0`).
 
 		If this test fails: someone added a new Hamilton DocType without
-		`track_changes: 1`, OR removed `track_changes` from an existing one.
-		The audit-trail invariant is broken; investigate before merging.
+		`track_changes: 1`, OR removed `track_changes` from an existing
+		one. The audit-trail invariant is broken; investigate before merging.
 
-		Surfaced as a side-finding for Chris: install.py:46-69
-		`_ensure_audit_trail_enabled` is targeting a field that does not exist
-		on v16. It is a no-op. The function should either be deleted (the v16
-		audit mechanism is per-DocType track_changes, which we now pin here)
-		or rewritten to target whatever v16's equivalent is (if any exists).
-		See the audit-synthesis-decisions follow-up note.
+		History: T1-6 in `docs/inbox/2026-05-04_audit_synthesis_decisions.md`
+		originally called for asserting `System Settings.enable_audit_trail
+		== 1`. Investigation revealed that field does not exist on Frappe
+		v16.14.0; per-DocType `track_changes` is the v16 mechanism. The
+		corresponding install hook `_ensure_audit_trail_enabled` was
+		removed 2026-05-03 (LL-038).
 		"""
 		# Per-DocType track_changes coverage is the v16 audit mechanism.
 		# Asset Status Log is the audit log itself — tracking changes on it
