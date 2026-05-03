@@ -114,6 +114,7 @@ bumped to bookkeep the V9.1 retail amendment, whose spec lives in
 
 When writing any Frappe code, consult these sources before writing:
 
+- **Frappe Claude Skill Package** — 60 deterministic skills installed at `~/.claude/skills/frappe-*` (org `OpenAEC-Foundation`, MIT). Skills auto-trigger on Frappe-surface keywords (controller, hook, whitelist, server script, schedule, etc.) and surface Frappe-specific decision trees, anti-patterns, and v14/v15/v16 differences. Use **alongside Context7**, not instead of — skills answer "when SHOULD I use this pattern?", Context7 answers "what does this method do?". Eval logged in DEC-072.
 - Frappe docs: https://frappeframework.com/docs/v16/user/en
 - Frappe wiki: https://github.com/frappe/frappe/wiki
 - ERPNext contributing guide: https://github.com/frappe/erpnext/blob/develop/CONTRIBUTING.md

@@ -1474,15 +1474,7 @@ Hamilton ERP is significantly above industry baseline for an AI-built custom Fra
 
 ---
 
-## Pre-DC: evaluate Frappe Claude Skill Package
-
-Repo: https://github.com/OpenAEC-Foundation/Frappe_Claude_Skill_Package
-
-61 deterministic Frappe/ERPNext skills (MIT, drop-in install at `~/.claude/skills/`). Encodes Frappe-specific gotchas similar to ones we've already hit (e.g. `frappe.flags.in_test` vs `frappe.in_test`, `override_doctype_class` vs `extend_doctype_class`).
-
-Timing: install AFTER Task 25 ships and BEFORE starting DC/Crew Club multi-venue refactor. Don't install mid-Phase-1 — it changes Claude Code behavior and could introduce noise in in-flight PRs.
-
-When evaluating: review which of the 61 skills overlap with patterns already in claude_memory.md (avoid duplication), and which fill gaps (especially around Server Scripts, hooks.py, custom apps, and v16-specific behavior).
+<!-- Closed 2026-05-03: Frappe Claude Skill Package evaluated and adopted. See DEC-072 in docs/decisions_log.md. -->
 
 ---
 
