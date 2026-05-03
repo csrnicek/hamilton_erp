@@ -69,3 +69,66 @@ class TestCashReconciliation(IntegrationTestCase):
 		).insert(ignore_permissions=True)
 		self.assertEqual(recon.actual_count, 195.0)
 		self.assertFalse(recon.variance_flag)  # Not set until submission
+
+	def test_t1_5_first_reconciliation_submission_succeeds(self):
+		"""T1-5 (per docs/inbox/2026-05-04_audit_synthesis_decisions.md):
+		the FIRST submitted reconciliation for a Cash Drop succeeds.
+
+		Sanity case for the duplicate guard — guard must not block
+		legitimate first submissions.
+		"""
+		drop = self._make_drop(200.0)
+		recon = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": 200.0,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		recon.submit()
+		self.assertEqual(recon.docstatus, 1)
+
+	def test_t1_5_second_reconciliation_for_same_drop_is_rejected(self):
+		"""T1-5: A second submitted reconciliation pointing at the same
+		Cash Drop must be rejected at before_submit.
+
+		Without this guard, two managers race-submitting reconciliations
+		for the same drop both succeed and overwrite the Cash Drop's
+		``reconciliation`` link to whichever submitted second; the first
+		reconciliation row orphans and the audit trail loses a record.
+		"""
+		drop = self._make_drop(200.0)
+
+		# Manager A submits first — succeeds.
+		recon_a = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": 200.0,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		recon_a.submit()
+
+		# Manager B inserts a draft for the same drop (insert is allowed —
+		# drafts can be created freely; the guard fires at before_submit).
+		recon_b = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": 195.0,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+
+		# Manager B's submit must fail with the T1-5 guard message.
+		with self.assertRaises(frappe.ValidationError) as ctx:
+			recon_b.submit()
+		# The error message names the existing reconciliation, so the
+		# manager has a breadcrumb to investigate.
+		self.assertIn(recon_a.name, str(ctx.exception))
+		self.assertIn("already been reconciled", str(ctx.exception).lower())

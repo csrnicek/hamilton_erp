@@ -30,9 +30,43 @@ class CashReconciliation(Document):
 		"""
 		if self.actual_count is None:
 			frappe.throw(_("Please enter the cash count before submitting."))
+		self._validate_no_duplicate_reconciliation()
 		self._populate_operator_declared()
 		self._calculate_system_expected()
 		self._set_variance_flag()
+
+	def _validate_no_duplicate_reconciliation(self):
+		"""T1-5 per docs/inbox/2026-05-04_audit_synthesis_decisions.md:
+		every Cash Drop reconciles AT MOST once.
+
+		Two managers opening the same Cash Drop and racing to submit
+		reconciliations would otherwise both succeed (no DB constraint,
+		no app-level guard) — and ``_mark_drop_reconciled`` would
+		overwrite the Cash Drop's ``reconciliation`` link to whichever
+		submitted second. Manager A's reconciliation row would orphan;
+		auditors querying "show me the reconciliation for DROP-X" would
+		see only Manager B's. The audit trail loses a record.
+
+		This guard rejects the second submission with a clear error
+		pointing at the existing reconciliation. Same-row resubmission
+		(e.g. an amend flow) is allowed via the ``name != self.name``
+		filter.
+		"""
+		if not self.cash_drop:
+			return
+		existing = frappe.db.exists(
+			"Cash Reconciliation",
+			{
+				"cash_drop": self.cash_drop,
+				"docstatus": 1,
+				"name": ["!=", self.name],
+			},
+		)
+		if existing:
+			frappe.throw(_(
+				"This Cash Drop has already been reconciled by "
+				"{0}. A drop reconciles at most once."
+			).format(existing))
 
 	def on_submit(self):
 		"""Mark the linked Cash Drop as reconciled after successful submission.
