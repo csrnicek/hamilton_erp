@@ -361,6 +361,34 @@ Ranked by likelihood × customer-facing impact during the first 48 hours.
 
 ---
 
+## When you need to correct an audit log row (typo / mis-attribution)
+
+Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admission Log`) are append-only after T1-2 lands. You cannot delete rows — but you can record a correction.
+
+**Workflow (admin-only):**
+
+1. Identify the audit row that's wrong. Note its DocType (`Asset Status Log` or `Comp Admission Log`) and `name`.
+2. Open a new **Hamilton Board Correction** in Frappe Desk.
+3. Fill in:
+   - **Target DocType** — `Asset Status Log` or `Comp Admission Log`
+   - **Target Name** — the audit row's `name`
+   - **Target Field** — optional; the specific field that's wrong (e.g. `reason`, `operator`)
+   - **Old Value / New Value** — what the row says vs what it should say
+   - **Reason** — REQUIRED — explain *why* the correction is being made (typo, mis-attribution, system glitch, operator dispute resolved, etc.)
+4. Save. The Hamilton Board Correction row is itself audit-logged. Original audit row is untouched.
+5. Forensic reconstruction = read the original audit row + any Hamilton Board Correction rows pointing at it.
+
+**Who can do this:** Hamilton Admin (Chris) only — Hamilton Board Correction has no role permission rows so System Manager / Hamilton Admin are the only paths.
+
+**When to use vs not use:**
+- ✅ Typo: "operator was set to alice but should have been bob"
+- ✅ Mis-attribution: "wrong status logged because of duplicate-tap before T0-1 idempotency landed"
+- ✅ Genuine error: "OOS reason should have been Plumbing not Lock"
+- ❌ "Hide a bad-looking row" — corrections are themselves audit-logged. There is no hiding.
+- ❌ Operator-side typos — operators don't have access to Hamilton Board Correction. Operator brings the issue to a manager who logs the correction.
+
+---
+
 ## Who to call
 
 | Situation | Contact |

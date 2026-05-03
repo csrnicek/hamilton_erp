@@ -620,6 +620,58 @@ Philadelphia, DC, and Dallas inherit the same standard-merchant baseline. Proces
 
 ---
 
+## Amendment 2026-05-03 — DEC-066: Audit-log corrections via Hamilton Board Correction (no Admin delete)
+
+**Context.** T1-2 (per `docs/inbox/2026-05-04_audit_synthesis_decisions.md`) removes the `delete` permission from Hamilton Admin on the two audit-log DocTypes (`Asset Status Log`, `Comp Admission Log`) so audit logs become append-only at the perm-grid level. That fix is operationally fragile on its own: if a manager spots a genuine typo in an audit row (operator mis-attribution, fat-fingered status, wrong reason), there has to be a sanctioned way to correct the record — otherwise the only paths are (a) bypass the audit invariant via raw SQL or (b) live with the drift. Both are worse than what we have today.
+
+**Decision.** **Extend the existing `Hamilton Board Correction` DocType to handle audit-log corrections.** Pattern (a) of the two patterns considered.
+
+**Pattern (a) — chosen — extend Hamilton Board Correction.** The DocType already exists with `track_changes: 1` and admin-only-by-Frappe-convention permissions (per `permissions_matrix.md` Notable Patterns). Today it captures Venue Asset corrections via a `venue_asset` Link + `old_status` / `new_status` / `reason` / `operator` / `timestamp`. Extension shape:
+
+- Replace the `venue_asset` Link with a polymorphic target via Frappe's standard pattern: `target_doctype` (Select: `Venue Asset`, `Asset Status Log`, `Comp Admission Log`) + `target_name` (Dynamic Link, options field is `target_doctype`).
+- Add `target_field` (Data, optional — for field-level corrections like "wrong reason on a single row").
+- Keep `old_status` / `new_status` for backward-compat on Venue Asset records (or rename to `old_value` / `new_value` and use the same fields polymorphically — preferred).
+- `reason` (existing Text, made `reqd: 1`) — every correction must explain itself.
+- `operator` (existing Link to User) becomes "the person who performed the correction" — auto-set to `frappe.session.user` in `before_insert`.
+- `timestamp` auto-set in `before_insert`.
+
+The Hamilton Board Correction row IS the correction record. The original audit-log row stays pristine. Forensic reconstruction = read the original row + any Hamilton Board Correction rows pointing at it.
+
+**Pattern (b) — rejected — new `Audit Log Correction` DocType.** Cleaner separation in principle, but: (i) creates a third correction-tracking surface alongside Hamilton Board Correction and ERPNext's own version table, fragmenting the audit forensic story; (ii) requires a brand-new DocType migrate vs an extension of an existing one; (iii) duplicates the perm-grid + admin-only-by-convention pattern that Hamilton Board Correction already encodes. The one place pattern (b) wins is strict immutability of the audit-log row's surface — which (a) also achieves because the original row is not modified, only referenced.
+
+**What this unblocks.** T1-2 (drop `delete` from Hamilton Admin on `Asset Status Log` + `Comp Admission Log`). Without DEC-066's pattern, T1-2 would create an audit log that managers cannot correct without violating the invariant. With DEC-066, the correction surface exists and is itself audit-logged.
+
+**Manager workflow on launch (the operational story).**
+
+1. Manager spots a typo or mis-attribution on an `Asset Status Log` or `Comp Admission Log` row during reconciliation review.
+2. Manager opens a new `Hamilton Board Correction` (via the standard form or a future button on the audit-row form).
+3. Manager fills in:
+   - `target_doctype` (e.g. `Asset Status Log`)
+   - `target_name` (the audit row's `name`)
+   - `target_field` (optional — e.g. `reason`)
+   - `old_value` / `new_value` (what the row says vs what it should say)
+   - `reason` (free text — REQUIRED — explaining why the correction is being made)
+4. Save submits the correction as its own audit row. Original audit row is untouched.
+5. Future reads of the audit row should surface "this row has N corrections — see Hamilton Board Correction <ids>" via a server-side helper.
+
+**What still needs implementing (not in this DEC).**
+
+- DocType schema change to add the polymorphic target fields. This requires `bench migrate`.
+- Optional UI button on `Asset Status Log` / `Comp Admission Log` form views to open a pre-filled Hamilton Board Correction.
+- Server-side helper (e.g. `get_corrections_for(doctype, name)`) for the read path.
+
+**Permission grid.** No change to Hamilton Board Correction's permissions. It remains admin-only by Frappe convention (no role rows = System Manager only). Only Chris can issue corrections. **This is intentional** — corrections are infrequent and high-trust; making them widely available defeats the audit-log immutability they're designed to support.
+
+**Closing T1-2.** With DEC-066 documented, T1-2 (drop delete from Hamilton Admin on the audit logs) can ship independently. The `_implementation_ of DEC-066's polymorphic target is a separate, schedulable PR — not a launch blocker.
+
+**References.**
+- `docs/inbox/2026-05-04_audit_synthesis_decisions.md` T1-CORRECT (the request) and T1-2 (the unblocked downstream item)
+- `docs/permissions_matrix.md` Notable Patterns — Hamilton Board Correction "no role perms" pattern
+- `hamilton_erp/hamilton_erp/doctype/hamilton_board_correction/hamilton_board_correction.json` — current schema
+- A1 / A2 / A3 / A4 audit findings on Asset Status Log + Comp Admission Log Admin delete
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
