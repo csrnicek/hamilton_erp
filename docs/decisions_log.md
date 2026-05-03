@@ -758,6 +758,53 @@ The audit synthesis (`docs/inbox/2026-05-04_audit_synthesis_decisions.md`) class
 
 ---
 
+## Amendment 2026-05-03 — DEC-070: `get_doc_before_save() is None` defensive bypass in Cash Drop guards (soft-spot documented)
+
+**What this DEC documents.** Both `_validate_immutable_after_first_save` and `_validate_immutable_after_reconciliation` in `cash_drop.py` (T0-4, PR #168) include a defensive bypass of the form:
+
+```python
+def _validate_immutable_after_first_save(self):
+    if self.is_new():
+        return
+    if getattr(frappe.flags, "allow_cash_drop_correction", False):
+        return
+    original = self.get_doc_before_save()
+    if original is None:
+        return  # ← the soft-spot
+    changed = [f for f in _IMMUTABLE_AFTER_FIRST_SAVE if self.get(f) != original.get(f)]
+    ...
+```
+
+The `if original is None: return` line is reached only on UPDATEs of existing docs (because `self.is_new()` short-circuits inserts above it). Under Frappe v16 today, `get_doc_before_save()` reliably returns the pre-save Document instance during a normal `db_update` path. The bypass exists to swallow an unknown-trigger edge case rather than throw — a deliberate "fail open" choice when the pre-save snapshot is unavailable.
+
+**Why the morning review of PRs #165–#169 flagged this.**
+
+The reviewer's concern (recorded in `docs/inbox.md` 2026-05-03 cleanup follow-ups, now closed): "if a future Frappe minor changes the semantics of `get_doc_before_save` (e.g. returns an empty `Document` instead of `None`), the guard silently no-ops and the immutability invariant breaks." On closer read the failure mode is the opposite — an empty-Document return would make `original.get(f)` always return `None`, the field-change comparison would flag every field as "changed", and the validator would *falsely throw* on every save (blocking, not bypassing). Either way: the bypass is defending against a code path we cannot describe today, which is itself a code smell.
+
+**The decision.**
+
+1. **Keep the bypass for now.** Cash Drop guards are recently shipped (PR #168, 2026-05-03); we have zero production telemetry on whether `get_doc_before_save()` ever returns `None` post-`is_new()` for a Hamilton Cash Drop. Removing the bypass and letting the guard throw on `None` could surface a real edge case as a launch-week regression. Defensive-but-documented is the right Phase 1 posture.
+
+2. **Pin `self.is_new()` as the only "new doc" check.** Already in place. Any future contributor adding a similar guard to Cash Drop or any Hamilton-owned DocType MUST use `self.is_new()` for the new-doc short-circuit, NOT `if self.get_doc_before_save() is None`. Documented contract.
+
+3. **Replace the bypass with a fail-loud assertion when telemetry justifies.** Once production has run ≥30 days with no `Asset lock TTL expired`-style Error Log entries indicating a `get_doc_before_save() is None` post-insert hit (we don't currently log that path — the next step is to add `frappe.log_error(title="Cash Drop guard saw get_doc_before_save() is None unexpectedly")` in the bypass), revisit this DEC and consider promoting `if original is None` to `frappe.throw(...)`. The fail-loud version surfaces the unknown trigger as an investigable Error Log entry instead of silently passing.
+
+**What this DEC is NOT.**
+
+- Not a deferred bug fix. The current code is correct under the documented Frappe v16 contract for `get_doc_before_save`.
+- Not a "remove the bypass" mandate. The bypass earns its keep until we have data showing it never fires.
+- Not a generalization. Other Hamilton DocTypes that do field-immutability checks should follow the `is_new()` pin contract above; the `is None` defensive pattern stays scoped to Cash Drop where it currently lives.
+
+**Follow-up work (not blocking).** Add a `frappe.log_error(title="Cash Drop unexpected get_doc_before_save None")` instrumentation inside both bypasses so we get production data on whether this code path ever fires. If it never fires in 30 days, replace with `frappe.throw`. If it does fire, the Error Log entry shows under what conditions, and we can write a real validator for that path.
+
+**References.**
+- `hamilton_erp/hamilton_erp/doctype/cash_drop/cash_drop.py::_validate_immutable_after_first_save` (line ~153)
+- `hamilton_erp/hamilton_erp/doctype/cash_drop/cash_drop.py::_validate_immutable_after_reconciliation` (line ~193)
+- DEC-066 — admin-correction endpoint that uses the `frappe.flags.allow_cash_drop_correction` carve-out path the bypass was paired with
+- Audit synthesis morning review of PRs #165–#169 (2026-05-03), originally surfaced in `docs/inbox.md` cleanup follow-ups
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
