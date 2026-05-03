@@ -1436,6 +1436,79 @@ class TestOvertimeAlertContract(IntegrationTestCase):
 		)
 
 
+class TestOfflineBannerContract(IntegrationTestCase):
+	"""DEC-104 — guard the offline banner surface."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path("hamilton_erp", "public", "css", "asset_board.css")
+
+	def test_js_defines_setup_offline_listeners(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_setup_offline_listeners", source,
+			"Offline listener setup missing — DEC-104.",
+		)
+
+	def test_js_listens_to_browser_offline_event(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		# DEC-104 contract: belt-and-suspenders — browser events catch
+		# OS-level outages before Socket.IO heartbeat times out.
+		self.assertIn(
+			'window.addEventListener("offline"', source,
+			"Browser offline listener missing — DEC-104.",
+		)
+
+	def test_js_listens_to_realtime_socket_disconnect(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			'frappe.realtime.socket.on("disconnect"', source,
+			"Frappe Socket.IO disconnect listener missing — DEC-104.",
+		)
+
+	def test_js_banner_text_warns_about_cash(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		# DEC-104: the wording must explicitly flag cash as the dangerous
+		# surface so the banner's purpose is unambiguous.
+		self.assertIn(
+			"do not process cash until reconnected", source,
+			"Offline banner text must warn about cash processing — DEC-104.",
+		)
+
+	def test_js_show_and_hide_offline_banner(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn("_show_offline_banner", source)
+		self.assertIn("_hide_offline_banner", source)
+
+	def test_js_checks_navigator_online_on_setup(self):
+		"""DEC-104 — surface the banner immediately if loaded offline."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"navigator.onLine === false", source,
+			"On-load offline check missing — DEC-104.",
+		)
+
+	def test_css_defines_offline_banner_class(self):
+		with open(self._css_path()) as f:
+			source = f.read()
+		self.assertIn(
+			".hamilton-offline-banner", source,
+			".hamilton-offline-banner styling missing — DEC-104.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

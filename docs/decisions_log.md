@@ -976,6 +976,35 @@ The skill package documents *generic Frappe patterns*. Hamilton's `decisions_log
 
 ---
 
+## Amendment 2026-05-03 — DEC-104: Offline banner — non-blocking, cash-warning
+
+**Decision.** When the Asset Board loses its server connection, render a full-width dark-red banner at the top: "System offline — do not process cash until reconnected." The banner auto-dismisses when the connection returns. Operators cannot dismiss it manually; it is not modal — interaction with the board continues.
+
+**Why a banner, not a modal blocking interaction.** A modal would prevent the operator from reading current board state during the outage. That's a regression: the operator may legitimately need to scan the room/locker assignments to answer a guest, complete a vacate the system already accepted, or note a Dirty asset that just freed up. Blocking those reads adds friction with no safety benefit — the data they're reading was committed before the outage and is still on screen.
+
+The dangerous surface during an outage is *cash processing*: a Sales Invoice submit that fails halfway, leaving the customer charged on their card but no SI in the database (the inverse of T0-1's idempotency case). The banner's wording flags exactly that surface ("do not process cash") rather than blocking everything indiscriminately.
+
+**Detection — both Frappe Socket.IO AND browser online/offline events.** We hook two surfaces:
+1. `frappe.realtime.socket.on("disconnect"|"connect"|"reconnect", ...)` — the Socket.IO client that Frappe wraps. Catches server-side outages (the Frappe socket dies but the operator's Wi-Fi is fine). Wrapped in try/catch so we don't fail on Frappe builds that hide the underlying socket.
+2. `window.addEventListener("offline"|"online", ...)` — browser-level network change. Catches OS-level outages (Wi-Fi off, ethernet unplugged) before the Socket.IO heartbeat times out, surfacing the banner faster.
+
+The two surfaces are belt-and-suspenders. Either firing shows the banner; both must clear before the banner is hidden (well, in practice the second clear is a no-op because `_show_offline_banner` is idempotent on element presence).
+
+**On-load check.** If the operator opens the Asset Board while already offline (Wi-Fi off when they navigate), `navigator.onLine === false` triggers the banner immediately rather than waiting for the next online/offline event. Without this, operators load a stale board with no warning.
+
+**Lifecycle / teardown.** Both `_on_offline` and `_on_online` are stashed on `this` so `teardown()` can detach them by reference. Anonymous handlers passed to `addEventListener` cannot be removed cleanly; binding once + storing the reference is the standard pattern.
+
+**What changed.**
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — `listen_realtime` now calls `_setup_offline_listeners`. New `_setup_offline_listeners`, `_show_offline_banner`, `_hide_offline_banner` methods. `teardown` detaches the listeners.
+- `hamilton_erp/public/css/asset_board.css` — `.hamilton-offline-banner` styling.
+- `hamilton_erp/test_asset_board_rendering.py` — substring contract tests under `TestOfflineBannerContract`.
+
+**Migrate flag.** None.
+
+**References.** `frappe.realtime.socket` (Socket.IO client wrapper); `navigator.onLine` MDN; DEC-101 (overtime banner — different colour palette + animation, intentionally distinct).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
