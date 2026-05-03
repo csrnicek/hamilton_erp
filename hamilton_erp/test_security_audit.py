@@ -575,6 +575,102 @@ class TestShiftRecordBlindRevealGuardrail(IntegrationTestCase):
 
 
 # ---------------------------------------------------------------------------
+# T1-3 — Hamilton Operator runtime read on the Asset Board
+# ---------------------------------------------------------------------------
+
+
+class TestAssetBoardOperatorReadAccess(IntegrationTestCase):
+	"""T1-3 (per docs/inbox/2026-05-04_audit_synthesis_decisions.md).
+
+	The synthesis claimed Hamilton Operator hits 403 when calling
+	``hamilton_erp.api.get_asset_board_data`` because that function reads
+	Hamilton Settings via ``frappe.get_cached_doc("Hamilton Settings")``
+	(api.py:241-256), and Hamilton Operator has no permission row on
+	Hamilton Settings.
+
+	Two outcomes are possible at runtime:
+
+	(a) ``get_cached_doc`` returns the cached singleton without re-checking
+	    perms on cache hit. Operator gets the data, no 403. The synthesis's
+	    403 claim is theoretical; the bug is invisible in practice.
+
+	(b) ``get_cached_doc`` checks perms on every call. Operator gets
+	    PermissionError on every Asset Board load. Production blocker.
+
+	**This test resolves the question by exercising the runtime path.**
+
+	If this test PASSES: T1-3 closes as a no-issue (case (a) is reality).
+	No follow-up PR is needed.
+
+	If this test FAILS with PermissionError: T1-3 is confirmed real.
+	The follow-up fix is to grant Hamilton Operator ``read`` on
+	Hamilton Settings (one JSON change to hamilton_settings.json,
+	bench-migrate-required, schedule into the Phase 3 migrate window).
+	"""
+
+	@classmethod
+	def setUpClass(cls):
+		super().setUpClass()
+		cls.operator_email = "asset-board-operator-read-test@example.com"
+		if not frappe.db.exists("User", cls.operator_email):
+			frappe.get_doc({
+				"doctype": "User",
+				"email": cls.operator_email,
+				"first_name": "AssetBoardOpTest",
+				"send_welcome_email": 0,
+				"enabled": 1,
+				"roles": [{"role": "Hamilton Operator"}],
+			}).insert(ignore_permissions=True)
+
+	@classmethod
+	def tearDownClass(cls):
+		email = getattr(cls, "operator_email", None)
+		if email and frappe.db.exists("User", email):
+			frappe.delete_doc("User", email, ignore_permissions=True, force=True)
+		super().tearDownClass()
+
+	def setUp(self):
+		frappe.clear_cache()
+
+	def tearDown(self):
+		frappe.set_user("Administrator")
+		frappe.clear_cache()
+
+	def test_hamilton_operator_can_load_asset_board_data(self):
+		"""Hamilton-Operator-only User must be able to call
+		``hamilton_erp.api.get_asset_board_data`` without PermissionError.
+
+		If this fails with PermissionError on Hamilton Settings: T1-3
+		confirmed real; schedule the JSON-perm follow-up fix per the
+		decisions doc (Phase 3 migrate window).
+		"""
+		from hamilton_erp.api import get_asset_board_data
+
+		frappe.set_user(self.operator_email)
+		try:
+			result = get_asset_board_data()
+		except frappe.PermissionError as exc:
+			self.fail(
+				"Hamilton Operator hit PermissionError loading Asset Board: "
+				f"{exc}\n\n"
+				"T1-3 in docs/inbox/2026-05-04_audit_synthesis_decisions.md "
+				"is now confirmed. Follow-up fix: grant Hamilton Operator "
+				"\"read\" on Hamilton Settings via the permissions array in "
+				"hamilton_settings.json. Schedule into the Phase 3 "
+				"bench-migrate window."
+			)
+
+		self.assertIn(
+			"settings", result,
+			f"get_asset_board_data response missing 'settings' key: {list(result.keys())}",
+		)
+		self.assertIn(
+			"grace_minutes", result["settings"],
+			f"settings payload missing 'grace_minutes': {result['settings']}",
+		)
+
+
+# ---------------------------------------------------------------------------
 # Field masking audit — gap #2 (Task 25 item 7 / Comp Admission Log.comp_value)
 # ---------------------------------------------------------------------------
 
