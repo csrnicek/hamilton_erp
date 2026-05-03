@@ -1265,6 +1265,44 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-03 — DEC-098: Receipt printing pipeline (Epson TM-T20III)
+
+**Decision.** Hamilton's cash-receipt print pipeline ships on the **Epson TM-T20III** Ethernet/WiFi thermal printer, dispatched via raw TCP sockets to port 9100 with ESC/POS init + cut bytes. Receipt content satisfies the CRA-mandated tier-2 fields (date/time, items + qty + rate + line total, subtotal, HST line with rate, grand total + rounded total, change, payment method, GST/HST registration number, venue name, session number when applicable, SI name as receipt #) per the inbox spec section "Receipt printing — Epson TM-T20III".
+
+**Hardware choice.** Epson TM-T20III is the standard thermal receipt printer for ERPNext POS deployments — well-supported by `python-escpos`, dual Ethernet/WiFi connectivity matches Hamilton's per-venue networking, and the price/availability/durability combination beats every alternative we evaluated (Star TSP100, Bixolon SRP, Munbyn). One unit per venue, IP configured per-site in `Hamilton Settings.receipt_printer_ip` (mirrors the Brother QL-820NWB label printer's per-venue IP pattern from DEC-011 / R-012).
+
+**Blocking rule — no receipt = no completed sale.** If the printer dispatch fails for any reason (network unreachable, printer offline, paper out, blank GST/HST registration number, Hamilton Settings missing) `submit_retail_sale` propagates the `ValidationError` out of the whitelisted method. Frappe's request-level rollback then reverses the Sales Invoice submit. Operator never sees "sale done" without a paper receipt in hand. **Same blocking pattern as R-012's cash-drop label rule** — the paper artifact is a control token, not a courtesy. This is the only way to keep the receipt-on-hook asset-board discipline (and the CRA paper trail) honest.
+
+**Why we don't use `pos_profile.print_format`.** Frappe v16 issue [#53857](https://github.com/frappe/erpnext/issues/53857) (open as of 2026-05-03): the POS Profile's print-format filter UI omits Sales Invoice formats and only lists POS Invoice formats. Hamilton's flow uses Sales Invoice with `is_pos=1` (per the v16 architecture choice we already made), so the POS Profile's print-format field will silently stay empty for our profile. **The fix:** the receipt-printing function (`_render_receipt`) loads the print format BY NAME via `frappe.get_print(..., print_format="Hamilton Cash Receipt")`. Explicit, not configuration-driven. When ERPNext fixes #53857 the workaround stays correct, just becomes redundant.
+
+**Print format.** "Hamilton Cash Receipt" (`print_format/hamilton_cash_receipt/hamilton_cash_receipt.json`) — Jinja, `custom_format=1`, monospace narrow-width layout matched to the TM-T20III's 80mm paper. CRA-mandated fields wired from the Sales Invoice + Hamilton Settings + Company (no fancy CSS — thermal printer rendering).
+
+**Dev escape hatches (the only places the blocking rule is bypassed).**
+1. **`frappe.in_test = True`** — the dispatch is short-circuited to a logged no-op. Tests that exercise `submit_retail_sale` work without a physical printer; the sale completes and assertions on the SI proceed normally. Tests that need to assert on the failure path explicitly toggle `frappe.flags.in_test = False` for the duration of the assertion.
+2. **`Hamilton Settings.receipt_printer_enabled = 0`** — manual operator override, lets dev / staging work proceed when the printer is offline. Both escape hatches log a clear marker via `frappe.logger("hamilton_erp.printing")` so the absence of a print is auditable.
+
+**Reprint role policy.** A "Reprint Receipt" custom button on the Sales Invoice form is visible only to **Hamilton Manager**, **Hamilton Admin**, and **System Manager**. Hamilton Operator is deliberately excluded — the cart's automatic post-submit print is the operator's only print path. Reprints are a manager-supervised operation to keep the receipt-as-control-token discipline intact (one paper receipt per sale; multiple operator-initiated reprints would muddy the asset-board hook discipline). Backed by `@frappe.rate_limit(limit=60, seconds=60)` per the existing convention for mutating endpoints (DEC-074).
+
+**Dependency added.** `python-escpos>=3.0` registered in `pyproject.toml` `[project.dependencies]`. The first runtime dependency declared on this app — addresses the SBOM gap flagged by S4.4 of the 2026-05-04 security audit (empty `dependencies` list blocked `pip-audit`). Even though the dispatch path uses raw socket bytes today, the library is on the dependency list because the operations playbook references it for diagnostic / reprint tooling and Phase 2 may switch to the higher-level `escpos.printer.Network` abstraction.
+
+**Hamilton Settings additions (this PR).**
+- `receipt_printer_ip` (Data) — per-venue Epson TM-T20III IP. Required when enabled.
+- `receipt_printer_enabled` (Check, default 1) — dev escape hatch + per-venue disable.
+- `gst_hst_registration_number` (Data, no default — entered via Desk per DEC-097) — printed on every receipt; blank value blocks the sale.
+- New section break "Receipts" grouping the three.
+- **Bench migrate REQUIRED** to surface the new fields in the singleton form.
+
+**References.**
+- DEC-097 (GST/HST registration number — printed on every receipt, blank blocks the sale)
+- R-012 (cash-drop label print rule — the precedent for "paper artifact = control token = blocking rule")
+- DEC-011 (Brother QL-820NWB label printer — the per-venue printer-IP pattern this design mirrors)
+- DEC-067 (idempotency on `submit_retail_sale` — the post-submit print sits AFTER the idempotency record write, so a print failure rolls back the idempotency row too; a retry with the same `client_request_id` therefore retries the print, not returns a stale payload pointing at a rolled-back SI)
+- DEC-074 (rate limiting on mutating endpoints — applied to `reprint_cash_receipt`)
+- `docs/inbox.md` "Receipt printing — Epson TM-T20III" section — closed and replaced with a "see DEC-098" pointer in this same PR
+- Frappe v16 issue #53857 — POS Profile print-format filter bug (the reason for explicit print-format-by-name)
+
+---
+
 ## Amendment 2026-05-03 — DEC-099: Shift Management from the Asset Board
 
 **Decision.** Hamilton Operators start and end their shifts from the Asset Board itself. No Frappe Desk access is required for the routine start/end-of-shift workflow.
@@ -1275,7 +1313,7 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 - Start Shift flow: tap the button → modal prompts for `float_expected` (Currency, default = `Hamilton Settings.float_amount`) → on confirm, `start_shift()` inserts the Shift Record and `init()` re-runs so the asset grid renders.
 - End Shift flow: header button (only visible with an Open shift) → `show_end_shift_flow()` runs the final cash drop modal first → on submit, `show_shift_summary_modal()` opens (DEC-102) → operator acknowledges → `end_shift()` flips the record to Closed.
 
-**Gating rule.** The Asset Board's normal asset grid is only reachable when `_get_open_shift_for_user(frappe.session.user)` returns a row. Enforced both by the JS gate (UX layer) and by the cash-handling discipline this exists to enforce — operators must commit to a shift before they can take cash actions. Permissions still apply on the backend.
+**Gating rule.** The Asset Board's normal asset grid is only reachable when `_get_open_shift_for_user(frappe.session.user)` returns a row. This is enforced both by the JS gate (UX layer) and by the fact that all asset/retail actions require an authenticated session — the JS gate prevents the operator from accidentally taking actions before they have committed to a shift, which is a cash-handling discipline issue, not a permissions issue. (Permissions still apply on the backend.)
 
 **Float prompt default — why Settings.** Operators almost always start with the venue standard float; defaulting to `Hamilton Settings.float_amount` means the common path is one tap (Confirm). Overrides are still possible (partial-shift handover, change-fund variance) but require deliberate input. The alternative — making the operator type the float every time — adds friction with no safety benefit, since the value is recorded on the Shift Record either way.
 

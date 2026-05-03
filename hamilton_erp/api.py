@@ -1056,6 +1056,16 @@ def submit_retail_sale(
 			si.db_set("owner", real_user, update_modified=False)
 		si.submit()
 
+		# DEC-098 — no receipt = no completed sale. Render + dispatch the
+		# cash receipt to the Epson TM-T20III. If this throws (network,
+		# paper out, blank GST/HST), the exception bubbles out of the
+		# whitelisted method; Frappe's request-level rollback then reverses
+		# the SI submit. Same blocking pattern as R-012's cash-drop label.
+		# Test mode + receipt_printer_enabled=0 short-circuit inside
+		# print_cash_receipt — see hamilton_erp/printing.py docstring.
+		from hamilton_erp.printing import print_cash_receipt
+		print_cash_receipt(si.name)
+
 		response = {
 			"sales_invoice": si.name,
 			"grand_total": grand_total,
