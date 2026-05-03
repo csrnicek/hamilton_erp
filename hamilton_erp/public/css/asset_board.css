@@ -776,32 +776,38 @@
 	padding: 8px;
 	cursor: default;
 }
-.hamilton-retail-row1 {
+/* Finding #2 layout (DEC-071): item name centered top, price centered
+   bottom (or OUT OF STOCK), stock count in the corner. SKU code
+   removed entirely. The retail tile is full-flex column with the name
+   anchored top and the price/OOS label anchored bottom. */
+.hamilton-retail-tile {
 	display: flex;
+	flex-direction: column;
 	justify-content: space-between;
-	align-items: baseline;
-	font-size: 11px;
-	font-weight: 700;
-	margin-bottom: 4px;
-}
-.hamilton-retail-code {
-	letter-spacing: 0.5px;
-}
-.hamilton-retail-stock {
-	font-size: 13px;
-	font-weight: 700;
+	align-items: center;
+	text-align: center;
+	padding: 6px;
 }
 .hamilton-retail-name {
 	font-size: 12px;
-	font-weight: 600;
-	flex: 1;
+	font-weight: 700;
 	line-height: 1.2;
+	width: 100%;
 	overflow: hidden;
+	text-overflow: ellipsis;
 }
 .hamilton-retail-price {
-	font-size: 13px;
+	font-size: 14px;
 	font-weight: 700;
-	margin-top: 4px;
+}
+/* Stock count parks in the top-right corner — small, secondary signal. */
+.hamilton-retail-stock {
+	position: absolute;
+	top: 3px;
+	right: 6px;
+	font-size: 10px;
+	font-weight: 700;
+	opacity: 0.7;
 }
 
 /* ── V9.1 Phase 2 — Cart drawer + cash payment modal ──────────
@@ -965,18 +971,10 @@
 	color: #888;
 }
 .hamilton-retail-oos-label {
-	position: absolute;
-	top: 50%;
-	left: 50%;
-	transform: translate(-50%, -50%) rotate(-8deg);
-	background: rgba(34, 34, 34, 0.92);
-	color: #d4d4d4;
+	color: #999;
 	font-size: 11px;
 	font-weight: 800;
 	letter-spacing: 0.05em;
-	padding: 3px 7px;
-	border: 1px solid #555;
-	border-radius: 4px;
 	pointer-events: none;
 }
 

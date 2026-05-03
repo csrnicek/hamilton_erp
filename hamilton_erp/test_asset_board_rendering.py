@@ -1110,19 +1110,24 @@ class TestV91RetailFoundation(IntegrationTestCase):
 		)
 
 	def test_css_defines_retail_tile_classes(self):
+		# Finding #2 (DEC-071, 2026-05-03) removed `.hamilton-retail-code`
+		# from the retail tile — operators sell by name + price, not SKU.
+		# Added `.hamilton-retail-oos` + `.hamilton-retail-oos-label` for
+		# the grey OOS state that replaces the previous red Occupied reuse.
 		with open(self._css_path()) as f:
 			src = f.read()
 		for cls in (
 			".hamilton-retail-grid",
 			".hamilton-retail-tile",
-			".hamilton-retail-code",
 			".hamilton-retail-stock",
 			".hamilton-retail-name",
 			".hamilton-retail-price",
+			".hamilton-retail-oos",
+			".hamilton-retail-oos-label",
 		):
 			self.assertIn(
 				cls, src,
-				f"asset_board.css missing {cls!r} — V9.1-D6 retail tile styling absent.",
+				f"asset_board.css missing {cls!r} — DEC-071 retail tile styling absent.",
 			)
 
 
