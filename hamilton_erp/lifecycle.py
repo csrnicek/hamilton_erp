@@ -366,8 +366,15 @@ def _close_current_session(asset_name: str, *, current_session: Optional[str],
 
 
 def _set_vacated_timestamp(asset_name: str) -> None:
-	frappe.db.set_value("Venue Asset", asset_name,
-	                    "last_vacated_at", frappe.utils.now_datetime())
+	# T3-1: use the Document API instead of frappe.db.set_value so the
+	# write goes through validate / before_save / on_update hooks and is
+	# captured by track_changes. Status hasn't changed here (caller has
+	# already flipped it), so VenueAsset.validate's transition check is
+	# a no-op and before_save's hamilton_last_status_change update
+	# correctly does NOT fire.
+	asset = frappe.get_doc("Venue Asset", asset_name)
+	asset.last_vacated_at = frappe.utils.now_datetime()
+	asset.save(ignore_permissions=True)
 
 
 # ---------------------------------------------------------------------------
@@ -400,8 +407,11 @@ def mark_asset_clean(asset_name: str, *, operator: str) -> None:
 # `return_asset_to_service`. OOS entry sets neither field, so the helper
 # pair plateaus at two.
 def _set_cleaned_timestamp(asset_name: str) -> None:
-	frappe.db.set_value("Venue Asset", asset_name,
-	                    "last_cleaned_at", frappe.utils.now_datetime())
+	# T3-1: see _set_vacated_timestamp above for the rationale. Same
+	# Document-API rewrite — track_changes audit trail + hooks fire.
+	asset = frappe.get_doc("Venue Asset", asset_name)
+	asset.last_cleaned_at = frappe.utils.now_datetime()
+	asset.save(ignore_permissions=True)
 
 
 # ---------------------------------------------------------------------------
