@@ -69,6 +69,15 @@ def publish_status_change(
 		)
 	else:
 		row["session_start"] = None
+	# DEC-075 / S2.1: drop `current_session` from the realtime payload.
+	# The Venue Session PK is a PII index (resolves to full_name + DOB
+	# once R-007 populates them at Philadelphia rollout). The Asset Board
+	# does not consume `current_session` from the realtime event — per-tile
+	# enrichment runs through the polled `get_asset_board_data` path which
+	# applies the permlevel mask. Keeping it on the wire here would defeat
+	# that mask. `session_start` is derived above and stays on the wire
+	# because the overtime ticker needs it and it is not a PII index.
+	row.pop("current_session", None)
 	# NEW-2 per docs/inbox/2026-05-04_audit_synthesis_decisions.md: wrap the
 	# publish in try/except so a transient Frappe Cloud realtime / socketio
 	# hiccup cannot turn the operator's response payload into a stack trace.

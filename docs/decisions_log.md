@@ -1148,6 +1148,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/api.py`: imported `rate_limit` from `frappe.rate_limiter`, decorated `get_asset_board_data`. No schema change.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.1; DEC-074 (mutating-endpoint rate limits, on unmerged feature branch); skill `frappe-impl-whitelisted` (rate_limit guidance).
+## Amendment 2026-05-04 — DEC-075: Drop `current_session` from realtime asset payload (audit S2.1)
+
+**Decision.** `publish_status_change` no longer ships the `current_session` field on the `hamilton_asset_status_changed` realtime event. The Asset Board's per-tile enrichment runs through the polled `get_asset_board_data` path, where the permlevel mask is applied.
+
+**Why.** R-007 will move `Venue Session.full_name` / `date_of_birth` to permlevel 1, but `frappe.publish_realtime` is a global broadcast that does not honour permlevels. Today's payload would let any connected operator resolve a session PK to its (Phase-2 populated) PII fields via the socket bus, defeating the schema mask the moment Philadelphia onboards. Stripping the field at the publisher is the lowest-risk fix and does not require client changes — `Object.assign` of an undefined key is a no-op, and the cached local value remains valid until the next polled refresh.
+
+**What changed.** `hamilton_erp/realtime.py::publish_status_change` pops `current_session` from the payload after `session_start` enrichment. JS update to consume server-confirmed `current_session` from the polled refresh is a follow-up (no breakage today; the JS does not read the field off the realtime event).
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S2.1; skill `frappe-impl-ui-components` (realtime scoping); R-007 (PII permlevel migration).
+
 ## Amendment 2026-05-04 — DEC-080: Pin Phase-2 authorization design for `assign_asset_to_session` (audit F2.3)
 
 **Decision.** When `assign_asset_to_session` is un-disabled in Phase 2, the authorization gate MUST verify that the calling user is either (a) the `owner` of the linked Sales Invoice (the operator who recorded the cart) or (b) a member of `HAMILTON_ADMIN_ROLES` (Hamilton Manager or System Manager). The current `frappe.has_permission("Venue Asset", "write", throw=True)` check is necessary but insufficient — every Hamilton Operator already holds `Venue Asset/write`, so without the SI-owner check any operator could attach any asset to any pending SI.
