@@ -40,7 +40,7 @@
    "reqd": 1
   },
   {
-   "description": "Direct link for faster reporting — also reachable via cash_drop (DEC-042).",
+   "description": "Direct link for faster reporting \u2014 also reachable via cash_drop (DEC-042).",
    "fieldname": "shift_record",
    "fieldtype": "Link",
    "label": "Shift Record",
@@ -70,7 +70,7 @@
    "label": "Manager Blind Count"
   },
   {
-   "description": "The amount the manager physically counted — entered blind before any expected totals are shown.",
+   "description": "The amount the manager physically counted \u2014 entered blind before any expected totals are shown.",
    "fieldname": "actual_count",
    "fieldtype": "Currency",
    "label": "Actual Count",
@@ -112,7 +112,8 @@
    "in_list_view": 1,
    "label": "Variance Flag",
    "options": "\nClean\nPossible Theft or Error\nOperator Mis-declared\nMulti-source Variance\nPending Phase 3",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "notes",
@@ -125,7 +126,7 @@
    "label": "Investigation Resolution (DEC-041)"
   },
   {
-   "description": "Manager who signed off investigation — null until resolved.",
+   "description": "Manager who signed off investigation \u2014 null until resolved.",
    "fieldname": "resolved_by",
    "fieldtype": "Link",
    "label": "Resolved By",
@@ -136,7 +137,7 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "Outcome of investigation — null until actioned.",
+   "description": "Outcome of investigation \u2014 null until actioned.",
    "fieldname": "resolution_status",
    "fieldtype": "Select",
    "label": "Resolution Status",
