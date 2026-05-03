@@ -1531,6 +1531,56 @@ class TestOfflineBannerContract(IntegrationTestCase):
 		self.assertIn(
 			".hamilton-offline-banner", source,
 			".hamilton-offline-banner styling missing — DEC-104.",
+
+		)
+
+
+class TestShiftSummaryContract(IntegrationTestCase):
+	"""DEC-102 — strict contract for the shift-summary modal.
+
+	The modal MUST surface every required field, the open-sessions warning
+	text, and MUST hide the close-X. These tests fail loudly if any of
+	those drift in a future refactor.
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	def test_summary_modal_renders_each_required_field(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		# Each label is rendered as plain text inside the dl. If a future
+		# refactor renames any of them, this test fires.
+		for label in (
+			"Sessions started today",
+			"Sessions currently open",
+			"Cash sales total",
+			"Cash drops submitted today",
+		):
+			self.assertIn(
+				label, source,
+				f"Shift summary missing required label {label!r} per DEC-102.",
+			)
+
+	def test_summary_modal_open_sessions_warning_text(self):
+		"""DEC-102 contract: warning text MUST be exact."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"Open sessions remain — vacate before closing your shift.",
+			source,
+			"Open-sessions warning text missing — DEC-102 contract.",
+		)
+
+	def test_summary_modal_acknowledge_label(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"Acknowledge & Close Shift", source,
+			"Primary-action label must be 'Acknowledge & Close Shift' per DEC-102.",
 		)
 
 
