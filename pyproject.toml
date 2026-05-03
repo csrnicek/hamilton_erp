@@ -52,12 +52,30 @@ line-length = 110
 target-version = "py314"
 
 [tool.ruff.lint]
-select = ["F", "E", "W", "I"]
+# DEC-084 / S3.4: `S` (flake8-bandit) added so unsafe-deserialization,
+# subprocess-with-shell, weak-crypto, hardcoded-password, and assert-in-prod
+# patterns get caught at lint time. Pre-existing S findings in operational
+# code are NOT auto-fixed in this PR — triage happens in a follow-up sweep.
+# Until then, the per-file-ignores below silence S101 in tests (asserts are
+# legitimate there) and the few other patterns the codebase uses today.
+select = ["F", "E", "W", "I", "S"]
 # E501: line-too-long (Frappe convention allows long lines).
 # W191 + E101: tab-indentation rules — Frappe convention is tabs (also declared
 # by [tool.ruff.format] indent-style = "tab" below). Lint flagging tabs while
 # format requires tabs is a contradiction; suppress the lint warnings.
-ignore = ["E501", "W191", "E101"]
+# S101: assert-in-prod is suppressed globally because Frappe convention uses
+# `assert` in many places; the test suite uses it heavily. The narrower per-
+# file scoping was discarded because Frappe app code itself uses asserts in
+# patches and one-off scripts.
+# S311: pseudo-random use is acceptable for non-cryptographic contexts (Hamilton
+# uses random for retail-cart UI ordering, never for tokens or session IDs).
+ignore = ["E501", "W191", "E101", "S101", "S311"]
+
+[tool.ruff.lint.per-file-ignores]
+# DEC-084 / S3.4 follow-up. Tests legitimately use dummy creds (S105/S106)
+# for fixtures and may launch subprocess for bench helpers (S603/S607).
+"test_*.py" = ["S105", "S106", "S603", "S607"]
+"conftest.py" = ["S105", "S106"]
 
 [tool.ruff.format]
 quote-style = "double"
