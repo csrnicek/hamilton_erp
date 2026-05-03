@@ -104,6 +104,26 @@ class CashReconciliation(Document):
 		"""
 		self._mark_drop_reconciled()
 
+	def on_cancel(self):
+		# Reset Cash Drop.reconciled when this reconciliation is cancelled.
+		# Without this the drop stays reconciled=1 forever, and T0-4's
+		# _validate_immutable_after_reconciliation then freezes every
+		# field on the drop with no way to recover.
+		# Only resets when the drop's current reconciliation link still
+		# points at this row — don't clobber a newer reconciliation.
+		if not self.cash_drop:
+			return
+		current_link = frappe.db.get_value(
+			"Cash Drop", self.cash_drop, "reconciliation"
+		)
+		if current_link == self.name:
+			frappe.db.set_value(
+				"Cash Drop",
+				self.cash_drop,
+				{"reconciled": 0, "reconciliation": None},
+				update_modified=False,
+			)
+
 	# ------------------------------------------------------------------
 	# Helpers
 	# ------------------------------------------------------------------

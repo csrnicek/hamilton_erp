@@ -215,3 +215,37 @@ class TestCashReconciliation(IntegrationTestCase):
 			# Roll back inside the loop so each case starts fresh
 			# without test-pollution between iterations.
 			frappe.db.rollback()
+	def _submit_recon(self, drop, actual: float = 100.0):
+		recon = frappe.get_doc(
+			{
+				"doctype": "Cash Reconciliation",
+				"cash_drop": drop.name,
+				"manager": "Administrator",
+				"actual_count": actual,
+				"timestamp": now_datetime(),
+			}
+		).insert(ignore_permissions=True)
+		recon.submit()
+		return recon
+
+	def test_on_cancel_resets_drop_reconciled_flag(self):
+		"""Cancelling a reconciliation must clear Cash Drop.reconciled."""
+		drop = self._make_drop(100.0)
+		recon = self._submit_recon(drop, actual=100.0)
+		drop.reload()
+		self.assertEqual(drop.reconciled, 1)
+		self.assertEqual(drop.reconciliation, recon.name)
+
+		recon.cancel()
+		drop.reload()
+		self.assertEqual(drop.reconciled, 0)
+		self.assertFalse(drop.reconciliation)
+
+	def test_on_cancel_no_op_without_cash_drop(self):
+		"""on_cancel guards against missing cash_drop link."""
+		drop = self._make_drop(100.0)
+		recon = self._submit_recon(drop, actual=100.0)
+		recon.cash_drop = None
+		# Direct field-level reset without re-running validate; the guard
+		# is what we are testing — no exception should fire.
+		recon.on_cancel()

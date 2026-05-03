@@ -1,66 +1,136 @@
 {
  "actions": [],
  "allow_rename": 0,
+ "autoname": "hash",
  "creation": "2026-04-09 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
  "field_order": [
+  "section_target",
+  "target_doctype",
+  "target_name",
+  "target_field",
+  "column_break_target",
+  "operator",
+  "timestamp",
+  "section_change",
+  "old_value",
+  "new_value",
+  "reason",
+  "section_legacy",
   "venue_asset",
   "old_status",
-  "new_status",
-  "reason",
-  "operator",
-  "timestamp"
+  "new_status"
  ],
  "fields": [
   {
-   "fieldname": "venue_asset",
+   "fieldname": "section_target",
+   "fieldtype": "Section Break",
+   "label": "Target"
+  },
+  {
+   "description": "DocType the correction targets. Audit-log DocTypes (Asset Status Log, Comp Admission Log) are corrected by appending a correction row only — the original audit row stays pristine. Mutable DocTypes (Cash Drop, Venue Asset) are mutated AND a correction row records the change.",
+   "fieldname": "target_doctype",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "label": "Target DocType",
+   "options": "\nAsset Status Log\nCash Drop\nComp Admission Log\nVenue Asset",
+   "reqd": 1
+  },
+  {
+   "description": "The target row's `name` (primary key).",
+   "fieldname": "target_name",
+   "fieldtype": "Dynamic Link",
+   "in_list_view": 1,
+   "label": "Target Name",
+   "options": "target_doctype",
+   "reqd": 1
+  },
+  {
+   "description": "Optional — the specific field being corrected (e.g. `reason`, `declared_amount`). Leave blank for a row-level correction note.",
+   "fieldname": "target_field",
+   "fieldtype": "Data",
+   "label": "Target Field"
+  },
+  {
+   "fieldname": "column_break_target",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Auto-set to frappe.session.user at insert time.",
+   "fieldname": "operator",
    "fieldtype": "Link",
    "in_list_view": 1,
-   "label": "Venue Asset",
+   "label": "Operator",
+   "options": "User",
+   "reqd": 1
+  },
+  {
+   "description": "Auto-set to now() at insert time.",
+   "fieldname": "timestamp",
+   "fieldtype": "Datetime",
+   "in_list_view": 1,
+   "label": "Timestamp",
+   "reqd": 1
+  },
+  {
+   "fieldname": "section_change",
+   "fieldtype": "Section Break",
+   "label": "Change"
+  },
+  {
+   "description": "What the field said before the correction (or null for new rows / row-level notes).",
+   "fieldname": "old_value",
+   "fieldtype": "Data",
+   "label": "Old Value"
+  },
+  {
+   "description": "What the field says after the correction (or null for audit-log row-level notes).",
+   "fieldname": "new_value",
+   "fieldtype": "Data",
+   "label": "New Value"
+  },
+  {
+   "description": "REQUIRED. Why is this correction being made? Free text — typo, mis-attribution, system glitch, dispute resolved, etc. Auditable record of intent.",
+   "fieldname": "reason",
+   "fieldtype": "Text",
+   "label": "Reason",
+   "reqd": 1
+  },
+  {
+   "collapsible": 1,
+   "description": "Legacy fields kept for backward compatibility with pre-DEC-066 rows. New corrections should use the polymorphic target fields above.",
+   "fieldname": "section_legacy",
+   "fieldtype": "Section Break",
+   "label": "Legacy (pre-DEC-066)"
+  },
+  {
+   "fieldname": "venue_asset",
+   "fieldtype": "Link",
+   "label": "Venue Asset (legacy)",
    "options": "Venue Asset"
   },
   {
    "fieldname": "old_status",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "Old Status"
+   "label": "Old Status (legacy)"
   },
   {
    "fieldname": "new_status",
    "fieldtype": "Data",
-   "in_list_view": 1,
-   "label": "New Status"
-  },
-  {
-   "fieldname": "reason",
-   "fieldtype": "Text",
-   "label": "Reason"
-  },
-  {
-   "fieldname": "operator",
-   "fieldtype": "Link",
-   "in_list_view": 1,
-   "label": "Operator",
-   "options": "User"
-  },
-  {
-   "fieldname": "timestamp",
-   "fieldtype": "Datetime",
-   "in_list_view": 1,
-   "label": "Timestamp"
+   "label": "New Status (legacy)"
   }
  ],
  "index_web_pages_for_search": 0,
- "istable": 1,
  "links": [],
- "modified": "2026-04-09 00:00:00.000000",
+ "modified": "2026-05-03 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Hamilton ERP",
  "name": "Hamilton Board Correction",
+ "naming_rule": "Random",
  "owner": "Administrator",
  "permissions": [],
- "sort_field": "modified",
+ "sort_field": "timestamp",
  "sort_order": "DESC",
  "track_changes": 1
 }

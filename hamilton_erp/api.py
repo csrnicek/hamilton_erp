@@ -365,6 +365,205 @@ def return_asset_from_oos(asset_name: str, reason: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Admin correction endpoint (DEC-066)
+#
+# Implements the corrective surface that DEC-066 documents and PR #168
+# anticipates via frappe.flags.allow_cash_drop_correction. Hamilton Admin /
+# System Manager only — corrections are infrequent, high-trust, and must
+# leave a tamper-resistant record.
+#
+# For audit-log targets (Asset Status Log, Comp Admission Log): the original
+# row is left untouched. The Hamilton Board Correction row IS the correction.
+# For mutable targets (Cash Drop, Venue Asset): the field is updated AND the
+# correction row records the before/after.
+# ---------------------------------------------------------------------------
+
+
+# DocTypes whose rows are append-only (audit logs). Corrections to these
+# DocTypes never mutate the original row — only a Hamilton Board Correction
+# row pointing at the original is created.
+_AUDIT_LOG_TARGETS = ("Asset Status Log", "Comp Admission Log")
+
+# DocTypes whose rows accept field-level corrections (mutable targets).
+# Each entry maps the target DocType to the frappe.flags.* attribute the
+# target's controller respects to bypass its immutability guards.
+# Cash Drop's allow_cash_drop_correction flag is honored by
+# _validate_immutable_after_first_save / _validate_immutable_after_reconciliation
+# in the cash_drop controller (T0-4, PR #168).
+_MUTABLE_TARGETS = {
+	"Cash Drop": "allow_cash_drop_correction",
+	"Venue Asset": None,  # No controller-level immutability today; mutate directly.
+}
+
+
+def _is_admin_user() -> bool:
+	"""Hamilton Admin or System Manager only.
+
+	System Manager bypasses every Hamilton role check (Frappe convention).
+	Hamilton Admin is the application-level admin role.
+	"""
+	roles = set(frappe.get_roles())
+	return "System Manager" in roles or "Hamilton Admin" in roles
+
+
+@frappe.whitelist(methods=["POST"])
+def submit_admin_correction(
+	target_doctype: str,
+	target_name: str,
+	reason: str,
+	target_field: str | None = None,
+	new_value: str | None = None,
+) -> dict:
+	"""Hamilton Admin / System Manager only — record a corrective change
+	to a Hamilton-owned DocType row, with tamper-resistant audit trail.
+
+	DEC-066 implementation. Bridges the operational gap T0-4 + T1-2 created:
+	once Cash Drops are immutable after first save and audit logs cannot be
+	deleted by Hamilton Admin, this is the sanctioned escape hatch for typo
+	correction. Every correction lands in `tabHamilton Board Correction`
+	(the DocType has track_changes=1 so the correction row itself is also
+	auditable).
+
+	Args:
+		target_doctype: One of `Asset Status Log`, `Cash Drop`,
+			`Comp Admission Log`, `Venue Asset`.
+		target_name: The target row's `name` (primary key).
+		reason: REQUIRED — free-text explanation. Logged to the correction
+			row's `reason` field. Used by future auditors to understand
+			intent.
+		target_field: Optional. The specific field being corrected on the
+			target row. Required when `new_value` is provided AND the
+			target is mutable (Cash Drop / Venue Asset).
+		new_value: Optional. The corrected value for `target_field`. For
+			audit-log targets, this is recorded in the correction row's
+			`new_value` but the audit row is NOT mutated. For mutable
+			targets, the field is updated.
+
+	Returns:
+		{"status": "logged" | "applied", "correction": <correction name>,
+		 "target_doctype": ..., "target_name": ...}
+
+	Raises:
+		frappe.PermissionError: caller lacks Hamilton Admin / System Manager.
+		frappe.ValidationError: reason missing, target row missing,
+			invalid target_doctype, or mutable-target call missing
+			target_field/new_value.
+	"""
+	if not _is_admin_user():
+		frappe.throw(_(
+			"Admin corrections require Hamilton Admin or System Manager role."
+		), exc=frappe.PermissionError)
+
+	if not reason or not str(reason).strip():
+		frappe.throw(_("Correction reason is required."))
+
+	if target_doctype not in _AUDIT_LOG_TARGETS and target_doctype not in _MUTABLE_TARGETS:
+		frappe.throw(_(
+			"Invalid target_doctype {0}. Allowed: {1}."
+		).format(
+			target_doctype,
+			", ".join(sorted(set(_AUDIT_LOG_TARGETS) | set(_MUTABLE_TARGETS))),
+		))
+
+	if not frappe.db.exists(target_doctype, target_name):
+		frappe.throw(_(
+			"{0} {1} does not exist."
+		).format(target_doctype, target_name))
+
+	# Capture the old value (if any) for the correction record.
+	old_value: str | None = None
+	if target_field:
+		current = frappe.db.get_value(target_doctype, target_name, target_field)
+		old_value = str(current) if current is not None else None
+
+	# Audit-log path: log only, don't mutate.
+	if target_doctype in _AUDIT_LOG_TARGETS:
+		correction = _make_correction_row(
+			target_doctype=target_doctype,
+			target_name=target_name,
+			target_field=target_field,
+			old_value=old_value,
+			new_value=str(new_value) if new_value is not None else None,
+			reason=reason,
+		)
+		return {
+			"status": "logged",
+			"correction": correction.name,
+			"target_doctype": target_doctype,
+			"target_name": target_name,
+		}
+
+	# Mutable-target path: validate field args, mutate, log.
+	if not target_field or new_value is None:
+		frappe.throw(_(
+			"target_field and new_value are required for corrections to {0}."
+		).format(target_doctype))
+
+	flag_attr = _MUTABLE_TARGETS[target_doctype]
+	target_doc = frappe.get_doc(target_doctype, target_name)
+	target_doc.set(target_field, new_value)
+	prior_flag = getattr(frappe.flags, flag_attr, False) if flag_attr else None
+	try:
+		if flag_attr:
+			setattr(frappe.flags, flag_attr, True)
+		target_doc.save(ignore_permissions=True)
+	finally:
+		if flag_attr:
+			# Restore prior value (typically False/missing). We use setattr
+			# to keep the attribute cleared rather than deleting; downstream
+			# code reads via getattr(frappe.flags, "...", False) so either
+			# works, but explicit reset is safer under exception paths.
+			setattr(frappe.flags, flag_attr, prior_flag)
+
+	correction = _make_correction_row(
+		target_doctype=target_doctype,
+		target_name=target_name,
+		target_field=target_field,
+		old_value=old_value,
+		new_value=str(new_value),
+		reason=reason,
+	)
+	return {
+		"status": "applied",
+		"correction": correction.name,
+		"target_doctype": target_doctype,
+		"target_name": target_name,
+	}
+
+
+def _make_correction_row(
+	target_doctype: str,
+	target_name: str,
+	target_field: str | None,
+	old_value: str | None,
+	new_value: str | None,
+	reason: str,
+):
+	"""Insert a Hamilton Board Correction row capturing the correction.
+
+	Centralized so both the audit-log and mutable-target branches build
+	the row identically. Operator and timestamp auto-set from the session;
+	the correction row itself has track_changes=1 so any later edit to
+	the row is also auditable.
+	"""
+	from frappe.utils import now_datetime
+
+	doc = frappe.get_doc({
+		"doctype": "Hamilton Board Correction",
+		"target_doctype": target_doctype,
+		"target_name": target_name,
+		"target_field": target_field,
+		"old_value": old_value,
+		"new_value": new_value,
+		"reason": reason,
+		"operator": frappe.session.user,
+		"timestamp": now_datetime(),
+	})
+	doc.insert(ignore_permissions=True)
+	return doc
+
+
+# ---------------------------------------------------------------------------
 # Retail cart — Sales Invoice creation (V9.1 Phase 2)
 # ---------------------------------------------------------------------------
 

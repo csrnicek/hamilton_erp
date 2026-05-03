@@ -656,9 +656,10 @@ The Hamilton Board Correction row IS the correction record. The original audit-l
 
 **What still needs implementing (not in this DEC).**
 
-- DocType schema change to add the polymorphic target fields. This requires `bench migrate`.
-- Optional UI button on `Asset Status Log` / `Comp Admission Log` form views to open a pre-filled Hamilton Board Correction.
-- Server-side helper (e.g. `get_corrections_for(doctype, name)`) for the read path.
+- ~~DocType schema change to add the polymorphic target fields. This requires `bench migrate`.~~ **Shipped 2026-05-03** — `Hamilton Board Correction` schema converted from child table to standalone DocType with `target_doctype` (Select), `target_name` (Dynamic Link), `target_field`, `old_value`, `new_value`, plus `reason`/`operator`/`timestamp` made required. Legacy fields kept in collapsible "Legacy (pre-DEC-066)" section. `bench migrate` required.
+- ~~Server-side helper~~ **Shipped 2026-05-03** — `submit_admin_correction()` whitelisted endpoint in `hamilton_erp/api.py`. Hamilton Admin / System Manager only. Audit-log targets (Asset Status Log, Comp Admission Log) are logged-only; mutable targets (Cash Drop, Venue Asset) are mutated AND logged. Cash Drop mutations set `frappe.flags.allow_cash_drop_correction` to bypass T0-4's immutability guards.
+- Optional UI button on `Asset Status Log` / `Comp Admission Log` form views to open a pre-filled Hamilton Board Correction. **Deferred** — endpoint can be called from a JS client script today; the form button is ergonomic, not load-bearing.
+- Server-side helper (e.g. `get_corrections_for(doctype, name)`) for the read path. **Deferred** — Hamilton Board Correction list view filtered on `target_doctype` + `target_name` covers the read path today.
 
 **Permission grid.** No change to Hamilton Board Correction's permissions. It remains admin-only by Frappe convention (no role rows = System Manager only). Only Chris can issue corrections. **This is intentional** — corrections are infrequent and high-trust; making them widely available defeats the audit-log immutability they're designed to support.
 
