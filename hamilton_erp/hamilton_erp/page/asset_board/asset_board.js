@@ -17,6 +17,18 @@ const LIVE_TICK_MS = 15000;
 // onboards, this becomes a per-venue config in site_config.json.
 const HST_RATE = 0.13;
 
+// F1.4 polish — Canadian penny-elimination rule (2013): cash totals round
+// to the nearest 0.05. Mirrors the server-side
+// frappe.utils.round_based_on_smallest_currency_fraction call applied to
+// the post-tax grand_total in submit_retail_sale. Used by the cart drawer
+// + cash payment modal so the operator's pre-Confirm preview matches what
+// the server will actually charge — without this, a $7.91 cart shows
+// "Change $12.09" but the server returns $12.10 and the Confirm gate
+// blocks an operator who types $7.90.
+function roundToNickel(value) {
+	return Math.round(value * 20) / 20;
+}
+
 // V9 Decision 5.2: 7 fixed OOS reasons in a global list. "Other" must
 // always remain the last option — it's the required escape hatch and
 // triggers the conditional note field. Per V9_CANONICAL_MOCKUP.html
@@ -553,7 +565,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		}
 		const subtotal = this._cart_subtotal().toFixed(2);
 		const hst = this._cart_hst().toFixed(2);
-		const total = this._cart_total().toFixed(2);
+		// F1.4: drawer summary shows the nickel-rounded total — matches
+		// what the server will charge for cash payments. Without this,
+		// the operator's mental math diverges from the rounded total they
+		// will actually collect at Confirm.
+		const total = roundToNickel(this._cart_total()).toFixed(2);
 		const summary = `
 			<div class="hamilton-cart-summary">
 				<span class="hamilton-cart-count">${this._cart_line_count()} ${__("items")}</span>
@@ -628,7 +644,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	// automatically via the Stock Ledger Entry that submission generates.
 	_open_cash_payment_modal() {
 		this._close_modals();
-		const total = this._cart_total().toFixed(2);
+		// F1.4: modal shows the nickel-rounded total — what the customer
+		// actually pays for a Cash sale. The unrounded grand_total is
+		// visible to the server (computed in submit_retail_sale and
+		// returned in the response), but the operator's pre-Confirm view
+		// matches the post-Confirm reality.
+		const total = roundToNickel(this._cart_total()).toFixed(2);
 		const $modal = $(`
 			<div class="hamilton-modal-backdrop hamilton-shown" data-modal="cash">
 				<div class="hamilton-oos-modal hamilton-cash-modal" onclick="event.stopPropagation()">
@@ -663,7 +684,11 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const $confirm = $modal.find(".hamilton-modal-btn-confirm");
 		$received.on("input", () => {
 			const got = Number($received.val()) || 0;
-			const due = this._cart_total();
+			// F1.4: Confirm gate + change preview both use the
+			// nickel-rounded due so an operator who types the actual
+			// rounded amount (e.g. $7.90 on a $7.91 cart) gets Confirm
+			// enabled — matches the server's rounded amount_due.
+			const due = roundToNickel(this._cart_total());
 			if (got >= due) {
 				$change.text(`$${(got - due).toFixed(2)}`);
 				$changeRow.show();

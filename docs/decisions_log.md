@@ -672,6 +672,60 @@ The Hamilton Board Correction row IS the correction record. The original audit-l
 
 ---
 
+## Amendment 2026-05-03 — DEC-068: Tier 1 cash-handling polish bundle (F1.4 + F3.5 + F3.8)
+
+Three small Tier 1 audit findings shipped together because they're independent, low-risk, and overlap in their reviewers' attention (cash flow + reconciliation labelling).
+
+**F1.4 — Client-side nickel rounding in cart drawer + cash modal.**
+
+The cart drawer summary and cash payment modal previewed the unrounded grand_total (`subtotal + 13% HST`), while the server applies Canadian penny-elimination rounding (Amendment 2026-04-30 (c)) and charges the rounded amount. The drift was small (≤4¢) but produced two operator-visible bugs:
+
+1. **Preview mismatch.** A $7.91 cart with $20 cash showed "Change $12.09" pre-Confirm; the server returned $12.10.
+2. **Confirm-gate stuck.** The Confirm button gated on `cash_received >= unrounded_total`. An operator who typed the actual rounded amount due ($7.90 for a $7.91 cart) couldn't enable Confirm because the JS thought $7.91 was owed.
+
+Fix: added a top-level `roundToNickel(value)` helper at `asset_board.js` (mirrors `frappe.utils.round_based_on_smallest_currency_fraction(value, "CAD")`). Used in:
+- `_render_cart_drawer` — drawer summary `total` shows the rounded value.
+- `_open_cash_payment_modal` — `total` displayed in the modal AND `due` in the Confirm-gate input handler both use the rounded value.
+
+The API payload still sends raw cart items; the server retains rate authority and applies its own rounding. Pure UX correction.
+
+**F3.5 — Configurable cash variance tolerance via Hamilton Settings.**
+
+`cash_reconciliation.py` previously hardcoded `_VARIANCE_TOLERANCE_PCT = 0.02` and `_VARIANCE_TOLERANCE_MIN = 1.00`. Tightening the tolerance for high-volume cash days, or loosening it for venues with chronic small-bill miscount noise, required a code edit and a release. New behavior: `_get_variance_tolerance()` reads from two new Hamilton Settings fields:
+
+- `cash_variance_tolerance_percent` (Percent, default 2.0)
+- `cash_variance_tolerance_minimum` (Currency, default 1.00)
+
+Defaults preserve the existing variance-flag behavior on fresh-install / migrate-pending sites; the function falls back to the module-level defaults when Settings is missing or either field is blank. Cached via `frappe.get_cached_doc` so a busy reconciliation cycle doesn't N+1 the Settings table.
+
+**F3.8 — Rename "Operator Mis-declared" catch-all → "Multi-source Variance".**
+
+`_set_variance_flag` had two branches that emitted the label `"Operator Mis-declared"`:
+
+1. **Specific case** — manager + system agree, operator differs. This branch IS specifically operator misdeclaration and is unchanged.
+2. **Catch-all `else`** — none of the three values agree. The cause is genuinely ambiguous (operator misdeclared *and* cash missing *and* POS error all consistent with the data). The previous label pre-judged the operator as the bad actor. Renamed to `"Multi-source Variance"` — describes the data shape (multiple sources disagree) without naming a cause. HR-impact reduction.
+
+Added `Multi-source Variance` to the `variance_flag` Select options in `cash_reconciliation.json`. `Operator Mis-declared` stays as a valid value because the specific-attribution branch still uses it correctly.
+
+**Tests.**
+
+- F1.4: three new pinning tests in `test_asset_board_rendering.py::TestV91RetailCartUXStub` — helper exists with canonical math, drawer summary uses it, cash modal Confirm-gate uses it.
+- F3.5: `test_f35_tolerance_reads_from_hamilton_settings_override` in `test_cash_reconciliation.py` — tightening the tolerance via Settings flips a previously-Clean variance to a flagged variance. Restores original Settings values in teardown.
+- F3.8: two tests in `test_cash_reconciliation.py` — three-way disagreement produces `Multi-source Variance`; specific-attribution case (manager+system agree, operator differs) still produces `Operator Mis-declared`.
+
+**STOP.** `bench migrate` REQUIRED — F3.5 adds two new fields to `Hamilton Settings`, F3.8 adds a Select option to `Cash Reconciliation`. Bundle into the same Phase 3 migrate window as PR #170 (DEC-066) and PR #171 (T0-1 / DEC-067).
+
+**Why bundled.** All three findings are LOW or MEDIUM severity, all touch cash-handling UX, and all fit comfortably under one reviewer's attention. Splitting into three PRs would triple the review/CI/migrate overhead for genuinely small changes.
+
+**References.**
+- `docs/inbox/2026-05-04_audit_synthesis_decisions.md` (T3-2 / T3-3 / T3-6 if mapped through, or original A1 F-codes F1.4 / F3.5 / F3.8)
+- `hamilton_erp/api.py::submit_retail_sale` (server-side rounding contract that F1.4's preview now matches)
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js::roundToNickel`
+- `hamilton_erp/hamilton_erp/doctype/cash_reconciliation/cash_reconciliation.py::_get_variance_tolerance`
+- `hamilton_erp/hamilton_erp/doctype/hamilton_settings/hamilton_settings.json` — new fields
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
