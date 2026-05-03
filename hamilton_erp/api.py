@@ -269,6 +269,10 @@ def _get_hamilton_settings() -> dict:
 		"assignment_timeout_minutes": s.get("assignment_timeout_minutes") or 15,
 		"show_waitlist_tab": bool(s.get("show_waitlist_tab")),
 		"show_other_tab": bool(s.get("show_other_tab")),
+		# DEC-099 — exposed so the Asset Board's Start Shift modal can
+		# default the float prompt to the venue standard. Operators
+		# rarely override; the single-tap default is the goal.
+		"float_amount": float(s.get("float_amount") or 0),
 	}
 
 
@@ -1077,3 +1081,210 @@ def purge_old_idempotency_records():
 			message=frappe.get_traceback(),
 		)
 		raise
+
+
+# ---------------------------------------------------------------------------
+# Shift Management (DEC-099) — operator-facing start/end shift from Asset Board
+# ---------------------------------------------------------------------------
+# These endpoints let any Hamilton Operator open and close their shift
+# without touching Frappe Desk. Gating rule: when no Open Shift Record
+# exists for `frappe.session.user`, the Asset Board renders a Start Shift
+# landing screen instead of the asset grid (asset_board.js).
+#
+# Float prompt default — comes from Hamilton Settings.float_amount so the
+# venue's standard float is one tap to confirm. Operator can override at
+# the prompt for unusual openings (e.g. partial-shift handover).
+
+
+def _get_open_shift_for_user(user: str | None = None) -> dict | None:
+	"""Return the open Shift Record (status=Open) for `user`, or None.
+
+	`user` defaults to `frappe.session.user`. Returns a dict with
+	`name`, `shift_date`, `shift_start`, `float_expected` so the JS
+	can render the operator's session header without an extra round trip.
+	"""
+	user = user or frappe.session.user
+	rows = frappe.get_all(
+		"Shift Record",
+		filters={"operator": user, "status": "Open"},
+		fields=["name", "shift_date", "shift_start", "float_expected"],
+		order_by="shift_start desc",
+		limit=1,
+	)
+	return rows[0] if rows else None
+
+
+@frappe.whitelist(methods=["GET"])
+def get_current_shift() -> dict:
+	"""Return the current operator's Open Shift Record, or {} if none.
+
+	Used by the Asset Board on load to decide between the Start Shift
+	landing screen and the normal asset grid. Read permission on Shift
+	Record is the gate (Hamilton Operator has it via the seeded role).
+	"""
+	frappe.has_permission("Shift Record", "read", throw=True)
+	shift = _get_open_shift_for_user()
+	return {"shift": shift or None}
+
+
+@frappe.whitelist(methods=["POST"])
+def start_shift(float_expected: float | str | None = None) -> dict:
+	"""Open a new Shift Record for the current operator.
+
+	Refuses if the operator already has an Open Shift Record (one open
+	shift per operator at a time — closes the silent-double-open trap).
+
+	`float_expected` is required so the operator explicitly confirms the
+	cash they're starting with. The Asset Board defaults the prompt to
+	`Hamilton Settings.float_amount` but operators can override.
+	"""
+	frappe.has_permission("Shift Record", "create", throw=True)
+
+	existing = _get_open_shift_for_user()
+	if existing:
+		frappe.throw(
+			_("You already have an open shift ({0}). End it before starting a new one.").format(
+				existing["name"]
+			)
+		)
+
+	if float_expected is None or str(float_expected).strip() == "":
+		frappe.throw(_("Float expected is required to start a shift."))
+
+	float_value = flt(float_expected)
+	if float_value < 0:
+		frappe.throw(_("Float expected cannot be negative."))
+
+	now = now_datetime()
+	doc = frappe.get_doc({
+		"doctype": "Shift Record",
+		"operator": frappe.session.user,
+		"shift_date": now.date(),
+		"status": "Open",
+		"shift_start": now,
+		"float_expected": float_value,
+	})
+	doc.insert()
+	return {
+		"shift": {
+			"name": doc.name,
+			"shift_date": str(doc.shift_date),
+			"shift_start": str(doc.shift_start),
+			"float_expected": float(doc.float_expected or 0),
+		}
+	}
+
+
+@frappe.whitelist(methods=["POST"])
+def end_shift(shift_name: str | None = None) -> dict:
+	"""Close the current operator's Open Shift Record.
+
+	The Asset Board End Shift flow runs the final cash drop FIRST and
+	shows the shift summary; once the operator acknowledges, the JS
+	calls this endpoint to flip the Shift Record to Closed.
+
+	If `shift_name` is supplied it must match the operator's open shift
+	(defense against a stale tab calling end_shift on a different open
+	shift the same user opened in another tab). If omitted, the
+	operator's currently-open shift is used.
+	"""
+	frappe.has_permission("Shift Record", "write", throw=True)
+
+	shift = _get_open_shift_for_user()
+	if not shift:
+		frappe.throw(_("No open shift found for {0}.").format(frappe.session.user))
+	if shift_name and shift_name != shift["name"]:
+		frappe.throw(
+			_("Open shift mismatch: requested {0}, but current open shift is {1}.").format(
+				shift_name, shift["name"]
+			)
+		)
+
+	doc = frappe.get_doc("Shift Record", shift["name"])
+	doc.status = "Closed"
+	doc.shift_end = now_datetime()
+	doc.save()
+	return {"shift": doc.name, "status": "Closed"}
+
+
+@frappe.whitelist(methods=["GET"])
+def get_shift_summary() -> dict:
+	"""Compute the End-Shift summary the operator must acknowledge (DEC-102).
+
+	Returns counts and totals for the current operator's day so the
+	Asset Board can render the acknowledgement modal before closing
+	the shift. Filters scoped to `frappe.session.user` and today's date.
+
+	Shape:
+	  {
+	    "sessions_started_today": int,
+	    "sessions_open_now": int,
+	    "open_sessions": [{name, asset_code, session_start}],
+	    "cash_sales_total": float,
+	    "cash_drops_count": int,
+	    "cash_drops_total": float,
+	  }
+	"""
+	frappe.has_permission("Shift Record", "read", throw=True)
+	user = frappe.session.user
+	today = now_datetime().date()
+
+	sessions_started = frappe.db.count(
+		"Venue Session",
+		filters={"operator_checkin": user, "session_start": [">=", today]},
+	)
+	open_sessions_rows = frappe.get_all(
+		"Venue Session",
+		filters={"status": "Occupied"},
+		fields=["name", "venue_asset", "session_start"],
+		order_by="session_start asc",
+	)
+	asset_codes: dict[str, str] = {}
+	if open_sessions_rows:
+		asset_names = [r["venue_asset"] for r in open_sessions_rows if r.get("venue_asset")]
+		if asset_names:
+			for row in frappe.get_all(
+				"Venue Asset",
+				filters={"name": ["in", asset_names]},
+				fields=["name", "asset_code"],
+			):
+				asset_codes[row["name"]] = row["asset_code"]
+	open_sessions = [
+		{
+			"name": r["name"],
+			"asset_code": asset_codes.get(r["venue_asset"]) or r["venue_asset"],
+			"session_start": str(r["session_start"]) if r.get("session_start") else None,
+		}
+		for r in open_sessions_rows
+	]
+
+	cash_sales_total = (
+		frappe.db.sql(
+			"""
+			SELECT COALESCE(SUM(grand_total), 0)
+			FROM `tabSales Invoice`
+			WHERE is_pos = 1
+			  AND posting_date = %s
+			  AND owner = %s
+			  AND docstatus = 1
+			""",
+			(today, user),
+		)[0][0]
+		or 0
+	)
+
+	drop_rows = frappe.get_all(
+		"Cash Drop",
+		filters={"operator": user, "shift_date": today},
+		fields=["name", "declared_amount"],
+	)
+	cash_drops_total = sum(float(r.get("declared_amount") or 0) for r in drop_rows)
+
+	return {
+		"sessions_started_today": int(sessions_started or 0),
+		"sessions_open_now": len(open_sessions),
+		"open_sessions": open_sessions,
+		"cash_sales_total": float(cash_sales_total),
+		"cash_drops_count": len(drop_rows),
+		"cash_drops_total": float(cash_drops_total),
+	}

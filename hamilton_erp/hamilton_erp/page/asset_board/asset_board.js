@@ -137,12 +137,236 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	async init() {
 		this.wrapper.html(`<div class="hamilton-loading">${__("Loading Asset Board...")}</div>`);
 		await this.fetch_board();
+		// DEC-099 — Shift Management gate. The Asset Board does not render
+		// the asset grid until the operator has an Open Shift Record.
+		// `current_shift` is null when no Open shift exists for the session
+		// user; in that case we render the Start Shift landing screen and
+		// short-circuit the rest of init (no overtime ticker, no realtime —
+		// the operator hasn't started their shift yet).
+		await this.fetch_current_shift();
+		if (!this.current_shift) {
+			this.render_no_shift_gate();
+			this.page.wrapper.on("page-destroyed", () => this.teardown());
+			return;
+		}
 		this.render_shell();
 		this.render_active_tab();
 		this.start_overtime_ticker();
 		this.start_clock();
 		this.listen_realtime();
 		this.page.wrapper.on("page-destroyed", () => this.teardown());
+	}
+
+	// DEC-099 — fetch the current operator's Open Shift Record (if any).
+	// Stored on `this.current_shift` and consulted by render_shell() to
+	// show the End Shift button and the open-shift identifier.
+	async fetch_current_shift() {
+		try {
+			const r = await frappe.call({
+				method: "hamilton_erp.api.get_current_shift",
+				type: "GET",
+			});
+			this.current_shift = (r && r.message && r.message.shift) || null;
+		} catch (e) {
+			this.current_shift = null;
+		}
+	}
+
+	// DEC-099 — Start Shift landing screen. Rendered when no Open Shift
+	// Record exists for the operator. Asset tabs are hidden; the only
+	// affordance is the Start Shift button.
+	render_no_shift_gate() {
+		const user_name = frappe.boot.user.full_name || frappe.session.user;
+		this.wrapper.html(`
+			<div class="hamilton-board hamilton-no-shift">
+				<div class="hamilton-header">
+					<div class="hamilton-header-left">
+						<span class="hamilton-header-venue">CLUB HAMILTON</span>
+						<span class="hamilton-header-sep">&middot;</span>
+						<span class="hamilton-header-title">ASSET BOARD</span>
+					</div>
+					<div class="hamilton-header-right">
+						<span class="hamilton-header-user">${frappe.utils.escape_html(user_name).toUpperCase()}</span>
+					</div>
+				</div>
+				<div class="hamilton-no-shift-body">
+					<div class="hamilton-no-shift-message">
+						${__("You have no open shift. Start your shift to access the asset board.")}
+					</div>
+					<button class="btn btn-primary btn-lg hamilton-start-shift-btn">
+						${__("Start Shift")}
+					</button>
+				</div>
+			</div>
+		`);
+		this.wrapper.on("click", ".hamilton-start-shift-btn", () => this.show_start_shift_modal());
+	}
+
+	// DEC-099 — Start Shift modal. Prompts for float_expected (Currency,
+	// default = Hamilton Settings.float_amount). On confirm, calls
+	// start_shift() and re-runs init() so the asset grid renders.
+	show_start_shift_modal() {
+		const default_float = Number(
+			(this.settings && this.settings.float_amount) || 0
+		);
+		const dialog = new frappe.ui.Dialog({
+			title: __("Start Shift"),
+			fields: [
+				{
+					fieldname: "float_expected",
+					label: __("Float Expected"),
+					fieldtype: "Currency",
+					default: default_float,
+					reqd: 1,
+					description: __(
+						"Cash float you are starting your shift with. Defaults to the venue standard from Hamilton Settings."
+					),
+				},
+			],
+			primary_action_label: __("Start Shift"),
+			primary_action: async (values) => {
+				try {
+					await frappe.call({
+						method: "hamilton_erp.api.start_shift",
+						args: { float_expected: values.float_expected },
+					});
+					dialog.hide();
+					frappe.show_alert({ message: __("Shift started"), indicator: "green" });
+					this.wrapper.off("click");
+					await this.init();
+				} catch (e) {
+					// frappe.call surfaces server errors as toasts already.
+				}
+			},
+		});
+		dialog.show();
+	}
+
+	// DEC-099 — End Shift flow. Order: (1) prompt the final cash drop,
+	// (2) show the shift summary (DEC-102), (3) on acknowledge, close
+	// the Shift Record. Cash-drop prompt runs first so any declared
+	// amount typo can be corrected before the summary is computed.
+	async show_end_shift_flow() {
+		const drop_dialog = new frappe.ui.Dialog({
+			title: __("End-of-Shift Cash Drop"),
+			fields: [
+				{
+					fieldname: "declared_amount",
+					label: __("Declared Amount"),
+					fieldtype: "Currency",
+					reqd: 1,
+					description: __("Total cash you are dropping for end-of-shift."),
+				},
+			],
+			primary_action_label: __("Submit Drop & Continue"),
+			primary_action: async (values) => {
+				try {
+					const today = frappe.datetime.get_today();
+					const existing = await frappe.db.count("Cash Drop", {
+						operator: frappe.session.user,
+						shift_date: today,
+					});
+					await frappe.db.insert({
+						doctype: "Cash Drop",
+						operator: frappe.session.user,
+						shift_record: this.current_shift && this.current_shift.name,
+						shift_date: today,
+						shift_identifier: (this.current_shift && this.current_shift.name) || today,
+						drop_type: "End-of-Shift",
+						drop_number: (existing || 0) + 1,
+						timestamp: frappe.datetime.now_datetime(),
+						declared_amount: values.declared_amount,
+					});
+					drop_dialog.hide();
+					await this.show_shift_summary_modal();
+				} catch (e) {
+					// Server error surfaced as toast.
+				}
+			},
+		});
+		drop_dialog.show();
+	}
+
+	// DEC-102 — Shift summary modal. Operator must explicitly acknowledge
+	// before the Shift Record closes. The close-X is hidden; the only
+	// escape is "Acknowledge & Close Shift". Open sessions still
+	// Occupied surface in a warning block at the top.
+	async show_shift_summary_modal() {
+		let summary;
+		try {
+			const r = await frappe.call({
+				method: "hamilton_erp.api.get_shift_summary",
+				type: "GET",
+			});
+			summary = (r && r.message) || {};
+		} catch (e) {
+			frappe.msgprint(__("Could not fetch shift summary. Try again."));
+			return;
+		}
+
+		const open_html = (summary.open_sessions || []).map((s) => {
+			const elapsed = s.session_start ? this._format_elapsed(s.session_start) : "";
+			return `<li>${frappe.utils.escape_html(s.asset_code || s.name)}${elapsed ? " — " + frappe.utils.escape_html(elapsed) : ""}</li>`;
+		}).join("");
+		const open_warning = (summary.sessions_open_now || 0) > 0
+			? `<div class="hamilton-shift-summary-warning">
+				${__("Open sessions remain — vacate before closing your shift.")}
+				<ul class="hamilton-shift-summary-open-list">${open_html}</ul>
+			</div>`
+			: "";
+
+		const body = `
+			<div class="hamilton-shift-summary">
+				${open_warning}
+				<dl class="hamilton-shift-summary-grid">
+					<dt>${__("Sessions started today")}</dt>
+					<dd>${summary.sessions_started_today || 0}</dd>
+					<dt>${__("Sessions currently open (venue-wide)")}</dt>
+					<dd>${summary.sessions_open_now || 0}</dd>
+					<dt>${__("Cash sales total")}</dt>
+					<dd>${format_currency(summary.cash_sales_total || 0)}</dd>
+					<dt>${__("Cash drops submitted today")}</dt>
+					<dd>${summary.cash_drops_count || 0} (${format_currency(summary.cash_drops_total || 0)})</dd>
+				</dl>
+			</div>
+		`;
+
+		const summary_dialog = new frappe.ui.Dialog({
+			title: __("Shift Summary"),
+			fields: [
+				{ fieldtype: "HTML", fieldname: "body", options: body },
+			],
+			primary_action_label: __("Acknowledge & Close Shift"),
+			primary_action: async () => {
+				try {
+					await frappe.call({
+						method: "hamilton_erp.api.end_shift",
+						args: { shift_name: this.current_shift && this.current_shift.name },
+					});
+					summary_dialog.hide();
+					frappe.show_alert({ message: __("Shift closed"), indicator: "green" });
+					this.current_shift = null;
+					this.wrapper.off("click");
+					await this.init();
+				} catch (e) {
+					// Server error surfaced as toast.
+				}
+			},
+		});
+		summary_dialog.$wrapper.find(".modal-header .btn-modal-close").hide();
+		summary_dialog.show();
+	}
+
+	// DEC-099 — duration helper for shift summary elapsed column.
+	_format_elapsed(dt_string) {
+		if (!dt_string) return "";
+		const start = new Date(String(dt_string).replace(" ", "T"));
+		if (isNaN(start.getTime())) return "";
+		const ms = Date.now() - start.getTime();
+		const mins = Math.max(0, Math.floor(ms / 60000));
+		const h = Math.floor(mins / 60);
+		const m = mins % 60;
+		return h > 0 ? `${h}h ${m}m` : `${m}m`;
 	}
 
 	// type: "GET" is mandatory — see DEC-058
@@ -229,6 +453,7 @@ hamilton_erp.AssetBoard = class AssetBoard {
 					<div class="hamilton-header-right">
 						<span class="hamilton-online-dot"></span>
 						<span class="hamilton-header-user">${frappe.utils.escape_html(user_name).toUpperCase()}</span>
+						<button class="btn btn-sm btn-default hamilton-end-shift-btn">${__("End Shift")}</button>
 					</div>
 				</div>
 				<div class="hamilton-tab-bar">${tab_html}</div>
@@ -239,6 +464,13 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		`);
 		this._render_cart_drawer();
 		this._bind_cart_events();
+
+		// DEC-099 — End Shift handler. Visible only when an Open Shift
+		// Record exists; init() short-circuits to render_no_shift_gate
+		// in the no-shift case so this button only appears with a shift.
+		this.wrapper.on("click", ".hamilton-end-shift-btn", () => {
+			this.show_end_shift_flow();
+		});
 
 		// Tab click handler
 		this.wrapper.on("click", ".hamilton-tab", (e) => {
