@@ -1048,6 +1048,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **References.**
 - F2.1 in `docs/audits/frappe_skills_audit_2026-05-04.md`
 - Skill `frappe-impl-whitelisted` rate-limiting workflow
+## Amendment 2026-05-04 — DEC-081: Rate-limit `get_asset_board_data` (audit S3.1)
+
+**Decision.** `@rate_limit(key="asset_board_get", limit=120, seconds=60)` added to `get_asset_board_data`. 120 req/min/IP is generous (normal Asset Board polls roughly twice/min per terminal) and bounds runaway client loops without impeding real operators.
+
+**Why.** DEC-074 covered mutating endpoints; `get_asset_board_data` is the hottest read endpoint in the system and was excluded by design. It runs four DB round trips per call. A misconfigured polling loop on one terminal can degrade response time for every operator. Adding a per-IP rate limit closes this defense-in-depth gap with no behaviour change for normal usage.
+
+**What changed.** `hamilton_erp/api.py`: imported `rate_limit` from `frappe.rate_limiter`, decorated `get_asset_board_data`. No schema change.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.1; DEC-074 (mutating-endpoint rate limits, on unmerged feature branch); skill `frappe-impl-whitelisted` (rate_limit guidance).
 ## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
 
 **Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.

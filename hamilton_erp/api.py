@@ -57,6 +57,7 @@ def on_sales_invoice_submit(doc, method):
 
 
 @frappe.whitelist(methods=["GET"])
+@rate_limit(key="asset_board_get", limit=120, seconds=60)
 def get_asset_board_data() -> dict:
 	"""Initial Asset Board load. Single batched query shape — no N+1.
 
