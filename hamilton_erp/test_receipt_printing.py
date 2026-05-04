@@ -137,13 +137,19 @@ class TestPrintCashReceiptValidation(IntegrationTestCase):
 			receipt_printer_ip="10.0.0.99",
 			gst_hst_registration_number="105204077RT0001",
 		)
-		with patch("hamilton_erp.printing._render_receipt", return_value="RECEIPT"):
-			with patch(
-				"hamilton_erp.printing._dispatch_to_printer",
-				side_effect=frappe.ValidationError("Receipt printer dispatch failed: simulated"),
-			):
-				with patch("hamilton_erp.printing.frappe.log_error") as log_mock:
-					result = print_cash_receipt("SI-DISPATCH-FAILURE-TEST")
+		# Disable test-mode short-circuit so the dispatch path actually runs.
+		saved_in_test = getattr(frappe.flags, "in_test", True)
+		frappe.flags.in_test = False
+		try:
+			with patch("hamilton_erp.printing._render_receipt", return_value="RECEIPT"):
+				with patch(
+					"hamilton_erp.printing._dispatch_to_printer",
+					side_effect=frappe.ValidationError("Receipt printer dispatch failed: simulated"),
+				):
+					with patch("hamilton_erp.printing.frappe.log_error") as log_mock:
+						result = print_cash_receipt("SI-DISPATCH-FAILURE-TEST")
+		finally:
+			frappe.flags.in_test = saved_in_test
 		self.assertEqual(result["status"], "queued_for_retry")
 		self.assertIn("dispatch failed", result["reason"])
 		self.assertEqual(result["sales_invoice"], "SI-DISPATCH-FAILURE-TEST")
@@ -294,9 +300,10 @@ class TestSubmitRetailSaleRollsBackOnPrintFailure(IntegrationTestCase):
 				items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
 				cash_received=10.00,
 			)
-		# Sale completed — submit_retail_sale returns the SI envelope.
-		self.assertEqual(result.get("status"), "ok")
-		self.assertTrue(result.get("invoice"))
+		# Sale completed — submit_retail_sale returns the SI envelope:
+		# {sales_invoice, grand_total, rounded_total, rounding_adjustment, change}.
+		self.assertTrue(result.get("sales_invoice"))
+		self.assertEqual(result.get("change"), 6.50)  # 10.00 - 3.50
 		# Defensive sanity: the patched submit_retail_sale was reached
 		# (POS Profile + Walk-in customer prerequisites are met).
 		self.assertTrue(frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE))
