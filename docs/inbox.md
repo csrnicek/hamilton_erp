@@ -66,6 +66,44 @@ The five hardware-research entries that lived here are no longer needed in the i
 
 Open questions still pending Chris's input live in each PR's body, not here.
 
+## 2026-05-01 — Open tasks following DEC-062 / DEC-063 / DEC-064
+
+These are operational follow-ups to today's classification + processor-architecture DECs. Pick up in a future session; none blocks anything currently shipping.
+
+### Hamilton backup processor selection (DEC-064 compliance)
+
+Hamilton's primary processor is Fiserv (MID 1131224, standard-classified). Per DEC-064, Hamilton must ALSO have a backup processor, pre-approved + integration-tested, swappable in hours. **Backup is NOT YET selected.** Helcim was the prior suggestion (Canadian flagship, adult-friendly TOS for the perception-driven termination scenario); reassess against current options before committing. Open the application + underwriting + KYC for the chosen backup before Phase 2 card-payment work begins — a "backup that takes 4 weeks to onboard at the moment of need" is not a backup.
+
+**Action items:**
+1. Compare Helcim, Stripe Terminal CA, and Moneris against the DEC-064 criteria (different processor than primary, supports same operations, integration-testable in hours after approval).
+2. Open the chosen backup's merchant account; let it sit dormant.
+3. Process a $1 test transaction through the backup once approved (per `docs/venue_rollout_playbook.md` Phase 0.3).
+4. Document the swap procedure in `docs/RUNBOOK.md`.
+
+### Hamilton scanner deferred to Phase 2
+
+Per DEC-062 + the 2026-05-01 hardware spec update, **Hamilton does NOT order an ID scanner at launch.** Phase 2 trigger: when (a) a loyalty program ships and front-desk needs DL parsing for membership lookup, OR (b) rentable asset key barcode scanning lands. Until then, Hamilton's anonymous walk-in check-in flow has no scanner dependency. Note: this defers the SCANNER, not ID acceptance — operators still verify ID visually for any age-gated workflow per existing manual practice. See `docs/design/pos_scanner_spec.md` requirement #1 for the broader ID-acceptance scope (DL via scanner, passport / age-of-majority / other gov photo ID via manual entry).
+
+### Fiserv terminal model lookup (Hamilton's existing rented unit)
+
+Hamilton has a physical, rented, standalone Fiserv terminal at the front desk. **Model is currently TBD.** When Chris provides the model number, queue this research:
+
+1. Does the specific model have an iPad-integrated SDK (Clover Connect API support? PAX SDK? other)?
+2. If YES → design the iPad integration; document the API path in `docs/research/merchant_processor_comparison.md`.
+3. If NO → recommend swapping the terminal at next lease renewal to a Clover Flex or equivalent (per `docs/research/merchant_processor_comparison.md` "Fiserv / Clover terminal hardware" section). Do not attempt iPad integration with a non-supported model.
+
+### Card-payment processor abstraction (Phase 2 architecture)
+
+Per DEC-064, the processor-abstraction layer (already on the Phase 2 inbox under "Merchant abstraction (multi-merchant resilience)" further down this file) MUST support **both primary AND backup** per venue, not just primary. The architectural shape:
+
+- Per-venue `site_config.json` lists primary + backup adapter names (e.g. `fiserv_clover`, `helcim`).
+- Each adapter implements the same interface: `charge(amount, currency, terminal_id) → txn_id`, `refund(txn_id, amount) → refund_id`, `void(txn_id)`, `capture(txn_id, amount)`, `settle()`.
+- Hamilton's `submit_retail_sale` endpoint (existing) calls the abstraction; the abstraction routes to primary by default, backup on operator-triggered swap.
+- Swap mechanism: `bench set-config primary_processor backup_processor_name` + `bench restart`. Documented in `docs/RUNBOOK.md`.
+- Adapter parity is mandatory — adding a new venue with a processor that has no adapter triggers adapter development AS PART OF rollout, not after.
+
+This work is Phase 2; the inbox entry below ("### Merchant abstraction (multi-merchant resilience)") has the full design. This task confirms the design must support primary + backup, not just primary.
+
 ## 2026-04-30 (afternoon) — PR #51 ready for human review
 
 Follow-up to PR #49 (cart UX stub). Ships the QBO-mirrored accounting seed and replaces the cart Confirm stub with real POS Sales Invoice creation. PR: https://github.com/csrnicek/hamilton_erp/pull/51 — auto-merge enabled (squash + delete branch).
