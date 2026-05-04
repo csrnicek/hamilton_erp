@@ -96,9 +96,11 @@ class TestCompAdmissionHappyPath(IntegrationTestCase):
 		self.assertIn("session", result)
 		self.assertIn("comp_admission_log", result)
 
-		# Session has comp_flag = 1
+		# Session has comp_flag = 1. Status options on Venue Session are
+		# Active / Completed (no Occupied — that's the Venue Asset
+		# vocabulary, not Venue Session).
 		session = frappe.get_doc("Venue Session", result["session"])
-		self.assertEqual(session.status, "Occupied")
+		self.assertEqual(session.status, "Active")
 		self.assertEqual(int(session.comp_flag or 0), 1)
 
 		# Comp Admission Log row exists with our reason.
