@@ -1028,6 +1028,26 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 ---
 
+## Amendment 2026-05-04 — DEC-074: Rate limiting on mutating whitelisted endpoints (audit F2.1)
+
+**Decision.** All 7 state-mutating whitelisted endpoints in `hamilton_erp/api.py` carry `@rate_limit(limit=60, seconds=60)` (per-IP). The GET endpoint `get_asset_board_data` is intentionally NOT rate-limited (read-only, called every 15 s by the live-tick).
+
+**Why.** Frappe skills audit F2.1 flagged the absence of rate limiting on whitelisted endpoints. A compromised operator session could fire `submit_retail_sale` / `vacate_asset` / etc. as fast as the network allows; the three-layer lock prevents asset-state corruption but not rapid-fire stock depletion or cash-line spam.
+
+**Budget.** 60/min per IP. A real cashier rings 1–2 sales/minute at peak; lifecycle operations fire <30/minute on a busy weekend. The budget is well above legitimate use, restrictive enough to bound runaway scripts or compromised-session abuse. Per-IP keying (Frappe's default) maps to per-tablet at the front desk.
+
+**Endpoints covered (7).** `assign_asset_to_session`, `start_walk_in_session`, `vacate_asset`, `clean_asset`, `set_asset_oos`, `return_asset_from_oos`, `submit_retail_sale`. Same 60/60 budget — distinct per-endpoint budgets would be premature optimization without operational data.
+
+**Endpoints NOT covered.**
+- `get_asset_board_data` — GET, read-only, frequent live-tick.
+- `submit_admin_correction` (PR #170) — still on a feature branch as of 2026-05-04. Follow-up commit on main should add the same `@rate_limit` after #170 merges.
+- `purge_old_idempotency_records` — scheduler hook, not whitelisted.
+
+**Re-tuning.** Constants `_RL_LIMIT` / `_RL_WINDOW_SECONDS` at the top of `api.py`. Single edit + redeploy if the budget needs adjustment.
+
+**References.**
+- F2.1 in `docs/audits/frappe_skills_audit_2026-05-04.md`
+- Skill `frappe-impl-whitelisted` rate-limiting workflow
 ## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
 
 **Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.

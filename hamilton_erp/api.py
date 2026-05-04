@@ -2,7 +2,18 @@ import json
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 from frappe.utils import flt, now_datetime
+
+# ---------------------------------------------------------------------------
+# Rate-limit budget for mutating endpoints (audit F2.1 / DEC-074).
+# Per-IP, 60 calls per 60 seconds. A real cashier rings 1-2 sales/minute
+# at peak; lifecycle ops fire <30/minute even on a busy weekend. 60/min
+# is well above legitimate use, restrictive enough to bound runaway
+# scripts or compromised-session abuse.
+# ---------------------------------------------------------------------------
+_RL_LIMIT = 60
+_RL_WINDOW_SECONDS = 60
 
 # ---------------------------------------------------------------------------
 # Sales Invoice doc_event hook (wired in hooks.py)
@@ -273,6 +284,7 @@ def _get_hamilton_settings() -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	"""Assign a Venue Asset after POS payment is confirmed.
 
@@ -331,6 +343,7 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def start_walk_in_session(asset_name: str) -> dict:
 	"""Assign a walk-in session to an Available asset. Available → Occupied."""
 	frappe.has_permission("Venue Asset", "write", throw=True)
@@ -341,6 +354,7 @@ def start_walk_in_session(asset_name: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def vacate_asset(asset_name: str, vacate_method: str) -> dict:
 	"""Vacate an Occupied asset. Occupied → Dirty."""
 	frappe.has_permission("Venue Asset", "write", throw=True)
@@ -351,6 +365,7 @@ def vacate_asset(asset_name: str, vacate_method: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def clean_asset(asset_name: str) -> dict:
 	"""Mark a single Dirty asset as clean. Dirty → Available."""
 	frappe.has_permission("Venue Asset", "write", throw=True)
@@ -361,6 +376,7 @@ def clean_asset(asset_name: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def set_asset_oos(asset_name: str, reason: str) -> dict:
 	"""Set an asset Out of Service. Reason is mandatory."""
 	frappe.has_permission("Venue Asset", "write", throw=True)
@@ -371,6 +387,7 @@ def set_asset_oos(asset_name: str, reason: str) -> dict:
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def return_asset_from_oos(asset_name: str, reason: str) -> dict:
 	"""Return an Out of Service asset to Available. Reason is mandatory."""
 	frappe.has_permission("Venue Asset", "write", throw=True)
@@ -689,6 +706,7 @@ def _check_retail_sale_permission():
 
 
 @frappe.whitelist(methods=["POST"])
+@rate_limit(limit=_RL_LIMIT, seconds=_RL_WINDOW_SECONDS)
 def submit_retail_sale(
 	items,
 	cash_received,
