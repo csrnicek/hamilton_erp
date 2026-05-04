@@ -37,14 +37,16 @@
    "in_list_view": 1,
    "label": "Cash Drop",
    "options": "Cash Drop",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "description": "Direct link for faster reporting \u2014 also reachable via cash_drop (DEC-042).",
    "fieldname": "shift_record",
    "fieldtype": "Link",
    "label": "Shift Record",
-   "options": "Shift Record"
+   "options": "Shift Record",
+   "search_index": 1
   },
   {
    "fieldname": "manager",
