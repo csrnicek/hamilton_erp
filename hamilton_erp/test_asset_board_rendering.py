@@ -1534,6 +1534,77 @@ class TestOfflineBannerContract(IntegrationTestCase):
 		)
 
 
+class TestShiftManagementContract(IntegrationTestCase):
+	"""DEC-099 — guard the Asset Board surfaces that gate on Shift Record.
+
+	Source-substring tests in the established pattern (TestExpandOverlayContract
+	above). Failure modes guarded:
+	  - render_no_shift_gate() removed / inlined under a different name
+	  - End Shift button missing from header
+	  - The float_expected default no longer pulled from Hamilton Settings
+	"""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	def test_js_defines_render_no_shift_gate(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"render_no_shift_gate", source,
+			"render_no_shift_gate() missing — DEC-099 requires the "
+			"Start Shift landing screen to short-circuit the asset grid.",
+		)
+
+	def test_js_init_calls_fetch_current_shift(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"fetch_current_shift", source,
+			"init() must call fetch_current_shift() to honour the DEC-099 "
+			"gating rule.",
+		)
+
+	def test_js_start_shift_modal_defaults_float_from_settings(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"this.settings && this.settings.float_amount", source,
+			"Start Shift modal must default float_expected from Hamilton "
+			"Settings.float_amount per DEC-099.",
+		)
+
+	def test_js_end_shift_button_in_header(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton-end-shift-btn", source,
+			"End Shift button missing from the header — DEC-099.",
+		)
+
+	def test_js_show_shift_summary_modal_uses_get_shift_summary(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton_erp.api.get_shift_summary", source,
+			"show_shift_summary_modal() must call the get_shift_summary "
+			"endpoint per DEC-102.",
+		)
+
+	def test_js_summary_modal_hides_close_button(self):
+		"""DEC-102 contract: the only escape is Acknowledge & Close Shift."""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			".btn-modal-close", source,
+			"Shift summary modal must hide its close-X to enforce the "
+			"DEC-102 acknowledge-only contract.",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 

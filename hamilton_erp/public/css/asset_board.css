@@ -1050,3 +1050,43 @@
 	border-bottom: 2px solid #450a0a;
 	letter-spacing: 0.02em;
 }
+
+/* DEC-099 — Shift Management UI -------------------------------------- */
+.hamilton-no-shift-body {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 24px;
+	padding: 96px 24px;
+	min-height: 360px;
+}
+.hamilton-no-shift-message {
+	font-size: 18px;
+	color: var(--text-muted);
+	text-align: center;
+	max-width: 480px;
+}
+.hamilton-end-shift-btn {
+	margin-left: 12px;
+}
+.hamilton-shift-summary-grid {
+	display: grid;
+	grid-template-columns: 1fr auto;
+	gap: 8px 24px;
+	margin: 12px 0;
+}
+.hamilton-shift-summary-grid dt { font-weight: 500; }
+.hamilton-shift-summary-grid dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+.hamilton-shift-summary-warning {
+	background: #fef2f2;
+	border: 1px solid #fecaca;
+	color: #b91c1c;
+	padding: 12px 16px;
+	border-radius: 6px;
+	margin-bottom: 12px;
+}
+.hamilton-shift-summary-open-list {
+	margin: 8px 0 0 16px;
+	padding: 0;
+}

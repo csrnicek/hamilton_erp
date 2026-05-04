@@ -1265,6 +1265,33 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-03 — DEC-099: Shift Management from the Asset Board
+
+**Decision.** Hamilton Operators start and end their shifts from the Asset Board itself. No Frappe Desk access is required for the routine start/end-of-shift workflow.
+
+**Design.**
+- A new pair of whitelisted endpoints, `start_shift(float_expected)` and `end_shift(shift_name)`, plus a read helper `get_current_shift()` and `get_shift_summary()` (the latter feeds DEC-102).
+- The Asset Board's `init()` calls `get_current_shift()` after `fetch_board()`. If no Open Shift Record exists for `frappe.session.user`, the board renders a Start Shift landing screen (`render_no_shift_gate()`) — header + a single Start Shift button. Asset tabs are hidden until the operator opens a shift.
+- Start Shift flow: tap the button → modal prompts for `float_expected` (Currency, default = `Hamilton Settings.float_amount`) → on confirm, `start_shift()` inserts the Shift Record and `init()` re-runs so the asset grid renders.
+- End Shift flow: header button (only visible with an Open shift) → `show_end_shift_flow()` runs the final cash drop modal first → on submit, `show_shift_summary_modal()` opens (DEC-102) → operator acknowledges → `end_shift()` flips the record to Closed.
+
+**Gating rule.** The Asset Board's normal asset grid is only reachable when `_get_open_shift_for_user(frappe.session.user)` returns a row. Enforced both by the JS gate (UX layer) and by the cash-handling discipline this exists to enforce — operators must commit to a shift before they can take cash actions. Permissions still apply on the backend.
+
+**Float prompt default — why Settings.** Operators almost always start with the venue standard float; defaulting to `Hamilton Settings.float_amount` means the common path is one tap (Confirm). Overrides are still possible (partial-shift handover, change-fund variance) but require deliberate input. The alternative — making the operator type the float every time — adds friction with no safety benefit, since the value is recorded on the Shift Record either way.
+
+**Why one open shift per operator.** `start_shift()` refuses if `_get_open_shift_for_user()` already returns a row. The Asset Board gate plus this server-side check together close the silent-double-open trap (operator opens a shift in tab A, forgets, opens another in tab B, ends up with two open Shift Records and ambiguous cash drops).
+
+**What changed.**
+- `hamilton_erp/api.py` — new endpoints `get_current_shift`, `start_shift`, `end_shift`, `get_shift_summary`, plus a private helper `_get_open_shift_for_user`. `_get_hamilton_settings()` now also returns `float_amount` so the JS modal can default the field.
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — new methods `fetch_current_shift`, `render_no_shift_gate`, `show_start_shift_modal`, `show_end_shift_flow`, `show_shift_summary_modal`, `_format_elapsed`. Header gains an End Shift button.
+- `hamilton_erp/public/css/asset_board.css` — landing screen + summary modal classes.
+
+**Migrate flag.** None required. Shift Record already has all needed fields (`operator`, `shift_date`, `status`, `shift_start`, `shift_end`, `float_expected`).
+
+**References.** Shift Record DocType `hamilton_erp/hamilton_erp/doctype/shift_record/`; DEC-102 (shift summary contract); Hamilton Settings `float_amount` field.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:

@@ -21,7 +21,6 @@
   "closing_float_variance",
   "section_board",
   "board_confirmed",
-  "board_corrections",
   "section_pos",
   "pos_profile",
   "pos_opening_entry",
@@ -135,13 +134,6 @@
    "fieldname": "board_confirmed",
    "fieldtype": "Check",
    "label": "Board Confirmed"
-  },
-  {
-   "description": "Structured corrections made to the asset board at shift start (DEC-024).",
-   "fieldname": "board_corrections",
-   "fieldtype": "Table",
-   "label": "Board Corrections",
-   "options": "Hamilton Board Correction"
   },
   {
    "fieldname": "section_pos",
