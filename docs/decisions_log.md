@@ -1148,6 +1148,19 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-04 — DEC-110: Bookkeeper review deferred to Phase 2
+
+**Decision.** The "bookkeeper/accountant has reviewed at least one test day-close" item is **deferred to Phase 2**. Phase-1 launch does not require bookkeeper sign-off.
+
+**Why.** Hamilton's accounting integration (QBO mirror, multi-venue chart-of-accounts wiring, day-close GL postings) ships in Phase 2. In Phase 1, day-close produces operational records (Cash Drop, Sales Invoice with the correct tax + price list — see Amendment 2026-04-30 (b)) but the books are not yet wired to QBO for true tie-out. Asking a bookkeeper to review a Phase-1 day-close would generate findings that are already in the Phase-2 backlog and would add launch-week noise without changing the launch decision.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — Tax / Accounting checklist row "Bookkeeper/accountant has reviewed at least one test day-close" struck through with a deferred-to-Phase-2 note pointing to this DEC.
+
+**References.** Amendment 2026-04-30 (b) (Hamilton accounting names locked from QBO mirror). DEC-062 (Hamilton ERP / ANVIL Corp business classification). Phase 2 hardware + accounting backlog in `docs/build_phases.md` and `docs/inbox.md`.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
