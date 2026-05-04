@@ -1454,10 +1454,12 @@ class TestRealtimeContracts(IntegrationTestCase):
 		)
 
 	def test_J4_c2_payload_contains_all_required_fields(self):
-		"""Asset Board tile re-render needs all fields in the C2 payload:
-		name, status, version, current_session, expected_stay_duration,
-		last_vacated_at, last_cleaned_at, hamilton_last_status_change,
-		old_status, session_start.
+		"""Asset Board tile re-render needs all fields in the C2 payload.
+
+		Per DEC-075 / S2.1, ``current_session`` is INTENTIONALLY excluded
+		from the broadcast payload to prevent leaking PII (the linked
+		Asset Session contains member identity) to clients that don't
+		need it for tile rendering.
 		"""
 		from unittest.mock import patch
 
@@ -1469,12 +1471,15 @@ class TestRealtimeContracts(IntegrationTestCase):
 			realtime.publish_status_change(
 				self.asset.name, previous_status="Available")
 		required = {
-			"name", "status", "version", "current_session",
+			"name", "status", "version",
 			"expected_stay_duration", "last_vacated_at", "last_cleaned_at",
 			"hamilton_last_status_change", "old_status", "session_start",
 		}
 		self.assertTrue(required.issubset(set(captured.keys())),
 			f"C2 payload missing: {required - set(captured.keys())}")
+		# S2.1: current_session must NOT be in the broadcast (PII guard)
+		self.assertNotIn("current_session", captured,
+			"current_session leaked into realtime broadcast (DEC-075)")
 
 	def test_J5_publish_status_change_sets_after_commit_true(self):
 		"""after_commit=True is load-bearing: without it, the client
