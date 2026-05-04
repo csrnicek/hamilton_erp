@@ -1093,19 +1093,9 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	//
 	// Reference implementation: docs/design/asset_board_mockup_v7.html
 	// positionExpandedOverlay() (around line 1283).
-	_show_overlay(asset, $tile) {
-		$tile.addClass("hamilton-source-tile");
-		// Port of mockup expandedOverlayHTML() at
-		// docs/design/asset_board_mockup_v7.html line 975+.
-		// The overlay echoes the source tile's structure (status class +
-		// tile-code) so it reads as "the tile expanded" rather than "a
-		// separate panel beside the tile". Action buttons go inside a
-		// hamilton-tile-actions wrapper (mockup .tile-actions equivalent).
-		// Out-of-scope for this PR (deferred to PR 2/3/5):
-		//   - corner badge (.tile-corner-badge.ot) — PR 3
-		//   - time-text (.tile-time countdown/overtime) — PR 3
-		//   - oos-days counter (.oos-days) — PR 2
-		//   - guest-info / oos-info rich panels — PR 2/5
+	_build_overlay(asset, $tile) {
+		// Build overlay HTML and attach event handlers.
+		// Returns the constructed $overlay element ready for insertion.
 		const status_cls = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
 		const code_html = `<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>`;
 		const actions_html = this._render_expand_panel(asset);
@@ -1115,9 +1105,6 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				<div class="hamilton-tile-actions">${actions_html}</div>
 			</div>`
 		);
-		const $board = this.wrapper.find(".hamilton-board");
-		$board.append($overlay);
-		this.$overlay = $overlay;
 
 		$overlay.find("[data-action]").on("click.action", (e) => {
 			e.stopPropagation();
@@ -1144,6 +1131,27 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				this._run_action(asset, action);
 			}
 		});
+
+		return $overlay;
+	}
+
+	_show_overlay(asset, $tile) {
+		$tile.addClass("hamilton-source-tile");
+		// Port of mockup expandedOverlayHTML() at
+		// docs/design/asset_board_mockup_v7.html line 975+.
+		// The overlay echoes the source tile's structure (status class +
+		// tile-code) so it reads as "the tile expanded" rather than "a
+		// separate panel beside the tile". Action buttons go inside a
+		// hamilton-tile-actions wrapper (mockup .tile-actions equivalent).
+		// Out-of-scope for this PR (deferred to PR 2/3/5):
+		//   - corner badge (.tile-corner-badge.ot) — PR 3
+		//   - time-text (.tile-time countdown/overtime) — PR 3
+		//   - oos-days counter (.oos-days) — PR 2
+		//   - guest-info / oos-info rich panels — PR 2/5
+		const $overlay = this._build_overlay(asset, $tile);
+		const $board = this.wrapper.find(".hamilton-board");
+		$board.append($overlay);
+		this.$overlay = $overlay;
 
 		this._position_overlay($tile, $overlay);
 
@@ -1212,36 +1220,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			this.$overlay.remove();
 			this.$overlay = null;
 		}
-		// Rebuild
-		const status_cls = `hamilton-status-${asset.status.toLowerCase().replace(/ /g, "-")}`;
-		const code_html = `<div class="hamilton-tile-code">${frappe.utils.escape_html(asset.asset_code || "")}</div>`;
-		const actions_html = this._render_expand_panel(asset);
-		const $overlay = $(
-			`<div class="hamilton-expand-overlay hamilton-tile ${status_cls}">
-				${code_html}
-				<div class="hamilton-tile-actions">${actions_html}</div>
-			</div>`
-		);
+		// Rebuild using extracted helper
+		const $overlay = this._build_overlay(asset, $tile);
 		this.wrapper.find(".hamilton-board").append($overlay);
 		this.$overlay = $overlay;
-
-		$overlay.find("[data-action]").on("click.action", (e) => {
-			e.stopPropagation();
-			const action = $(e.currentTarget).data("action");
-			if (action === "oos") {
-				this.collapse_expanded();
-				this._open_oos_modal(asset);
-			} else if (action === "return") {
-				this.collapse_expanded();
-				this._open_return_modal(asset);
-			} else if (action === "vacate-toggle") {
-				this.vacate_subs_open = !this.vacate_subs_open;
-				this._redraw_overlay(asset, $tile);
-			} else {
-				this._run_action(asset, action);
-			}
-		});
-
 		this._position_overlay($tile, $overlay);
 	}
 
