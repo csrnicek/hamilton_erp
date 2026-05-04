@@ -1,0 +1,286 @@
+Account List,,,,,,
+1742279 Ont Inc,,,,,,
+
+Account #,Full name,Type,Detail type,Description,Total balance,Currency
+1010,Petty Cash,Bank,Cash on hand,,"3,041.40",CAD
+1020,Cash floats,Bank,Cash on hand,,"2,700.00",CAD
+1030,Cash and electron cash clearing,Bank,Cash on hand,,"-207,948.63",CAD
+1031,Cash and electron cash clearing:Cash clearing,Bank,Cash on hand,,"-592,556.60",CAD
+1100,"Bank, operating account",Bank,Chequing,,"-4,936.65",CAD
+1105,Savings Account B. Credit Union,Bank,Savings,,"-215,878.93",CAD
+1109,Buduchnist Credit Union US Bank,Bank,Chequing,,"89,786.21",USD
+1110,Current Buduchnist Credit Union,Bank,Chequing,BCU Operating Account (49450),"890,334.41",CAD
+1111,TD (174Corp),Bank,Chequing,,"227,575.53",CAD
+1116,TD US Chequing,Bank,Chequing,TD US,3.72,USD
+1120,Foreign exchange offset,Bank,Money Market,,0.00,CAD
+1165,Questrade CDN Cash,Bank,Money Market,,"715,397.90",CAD
+1170,Questrade US cash account,Bank,Money Market,,"-4,164.24",USD
+1200,Accounts reveivable trade,Accounts receivable (A/R),Accounts Receivable (A/R),,,CAD
+1215,Accounts receivable-Club Philly,Accounts receivable (A/R),Accounts Receivable (A/R),,"15,115.75",CAD
+1260,Employee advances receivable,Accounts receivable (A/R),Accounts Receivable (A/R),,0.00,CAD
+,Accounts Receivable (A/R) - USD,Accounts receivable (A/R),Accounts Receivable (A/R),,0.00,USD
+12000,Undeposited Funds,Other Current Assets,Other current assets,"Funds received, but not yet deposited to a bank account",0.00,CAD
+1300,Inventory,Other Current Assets,Inventory,,"5,467.66",CAD
+1302,Inventory:Food,Other Current Assets,Other current assets,,,CAD
+1304,Inventory:Beverage,Other Current Assets,Other current assets,,,CAD
+1310,Inventory:Liquor,Other Current Assets,Other current assets,,"2,268.27",CAD
+1312,Inventory:Beer,Other Current Assets,Other current assets,,"3,112.17",CAD
+1315,Inventory:Wine,Other Current Assets,Other current assets,,87.22,CAD
+1320,Inventory:Other,Other Current Assets,Other current assets,,,CAD
+1410,Investments,Other Current Assets,Investments - Other,,"204,920.00",CAD
+1500,Prepaid expenses,Other Current Assets,Prepaid Expenses,,"500,673.36",CAD
+1505,Prepaid expenses:Rent,Other Current Assets,Other current assets,,"11,250.00",CAD
+1510,Prepaid expenses:Insurance,Other Current Assets,Other current assets,,"22,876.68",CAD
+1511,Prepaid expenses:Insurance:Prepaid Insurance London,Other Current Assets,Prepaid Expenses,,1.00,CAD
+1512,Prepaid expenses:Insurance:Prepaid Insurance Hamilton,Other Current Assets,Prepaid Expenses,,"2,471.80",CAD
+1513,Prepaid expenses:Insurance:Prepaid Insurance Toronto,Other Current Assets,Prepaid Expenses,,0.00,CAD
+1514,Prepaid expenses:Insurance:Prepaid Insurance Fort Eerie,Other Current Assets,Prepaid Expenses,,0.00,CAD
+1515,Prepaid expenses:Other,Other Current Assets,Other current assets,,"351,157.41",CAD
+1520,Prepaid expenses:Property tax,Other Current Assets,Other current assets,,"109,747.78",CAD
+1521,Prepaid expenses:Property tax:Prepaid Property Tax London,Other Current Assets,Prepaid Expenses,,0.00,CAD
+1522,Prepaid expenses:Property tax:Prepaid Property Tax Hamilton,Other Current Assets,Prepaid Expenses,,"97,035.54",CAD
+2120,Loan to Forest City Fitness,Other Current Assets,Loans to Others,Loan to Forest City Fitness,"541,462.31",CAD
+,Advanced Payroll clearing,Other Current Assets,Other current assets,,,CAD
+,Allowance for bad debts,Other Current Assets,Allowance for bad debts,,,CAD
+,Due to/from Philadelphia,Other Current Assets,Other current assets,,831.55,CAD
+,Inventory Asset,Other Current Assets,Inventory,,"1,110.00",CAD
+,Uncategorized Asset,Other Current Assets,Other current assets,,-326.57,CAD
+,Undeposited Funds-1,Other Current Assets,Undeposited Funds,,"2,265.16",CAD
+1800,Equip/Furn/Fixt/Leaseholds,"Property, plant and equipment",Other fixed assets,,"60,853.04",CAD
+1810,Equip/Furn/Fixt/Leaseholds:Land,"Property, plant and equipment",Land,,,CAD
+1820,Equip/Furn/Fixt/Leaseholds:Building,"Property, plant and equipment",Buildings,,0.00,CAD
+1821,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Building,"Property, plant and equipment",Buildings,,,CAD
+1825,Equip/Furn/Fixt/Leaseholds:Spa Equipment,"Property, plant and equipment",Machinery and equipment,,"209,744.50",CAD
+1826,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Spa Equip,"Property, plant and equipment",Other fixed assets,,"-181,397.22",CAD
+1830,Equip/Furn/Fixt/Leaseholds:Furniture/Fixtures,"Property, plant and equipment",Furniture and Fixtures,,"279,491.77",CAD
+1831,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Furn/Fix,"Property, plant and equipment",Other fixed assets,,"-259,371.77",CAD
+1835,Equip/Furn/Fixt/Leaseholds:Office Equipment,"Property, plant and equipment",Machinery and equipment,,"36,209.62",CAD
+1836,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Off. Equip,"Property, plant and equipment",Other fixed assets,,"-34,368.83",CAD
+1840,Equip/Furn/Fixt/Leaseholds:Computer Hardware,"Property, plant and equipment",Other fixed assets,,"73,159.09",CAD
+1841,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Hardware,"Property, plant and equipment",Other fixed assets,,"-64,650.47",CAD
+1845,Equip/Furn/Fixt/Leaseholds:Computer Software,"Property, plant and equipment",Other fixed assets,,"24,713.55",CAD
+1846,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Software,"Property, plant and equipment",Other fixed assets,,"-22,677.20",CAD
+1850,Website,"Property, plant and equipment",Other fixed assets,,0.00,CAD
+1851,Accum Amortization Website,"Property, plant and equipment",Other fixed assets,,0.00,CAD
+1860,Equip/Furn/Fixt/Leaseholds:Leasehold Improvements,"Property, plant and equipment",Other fixed assets,,0.00,CAD
+1861,Equip/Furn/Fixt/Leaseholds:Accum Amortization - Leasehold,"Property, plant and equipment",Other fixed assets,,0.00,CAD
+1600,Questrade Inc,Long-term Assets,Investments,,"-21,665.25",USD
+1650,Questrade Investments,Long-term Assets,Investments,,"688,048.13",CAD
+1857,SeaDogs Sauna and Spa,Long-term Assets,Other Long-term Assets,,"31,250.00",CAD
+1900,Fort Eerie purchase,Long-term Assets,Other Long-term Assets,,0.00,CAD
+2000,Accounts Payable,Accounts payable (A/P),Accounts Payable (A/P),,"-900,437.80",CAD
+,Accounts Payable (A/P) - USD,Accounts payable (A/P),Accounts Payable (A/P),,-143.70,USD
+5199598663316548,MBNA Mastercard #6548,Credit Card,Credit Card,,"40,230.00",CAD
+,MBNA,Credit Card,Credit Card,,"86,780.34",CAD
+1999,Ask Chris,Other Current Liabilities,Current Liabilities,,"3,160.47",CAD
+2100,Accounts payable trade,Other Current Liabilities,Current Liabilities,,,CAD
+2110,Accrued liabilities,Other Current Liabilities,Current Liabilities,,"-49,575.00",CAD
+2111,Union Gas Equal Instalment Plan,Other Current Liabilities,Current Liabilities,,226.00,CAD
+2140,Due To/From 1435675 Ontario Inc,Other Current Liabilities,Current Liabilities,,"12,046.41",CAD
+2145,Due To/From Wildwood Lake Inves,Other Current Liabilities,Current Liabilities,,"-148,954.50",CAD
+2150,Due to/from 2049847 Ontario Inc,Other Current Liabilities,Current Liabilities,,"3,761.50",CAD
+2151,Fort Eerie - David Ross,Other Current Liabilities,Current Liabilities,,-842.36,CAD
+2152,Due from Philadelphia,Other Current Liabilities,Current Liabilities,,"3,789.29",CAD
+2155,Suspense,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2156,Due to/from 287346 Ontario Inc.,Other Current Liabilities,Current Liabilities,,"-2,581.95",CAD
+2200,Payroll deductions payable,Other Current Liabilities,Current Liabilities,,0.01,CAD
+2210,Payroll deductions payable:EI Payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2215,Payroll deductions payable:CPP Payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2217,Payroll deductions payable:Income Tax Payable,Other Current Liabilities,Sales tax payable,,0.01,CAD
+2220,Other employee liabilities,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2223,Other employee liabilities:WSIB Payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2225,Other employee liabilities:Accrued vacation payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2230,Other employee liabilities:Benefits Payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2400,GST,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2405,GST:GST Collected on Sales,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2410,GST:GST ITCs on Purchases,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2420,PST Payable,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2450,Corp. income tax payable,Other Current Liabilities,Sales tax payable,,"15,901.30",CAD
+2455,Corp. income tax payable:Federal,Other Current Liabilities,Current Liabilities,,"15,901.30",CAD
+2458,Corp. income tax payable:Ontario,Other Current Liabilities,Current Liabilities,,0.00,CAD
+2700,Shareholder's loan,Other Current Liabilities,Loan Payable,,"154,075.62",CAD
+2701,Shareholder's loan - Chris,Other Current Liabilities,Loan Payable,,"-970,536.60",CAD
+,Benefits & deductions,Other Current Liabilities,Payroll liabilities,,,CAD
+,Gift Card Outstanding,Other Current Liabilities,Current Liabilities,,,CAD
+,GST/HST Payable,Other Current Liabilities,GST/HST Payable,,"-156,492.37",CAD
+,GST/HST Suspense,Other Current Liabilities,GST/HST Suspense,,"-14,746.95",CAD
+,Payroll liabilities,Other Current Liabilities,Payroll liabilities,,,CAD
+,Payroll taxes,Other Current Liabilities,Payroll liabilities,,,CAD
+,PST (ON) Payable,Other Current Liabilities,GST/HST Payable,,0.00,CAD
+,PST (ON) Suspense,Other Current Liabilities,GST/HST Suspense,,0.00,CAD
+,Square Sales Tax Payable,Other Current Liabilities,Sales tax payable,,,CAD
+,Tips,Other Current Liabilities,Payroll liabilities,,"-1,114.16",CAD
+,Vacation liability,Other Current Liabilities,Payroll liabilities,,,CAD
+2550,Loans to Anvil,Long-term Liabilities,Other Long Term Liabilities,,"55,362.33",CAD
+2560,CEBA Loan,Long-term Liabilities,Bank loans,,"-80,000.00",CAD
+2702,Mortgage - Lynne Powell,Long-term Liabilities,Other Long Term Liabilities,,"20,187.32",CAD
+2800,Mortgage payable,Long-term Liabilities,Other Long Term Liabilities,,"14,170.79",CAD
+2801,Mortgage payable:First,Long-term Liabilities,Other Long Term Liabilities,,0.00,CAD
+2802,Mortgage payable:Second,Long-term Liabilities,Other Long Term Liabilities,,0.00,CAD
+2803,Mortgage payable:Third,Long-term Liabilities,Other Long Term Liabilities,,,CAD
+2804,Mortgage payable:Fourth,Long-term Liabilities,Other Long Term Liabilities,,,CAD
+2850,Amount due to,Long-term Liabilities,Other Long Term Liabilities,IOU,"-217,500.00",CAD
+,Amount due to:Amount due to David Fullman,Long-term Liabilities,Other Long Term Liabilities,IOU to David Fullman,"-217,500.00",CAD
+3000,Equity,Equity,Owner's Equity,,,CAD
+3040,Opening Bal Equity,Equity,Owner's Equity,,0.00,CAD
+3100,Share Capital,Equity,Owner's Equity,,-210.00,CAD
+3500,Retained Earnings,Equity,Retained Earnings,,,CAD
+3600,Dividends,Equity,Owner's Equity,,,CAD
+3700,Owner Draw,Equity,Owner's Equity,,200.00,CAD
+,Opening Balance Equity,Equity,Opening Balance Equity,,"5,672.59",CAD
+4010,Rooms/Cubicles,Income,Sales of Product Income,,,CAD
+4020,Lockers,Income,Sales of Product Income,,,CAD
+4100,Other club sales/rentals,Income,Sales of Product Income,,,CAD
+4110,Other club sales/rentals:Memberships,Income,Sales of Product Income,,,CAD
+4120,Other club sales/rentals:Cruise line memberships,Income,Sales of Product Income,,,CAD
+4130,Other club sales/rentals:Movie sales,Income,Sales of Product Income,,,CAD
+4135,Other club sales/rentals:Movie rentals,Income,Sales of Product Income,,,CAD
+4190,Other club sales/rentals:Other,Income,Sales of Product Income,,,CAD
+4200,Food and Beverage sales,Income,Sales of Product Income,,,CAD
+4210,Food and Beverage sales:Food,Income,Sales of Product Income,,,CAD
+4220,Food and Beverage sales:Liquor,Income,Sales of Product Income,,,CAD
+4230,Food and Beverage sales:Wine,Income,Sales of Product Income,,,CAD
+4240,Food and Beverage sales:Beer,Income,Sales of Product Income,,,CAD
+4260,Food and Beverage sales:Beverage,Income,Sales of Product Income,,,CAD
+4300,Other merchandise,Income,Sales of Product Income,,,CAD
+4305,Other merchandise:Cigarettes,Income,Sales of Product Income,,,CAD
+4310,"Other merchandise:Lube, condoms, etc.",Income,Sales of Product Income,,,CAD
+4350,Other merchandise:Vending sales,Income,Sales of Product Income,,,CAD
+4390,Other merchandise:Miscellaneous,Income,Sales of Product Income,,,CAD
+4700,Other income,Income,Sales of Product Income,,,CAD
+4710,Other income:Interest,Income,Sales of Product Income,,,CAD
+4720,Other income:PST compensation,Income,Sales of Product Income,,,CAD
+4730,Corp Management Fee,Income,Other Primary Income,,,CAD
+4900,Cash Short/Over,Income,Sales of Product Income,,,CAD
+4910,Discounts given,Income,Discounts/Refunds Given,,,CAD
+4920,Wage Subsidy,Income,Discounts/Refunds Given,,,CAD
+4925,Rent Subsidy,Income,Other Primary Income,,,CAD
+,AccountForCustomerOpeningBal,Income,Sales of Product Income,DummyAccountForCustomerOpeningBal,,CAD
+,Billable Expense Income,Income,Service/Fee Income,,,CAD
+,Discount Income,Income,Sales of Product Income,,,CAD
+,Sales of Product Income,Income,Sales of Product Income,,,CAD
+,Services,Income,Service/Fee Income,,,CAD
+,Shipping Income,Income,Service/Fee Income,,,CAD
+,Unapplied Cash Payment Income,Income,Unapplied Cash Payment Income,,,CAD
+,Uncategorized Income,Income,Service/Fee Income,,,CAD
+5070,COS - Other,Cost of Goods Sold,Supplies and materials - COGS,,,CAD
+5085,T Shirts,Cost of Goods Sold,Supplies and materials - COGS,,,CAD
+,Cost of Goods Sold-1,Cost of Goods Sold,Supplies and materials - COGS,,,CAD
+,Inventory Shrinkage,Cost of Goods Sold,Supplies and materials - COGS,,,CAD
+5000,Cost of Goods Sold,Expenses,Other Miscellaneous Service Cost,,,CAD
+5010,Cost of Goods Sold:Food,Expenses,Other Miscellaneous Service Cost,,,CAD
+5020,Cost of Goods Sold:Liquor,Expenses,Other Miscellaneous Service Cost,,,CAD
+5030,Cost of Goods Sold:Wine,Expenses,Other Miscellaneous Service Cost,,,CAD
+5040,Cost of Goods Sold:Beer,Expenses,Other Miscellaneous Service Cost,,,CAD
+5060,Cost of Goods Sold:Beverage,Expenses,Other Miscellaneous Service Cost,,,CAD
+5065,Cost of Goods Sold:Bar supplies,Expenses,Supplies,,,CAD
+5075,Cost of Goods Sold:Cigarettes,Expenses,Other Miscellaneous Service Cost,,,CAD
+5080,"Cost of Goods Sold:Lube, condoms, etc.",Expenses,Other Miscellaneous Service Cost,,,CAD
+5090,Cost of Goods Sold:Vending machine costs,Expenses,Other Miscellaneous Service Cost,,,CAD
+5095,Cost of Goods Sold:General Operating Supplies,Expenses,Supplies,,,CAD
+5100,Direct supplies and services,Expenses,Supplies,,,CAD
+5110,Direct supplies and services:Cleaning supplies,Expenses,Supplies,,,CAD
+5115,Direct supplies and services:Misc Room Supplies,Expenses,Supplies,,,CAD
+5120,"Direct supplies and services:Towels, linen",Expenses,Other Miscellaneous Service Cost,,,CAD
+5125,"Direct supplies and services:Keys, locker expense",Expenses,Other Miscellaneous Service Cost,,,CAD
+5130,"Direct supplies and services:Videos, music, cable",Expenses,Other Miscellaneous Service Cost,,,CAD
+5140,Direct supplies and services:Cruise line,Expenses,Other Miscellaneous Service Cost,,,CAD
+5200,Advertising/Promotion,Expenses,Advertising/Promotional,,,CAD
+5210,Advertising/Promotion:Advertising,Expenses,Advertising/Promotional,,,CAD
+5220,"Advertising/Promotion:Events, DJs, etc.",Expenses,Other Miscellaneous Service Cost,,,CAD
+5230,Advertising/Promotion:Sponsorship,Expenses,Other Miscellaneous Service Cost,,,CAD
+5240,Advertising/Promotion:Charitable donations,Expenses,Other Miscellaneous Service Cost,,,CAD
+5250,Advertising/Promotion:Dues/Subs/Memberships,Expenses,Dues and Subscriptions,,,CAD
+5260,Web Hosting,Expenses,Other Miscellaneous Service Cost,,,CAD
+5270,Advertising/Promotion:Meals Entertainment,Expenses,Entertainment,,,CAD
+5300,Occupancy Costs,Expenses,Other Miscellaneous Service Cost,,,CAD
+5310,Occupancy Costs:Rent,Expenses,Rent or Lease of Buildings,,,CAD
+5320,Occupancy Costs:Hydro,Expenses,Other Miscellaneous Service Cost,,,CAD
+5325,Occupancy Costs:Heat,Expenses,Other Miscellaneous Service Cost,,,CAD
+5330,Occupancy Costs:Water,Expenses,Other Miscellaneous Service Cost,,,CAD
+5335,Occupancy Costs:Small Garbage,Expenses,Other Miscellaneous Service Cost,,,CAD
+5340,Occupancy Costs:Garbage,Expenses,Other Miscellaneous Service Cost,,,CAD
+5341,Occupancy Costs:Guest Supplies,Expenses,Supplies,,,CAD
+5345,Occupancy Costs:Pest control,Expenses,Other Miscellaneous Service Cost,,,CAD
+5346,Occupancy Costs:Laundry,Expenses,Other Miscellaneous Service Cost,,,CAD
+5350,Occupancy Costs:Property Tax,Expenses,Taxes Paid,,,CAD
+5355,Occupancy Costs:Business Tax,Expenses,Taxes Paid,,,CAD
+5360,Occupancy Costs:Insurance,Expenses,Insurance,,,CAD
+5380,"Occupancy Costs:Repairs, building",Expenses,Repair and maintenance,,,CAD
+5381,Occupancy Costs:Spa Equipment and Supplies,Expenses,Supplies,,,CAD
+5382,Occupancy Costs:Spa supplies and maintenance,Expenses,Supplies,,,CAD
+5385,"Occupancy Costs:Maintenance, building/grounds",Expenses,Other Miscellaneous Service Cost,,,CAD
+5386,Occupancy Costs:Equipment repairs and maint,Expenses,Repair and maintenance,,,CAD
+5390,Occupancy Costs:Security,Expenses,Other Miscellaneous Service Cost,,,CAD
+5400,Payroll Expenses,Expenses,Payroll Expenses,,,CAD
+5410,Payroll Expenses:Management fees,Expenses,Legal and professional fees,,,CAD
+5420,Payroll Expenses:Salary/Wages,Expenses,Payroll Expenses,,,CAD
+5425,Payroll Expenses:Casual Labour,Expenses,Other Miscellaneous Service Cost,,,CAD
+5428,Payroll Expenses:Vacation Pay,Expenses,Other Miscellaneous Service Cost,,,CAD
+5430,Payroll Expenses:EI,Expenses,Other Miscellaneous Service Cost,,,CAD
+5435,Payroll Expenses:CPP,Expenses,Other Miscellaneous Service Cost,,,CAD
+5440,Payroll Expenses:WSIB,Expenses,Other Miscellaneous Service Cost,,,CAD
+5450,Payroll Expenses:Employee benefits,Expenses,Other Miscellaneous Service Cost,,,CAD
+5500,Administration Costs,Expenses,Office/General Administrative Expenses,,,CAD
+5505,Administration Costs:Telephone,Expenses,Other Miscellaneous Service Cost,,,CAD
+5506,Administration Costs:Hotel Charges,Expenses,Bank charges,,,CAD
+5508,Cable,Expenses,Other Miscellaneous Service Cost,,,CAD
+5510,Administration Costs:Internet,Expenses,Other Miscellaneous Service Cost,,,CAD
+5520,Administration Costs:Equipment rental,Expenses,Equipment rental,,,CAD
+5530,Administration Costs:Licenses and permits,Expenses,Other Miscellaneous Service Cost,,,CAD
+5540,"Administration Costs:Postage, courier",Expenses,"Shipping, Freight, and Delivery",,,CAD
+5545,Administration Costs:Ceridian payroll processing,Expenses,Payroll Expenses,,,CAD
+5550,Administration Costs:Bank service charges,Expenses,Bank charges,,,CAD
+5555,Administration Costs:Credit/debit card fees,Expenses,Legal and professional fees,,,CAD
+5570,Administration Costs:Foreign Exchange,Expenses,Other Miscellaneous Service Cost,,,CAD
+5571,Administration Costs:Auto mileage,Expenses,Other Miscellaneous Service Cost,,,CAD
+5572,Administration Costs:Auto insurance,Expenses,Insurance,,,CAD
+5573,Administration Costs:Auto gas,Expenses,Other Miscellaneous Service Cost,,,CAD
+5574,Administration Costs:Auto parking,Expenses,Other Miscellaneous Service Cost,,,CAD
+5575,Administration Costs:Taxi,Expenses,Other Miscellaneous Service Cost,,,CAD
+5576,Administration Costs:Auto - repairs and maintenance,Expenses,Repair and maintenance,,,CAD
+5577,Administration Costs:Research & developement,Expenses,Other Miscellaneous Service Cost,,,CAD
+5580,Administration Costs:Office supplies,Expenses,Supplies,,,CAD
+5585,Administration Costs:Office equip. R & M,Expenses,Other Miscellaneous Service Cost,,,CAD
+5600,Professional fees,Expenses,Legal and professional fees,,,CAD
+5610,Professional fees:Accounting,Expenses,Other Miscellaneous Service Cost,,,CAD
+5620,Professional fees:Legal,Expenses,Other Miscellaneous Service Cost,,,CAD
+5630,Professional fees:Consulting,Expenses,Other Miscellaneous Service Cost,,,CAD
+5640,Professional fees:Interior Design,Expenses,Other Miscellaneous Service Cost,,,CAD
+5650,Interest,Expenses,Interest paid,,,CAD
+5655,"Interest:Interest, current debt",Expenses,Rent or Lease of Buildings,,,CAD
+5660,"Interest:Interest, mortgage",Expenses,Interest paid,,,CAD
+5665,"Interest:Interest, late payment",Expenses,Interest paid,,,CAD
+5700,Travel,Expenses,Travel,,,CAD
+5800,Gift,Expenses,Other Miscellaneous Service Cost,,,CAD
+5850,Other fees,Expenses,Legal and professional fees,,,CAD
+5900,Amortization,Expenses,Other Miscellaneous Service Cost,,,CAD
+5950,Income tax,Expenses,Taxes Paid,,,CAD
+,Advertising/Promotion:Marketing From Forest City Fitness,Expenses,Advertising/Promotional,,,CAD
+,Administration Costs:Utilities,Expenses,Utilities,,,CAD
+,5010,Expenses,Advertising/Promotional,,,CAD
+,a,Expenses,Advertising/Promotional,,,CAD
+,AccountForItemExpense,Expenses,Other Miscellaneous Service Cost,DummyAccountForItemExpense,,CAD
+,Auto parking,Expenses,Advertising/Promotional,,,CAD
+,Company Contributions,Expenses,Payroll Expenses,,,CAD
+,Oil & fuel & Gas,Expenses,Advertising/Promotional,,,CAD
+,Payroll processing fee,Expenses,Payroll Expenses,,,CAD
+,PST (ON) Expense,Expenses,GST/HST expense,,,CAD
+,Purchases,Expenses,Supplies,,,CAD
+,Reconciliation Discrepancies,Expenses,Other Miscellaneous Service Cost,Discrepancies between bank statements and company records,,CAD
+,Square Fees,Expenses,Bank charges,,,CAD
+,Taxes,Expenses,Payroll Expenses,,,CAD
+,Unapplied Cash Bill Payment Expense,Expenses,Unapplied Cash Bill Payment Expense,,,CAD
+,Uncategorized Expense,Expenses,Other Miscellaneous Service Cost,,,CAD
+,Wages,Expenses,Payroll Expenses,,,CAD
+4500,Capital Gains,Other Income,Gain/loss on sale of investments,,,CAD
+4550,Dividend Income,Other Income,Dividend income,,,CAD
+5980,Exchange Gain or Loss,Other Expense,Exchange Gain or Loss,,,CAD
+5999,expense to ask About,Other Expense,Other Miscellaneous Expense,Need to know what it is,,CAD
+,Other Miscellaneous Expense,Other Expense,Other Miscellaneous Expense,,,CAD
+,Reconciliation Discrepancies-1,Other Expense,Other Miscellaneous Expense,,,CAD
+TOTAL,,,,,"$1,265,050.06",
+
+
+
+" Monday, May 04, 2026 06:13 PM GMTZ",,,,,,
