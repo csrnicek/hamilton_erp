@@ -1195,6 +1195,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** Documentation only. The existing version-monotonicity guard in `apply_status_change` (`payload.version <= local.version` → ignore) already discards any spoofed event with a stale or missing version, so the practical exploit surface is narrower than the audit framed.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.3; DEC-019 (three-layer locking — asset status truth lives in DB); skill `frappe-impl-ui-components` (realtime patterns).
+## Amendment 2026-05-04 — DEC-086: Defer `extend_bootinfo` Hamilton Settings publication (audit F3.2)
+
+**Decision.** No `extend_bootinfo` hook is wired in `hooks.py`. Hamilton Settings continues to be fetched per request via `frappe.get_cached_doc("Hamilton Settings")` and shipped on the `get_asset_board_data` response. Defer the boot-info optimization until Phase 2 when the Asset Board adds more per-session config (multi-tenancy flags, role-aware UI, feature flags).
+
+**Why.** The audit F3.2 is explicit: "Optional polish, not a defect." `frappe.get_cached_doc` is fast, the existing payload shape works, and changing the boot path now would invite test churn for no operator-visible benefit. Phase 2 will benefit more — multiple per-session keys justify the round-trip savings of one boot-info read vs. N per-request reads.
+
+**What changed.** Documentation only. Phase-2 implementation will register `extend_bootinfo = "hamilton_erp.boot.boot_session"` and surface settings on `frappe.boot.hamilton_settings`.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F3.2; skill `frappe-syntax-hooks` / `frappe-impl-hooks` (extend_bootinfo).
 ## Amendment 2026-05-04 — DEC-087: Accept `app_include_css` for the Asset Board CSS (audit F3.1)
 
 **Decision.** `asset_board.css` continues to load via `app_include_css` in `hooks.py`. We do not move it to `page_css` (per the existing inline comment in hooks.py: page-level CSS includes were removed in v15) or to `doctype_js` (the Asset Board is a Frappe Page, not a DocType view). The CSS is selector-scoped to `.hamilton-asset-board` / `.hamilton-loading`, so it does not bleed into other pages.
