@@ -1204,6 +1204,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** Documentation only. Phase-2 implementation will register `extend_bootinfo = "hamilton_erp.boot.boot_session"` and surface settings on `frappe.boot.hamilton_settings`.
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F3.2; skill `frappe-syntax-hooks` / `frappe-impl-hooks` (extend_bootinfo).
+## Amendment 2026-05-04 — DEC-084: Enable Ruff `S` (flake8-bandit) ruleset (audit S3.4)
+
+**Decision.** Add `"S"` to `[tool.ruff.lint] select`. Pre-existing S violations are NOT fixed in this PR; the linter is enabled with conservative ignores so future PRs can't regress without surfacing a signal. A follow-up sweep PR will triage the remaining S findings in operational code.
+
+**Why.** The audit's S3.4 flagged that today's lint config (`F`, `E`, `W`, `I`) does not catch `subprocess(... shell=True)`, unsafe deserialization sinks, weak crypto (`hashlib.md5`), or hardcoded-password patterns. Bandit ruleset (`S`) covers these. Ruff's `S` is already integrated; flipping the switch is one line. Adding the linter without fixing existing findings is the audit's explicit recommendation: "keep the PR focused on the linter config."
+
+**What changed.** `pyproject.toml`: added `S` to `select`, added `S101` and `S311` to global ignore (Frappe-codebase-wide use of `assert` and non-crypto random is conventional), added `[tool.ruff.lint.per-file-ignores]` allowing `S105/S106` in tests and conftest, and `S603/S607` in tests for subprocess use in bench helpers.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.4; skill `tob-modern-python` (Python toolchain hygiene); skill `cybersecurity` (CI/CD dimension); existing lint config in `pyproject.toml`.
 ## Amendment 2026-05-04 — DEC-087: Accept `app_include_css` for the Asset Board CSS (audit F3.1)
 
 **Decision.** `asset_board.css` continues to load via `app_include_css` in `hooks.py`. We do not move it to `page_css` (per the existing inline comment in hooks.py: page-level CSS includes were removed in v15) or to `doctype_js` (the Asset Board is a Frappe Page, not a DocType view). The CSS is selector-scoped to `.hamilton-asset-board` / `.hamilton-loading`, so it does not bleed into other pages.
