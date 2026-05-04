@@ -1,5 +1,6 @@
 [
  {
+  "name": "Item-Hamilton Operator-0",
   "docstatus": 0,
   "doctype": "Custom DocPerm",
   "parent": "Item",
@@ -23,6 +24,7 @@
   "if_owner": 0
  },
  {
+  "name": "Item-Hamilton Manager-0",
   "docstatus": 0,
   "doctype": "Custom DocPerm",
   "parent": "Item",
@@ -46,6 +48,7 @@
   "if_owner": 0
  },
  {
+  "name": "Item-Hamilton Admin-0",
   "docstatus": 0,
   "doctype": "Custom DocPerm",
   "parent": "Item",
