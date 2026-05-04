@@ -1025,6 +1025,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 - F2.4 in `docs/audits/frappe_skills_audit_2026-05-04.md`
 - DEC-062 / DEC-063 / DEC-064 — the per-venue architecture
 - `hamilton_erp/api.py::get_asset_board_data` — endpoint with intentionally no tenant filter
+## Amendment 2026-05-04 — DEC-085: Unified `{"status": "ok", ...}` envelope on action endpoints (audit F2.2)
+
+**Decision.** All single-asset action endpoints (`start_walk_in_session`, `vacate_asset`, `clean_asset`, `set_asset_oos`, `return_asset_from_oos`) return `{"status": "ok", ...}` with optional extra keys for endpoint-specific data. `start_walk_in_session` now returns `{"status": "ok", "session": session_name}` instead of `{"session": session_name}`.
+
+**Why.** The audit F2.2 flagged that the surface mixed `{"session": ...}`, `{"status": "ok"}`, and `{"status": "phase_1_disabled"}`. Idempotency wrappers (DEC-067 / T0-1) and future client code benefit from a single `status` key to branch on. The Asset Board JS does not consume the return value today, so the change is non-breaking.
+
+**What changed.** `hamilton_erp/api.py::start_walk_in_session` updated to add `"status": "ok"`. Other four already return `{"status": "ok"}`. `assign_asset_to_session`'s `phase_1_disabled` envelope is left as-is (intentional — it signals a different state).
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F2.2; DEC-067 (idempotency); skill `frappe-impl-whitelisted` (return envelope consistency).
 
 ---
 
