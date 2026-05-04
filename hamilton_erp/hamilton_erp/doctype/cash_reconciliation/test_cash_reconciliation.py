@@ -23,21 +23,29 @@ class TestCashReconciliation(IntegrationTestCase):
 			}
 		).insert(ignore_permissions=True)
 
-	def _make_drop(self, declared: float = 100.0) -> object:
+	def _make_drop(self, declared: float = 100.0, **overrides) -> object:
+		"""Create a Cash Drop with a valid Shift Record link.
+
+		Extra fields (e.g. tip_pull_amount) MUST be passed as kwargs so they
+		are set during construction — before .insert() runs the immutability
+		guards. Mutating-then-.save() trips the T0-4 / DEC-005 invariant
+		(shift_date is flagged as changed by the post-save diff machinery
+		even when only an unrelated field was touched).
+		"""
 		shift = self._make_shift()
-		return frappe.get_doc(
-			{
-				"doctype": "Cash Drop",
-				"operator": "Administrator",
-				"shift_record": shift.name,
-				"shift_date": today(),
-				"shift_identifier": "Evening",
-				"drop_type": "Mid-Shift",
-				"drop_number": 1,
-				"declared_amount": declared,
-				"timestamp": now_datetime(),
-			}
-		).insert(ignore_permissions=True)
+		base = {
+			"doctype": "Cash Drop",
+			"operator": "Administrator",
+			"shift_record": shift.name,
+			"shift_date": today(),
+			"shift_identifier": "Evening",
+			"drop_type": "Mid-Shift",
+			"drop_number": 1,
+			"declared_amount": declared,
+			"timestamp": now_datetime(),
+		}
+		base.update(overrides)
+		return frappe.get_doc(base).insert(ignore_permissions=True)
 
 	def test_operator_cannot_access_cash_reconciliation(self):
 		"""Hamilton Operator must have no permissions on Cash Reconciliation.
@@ -262,9 +270,10 @@ class TestCashReconciliation(IntegrationTestCase):
 		This test pins the hook itself, not the future Phase 3 math. R-011
 		in docs/risk_register.md tracks the placeholder state.
 		"""
-		drop = self._make_drop(50.0)
-		drop.tip_pull_amount = 12.70
-		drop.save(ignore_permissions=True)
+		# Pass tip_pull_amount at construction (not mutate-after-insert) —
+		# the T0-4 immutability guard otherwise rejects the second save
+		# because the post-save diff machinery flags shift_date as changed.
+		drop = self._make_drop(50.0, tip_pull_amount=12.70)
 
 		recon = frappe.get_doc(
 			{
