@@ -1002,6 +1002,32 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **Migrate flag.** None.
 
 **References.** `frappe.realtime.socket` (Socket.IO client wrapper); `navigator.onLine` MDN; DEC-101 (overtime banner — different colour palette + animation, intentionally distinct).
+## Amendment 2026-05-04 — DEC-073: Multi-venue isolation lives at the bench level, not in API filters (audit F2.4)
+
+**Decision.** `hamilton_erp.api.get_asset_board_data` does NOT filter assets by company/venue. Per-venue isolation is solved by deploying one Frappe Cloud site per venue, NOT by adding a `filters={"company": ...}` clause inside the endpoint.
+
+**Why this came up.** Frappe skills audit 2026-05-04 (F2.4) flagged that the endpoint has no caller-scoped filter. Read literally, it would leak every venue's assets to every authenticated operator if a second venue's data ever lived on the same site.
+
+**Why we're not adding a filter.** Hamilton's multi-venue strategy is already site-per-venue (per DEC-062, DEC-063, DEC-064). Each venue gets its own Frappe Cloud bench + site. No two venues share a database. The board endpoint runs against a single-tenant DB; cross-venue leakage is operationally impossible. Adding a `company` filter would imply the endpoint guards multi-tenancy (it doesn't; the bench does) and risks fail-open silent zero-asset boards if `frappe.defaults.get_user_default("Company")` returns None.
+
+**What this DEC pins.**
+
+1. Hamilton ERP runs **one bench per venue, one site per bench**. This is the only multi-tenancy boundary.
+2. Endpoints in `hamilton_erp/api.py` are **not required** to add company/venue filters.
+3. If a future requirement pushes toward shared-bench multi-tenancy, this DEC must be reversed and `Venue Asset.company`-scoped filters added across every endpoint that returns asset / session / cash data.
+
+**Pre-second-venue checklist.**
+- [ ] Confirm the new venue has its own Frappe Cloud bench + site.
+- [ ] Confirm `frappe.conf.hamilton_company` is pinned per site.
+- [ ] If shared-bench is ever proposed, reverse DEC-073 explicitly, then audit every endpoint for tenant filters before going live.
+
+**References.**
+- F2.4 in `docs/audits/frappe_skills_audit_2026-05-04.md`
+- DEC-062 / DEC-063 / DEC-064 — the per-venue architecture
+- `hamilton_erp/api.py::get_asset_board_data` — endpoint with intentionally no tenant filter
+
+---
+
 ## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
 
 **Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.
