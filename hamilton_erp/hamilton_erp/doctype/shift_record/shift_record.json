@@ -54,7 +54,8 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Shift Date",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "default": "Open",
@@ -84,7 +85,7 @@
   {
    "fieldname": "section_float_start",
    "fieldtype": "Section Break",
-   "label": "Float — Shift Start"
+   "label": "Float \u2014 Shift Start"
   },
   {
    "description": "The configured fixed float amount for this location.",
@@ -108,7 +109,7 @@
   {
    "fieldname": "section_float_close",
    "fieldtype": "Section Break",
-   "label": "Float — Shift End (DEC-050)"
+   "label": "Float \u2014 Shift End (DEC-050)"
   },
   {
    "description": "Float counted by operator at shift END before handoff.",

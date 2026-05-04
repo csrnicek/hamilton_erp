@@ -48,7 +48,8 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Shift Date",
-   "reqd": 1
+   "reqd": 1,
+   "search_index": 1
   },
   {
    "description": "e.g. Evening, Morning, Night.",
@@ -105,7 +106,8 @@
    "fieldname": "reconciled",
    "fieldtype": "Check",
    "label": "Reconciled",
-   "read_only": 1
+   "read_only": 1,
+   "search_index": 1
   },
   {
    "fieldname": "reconciliation",

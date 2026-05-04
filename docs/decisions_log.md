@@ -1122,6 +1122,18 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-04 — DEC-079: Add `search_index: 1` on high-traffic status / date filter fields (audit F4.2)
+
+**Decision.** `search_index: 1` added to non-Link filter dimensions the audit identified as highest-value: `Cash Drop.reconciled` (Check), `Cash Drop.shift_date` (Date), `Cash Reconciliation.variance_flag` (Select), `Shift Record.shift_date` (Date), `Venue Session.session_start` (Datetime). Other F4.2 fields (`Cash Drop.timestamp`, `Cash Reconciliation.timestamp`, `Comp Admission Log.timestamp`, `Venue Session.session_end`) deferred until they appear in slow-query logs.
+
+**Why.** `Cash Drop.reconciled` is the highest-signal one — every "show me unreconciled drops" query is a table-scan today. `shift_date` and `session_start` drive every operational and reporting filter. Adding the indices now is cheap (small tables) and avoids a future migrate-required hotfix at the 6-venue rollout. Phase-3 reconciliation reporting will hit `reconciled` and `variance_flag` hardest; pinning them now removes that perf cliff.
+
+**What changed.** JSON edits to four DocType definitions: `cash_drop.json` (reconciled, shift_date), `cash_reconciliation.json` (variance_flag), `shift_record.json` (shift_date), `venue_session.json` (session_start). `bench migrate` REQUIRED. Bundle into the next Phase 3 migrate window with #168 / #170 / #171 / #172 / #174 / #192 (DEC-078 sibling).
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F4.2; skill `frappe-syntax-doctypes`; DEC-078 (sibling Link-field pass).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
