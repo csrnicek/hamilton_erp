@@ -44,6 +44,7 @@ import socket
 
 import frappe
 from frappe import _
+from frappe.rate_limiter import rate_limit
 
 # The print-format name is referenced by string here (not via the POS
 # Profile) per the Frappe v16 #53857 workaround. Keep this constant in
@@ -214,7 +215,7 @@ def _check_reprint_permission() -> None:
 
 
 @frappe.whitelist(methods=["POST"])
-@frappe.rate_limit(limit=60, seconds=60)
+@rate_limit(limit=60, seconds=60)
 def reprint_cash_receipt(sales_invoice: str) -> dict:
 	"""Re-render and re-dispatch the cash receipt for an existing SI.
 
