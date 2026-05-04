@@ -1161,6 +1161,19 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-04 — DEC-109: Staff PIN policy (per-operator, June 2026 setup)
+
+**Decision.** Every front-desk operator gets their own PIN. No shared accounts. Temporary PINs are provisioned per-named-operator in **June 2026** as a pre-launch setup step; the operator changes the PIN at first login.
+
+**Why.** The audit trail (DEC-077, document versioning on Venue Session / Bathhouse Assignment / Cash Drop / Comp Admission Log) only works if every action attributes to a real human. A shared "frontdesk" account would make forensic reconstruction impossible after a cash variance or comp dispute. Provisioning in June (not at go-live) keeps the launch-day checklist short and gives Chris time to walk each operator through the change-on-first-login flow during their practice shifts.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — Staff readiness Go/No-Go now lists per-operator PIN policy plus the June 2026 setup step. The Permissions / People section in Part 4 calls out the same setup as a pre-launch task with a DEC-109 reference.
+
+**References.** DEC-077 (audit-log post-submit owner correction). RUNBOOK §3.2 (account recovery). Part 4 "Permissions" and "People" sections of the launch playbook.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:

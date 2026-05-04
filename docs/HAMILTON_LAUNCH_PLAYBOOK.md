@@ -52,7 +52,8 @@ The guiding principle from ChatGPT's review:
 
 ## Staff readiness
 
-- [ ] Each front desk staff has their own login PIN — no shared accounts
+- [ ] Each front desk staff has their own login PIN — no shared accounts (per-operator policy, see DEC-109)
+- [ ] Temporary PINs created per-operator in **June 2026** as a pre-launch setup step (one PIN per named operator; PINs change at first login)
 - [ ] Each staff has done at least 2 practice shifts on the actual tablets with actual workflows
 - [ ] Staff have practiced 6 failure scenarios: paid-but-no-session, wrong key, refund request, cash variance, internet drop, key already assigned
 - [ ] Staff have a printed runbook (Part 3 below) at the front desk
@@ -454,7 +455,8 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 
 ## Staff accounts
 
-- [ ] Each staff has unique login PIN (no shared "frontdesk" account)
+- [ ] Each staff has unique login PIN (no shared "frontdesk" account) — **per-operator, no exceptions** (DEC-109)
+- [ ] **Pre-launch setup (June 2026):** Chris generates a temporary PIN for each named operator before go-live. Operator changes the PIN on first login.
 - [ ] PINs are 4-digit minimum, not sequential, not birthdays
 - [ ] PIN list stored in password manager (not on a sticky note)
 - [ ] Staff trained: "you don't share your PIN, ever, even if it seems faster"
