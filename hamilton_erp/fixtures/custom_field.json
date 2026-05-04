@@ -593,6 +593,8 @@
   "width": null
  },
  {
+  "name": "Item-hamilton_square_token",
+  "modified": "2026-05-04 00:00:00",
   "docstatus": 0,
   "doctype": "Custom Field",
   "dt": "Item",
