@@ -10,30 +10,36 @@
 
 ## CRA Form Overview
 
-**Form Numbers:** GST34-2 (Personalized) / GST62 (Non-Personalized)  
+**Form Number:** GST62 (Goods and Services / Harmonized Sales Tax Return)  
 **Filing Frequency:** Monthly, quarterly, or annual (based on revenue threshold)  
-**Applicable Tax:** HST 13% in Ontario (composed of 5% GST + 8% provincial portion)
+**Applicable Tax:** HST 13% in Ontario (composed of 5% GST + 8% provincial portion)  
+**Business Account:** 105204077 (1742279 Ont Inc / Club Hamilton)  
+**Basis:** Accrual
 
 ---
 
 ## Line Item Mapping
 
-| CRA Line | Description | ERPNext Data Source | Match Status | Notes |
-|----------|-------------|---------------------|--------------|-------|
-| **101** | Sales and other revenue | `Sales Invoice.net_total` (sum all submitted invoices) | ✅ CLEAN | Net total before tax. Include zero-rated and exempt supplies. |
-| **103** | GST/HST collected or collectible | `Sales Taxes and Charges.base_tax_amount` WHERE `account_head` = HST Payable account | ✅ CLEAN | Sum from child table. Filter by HST account only. |
-| **104** | Adjustments | Manual entry or custom field | ⚠️ GAP | ERPNext has no standard "HST adjustment" field. Requires custom field or Journal Entry tracking. |
-| **105** | Total GST/HST (Line 103 + 104) | Calculated: Line 103 + Line 104 | ✅ CLEAN | Auto-calculated in report. |
-| **106** | Input Tax Credits (ITCs) | `Purchase Taxes and Charges.base_tax_amount` WHERE `account_head` = HST Payable account | ✅ CLEAN | Sum from Purchase Invoice taxes child table. Same account as Line 103. |
-| **107** | Other ITCs | Manual entry or custom tracking | ⚠️ GAP | Rare: includes capital asset ITCs, vehicle allowances. Not in standard ERPNext. |
-| **108** | Total ITCs (Line 106 + 107) | Calculated: Line 106 + Line 107 | ✅ CLEAN | Auto-calculated in report. |
-| **109** | Net tax (Line 105 - 108) | Calculated: Line 105 - Line 108 | ✅ CLEAN | Auto-calculated. Positive = owe CRA, negative = refund. |
-| **110** | Quarterly instalments paid | `Payment Entry` WHERE `payment_type` = 'Pay' AND `party_type` = 'Supplier' AND `party` = 'CRA' | ⚠️ GAP | Requires tagging instalment payments to CRA as supplier. Not auto-tracked. |
-| **111** | Pension entity rebate | Manual entry or N/A | ⚠️ GAP | Hamilton is not a pension entity. Field can remain null. |
-| **113** | Refund or balance owing | Calculated: Line 109 - Line 110 - Line 111 | ✅ CLEAN | Auto-calculated. |
-| **114** | Refund claimed (if negative) | Display Line 113 as positive if < 0 | ✅ CLEAN | Conditional display logic. |
-| **115** | Amount due (if positive) | Display Line 113 if > 0 | ✅ CLEAN | Conditional display logic. |
-| **205** | Real property purchases | `Purchase Invoice` with custom category or manual flag | ⚠️ GAP | Only for taxable real property >50% commercial use. Rare for Hamilton. Requires manual flagging. |
+**Source:** CRA NETFILE confirmation (1742279 Ont Inc - Nov 1 2020 to Jan 31 2021)
+
+| CRA Line | Description (Exact CRA Wording) | ERPNext Data Source | Match Status | Notes |
+|----------|--------------------------------|---------------------|--------------|-------|
+| **101** | Sales and other revenue. | `Sales Invoice.net_total` (sum all submitted invoices) | ✅ CLEAN | Net total before tax. Include zero-rated and exempt supplies. |
+| **103** | GST/HST collected or collectible. | `Sales Taxes and Charges.base_tax_amount` WHERE `account_head` = HST Payable account | ✅ CLEAN | Sum from child table. Filter by HST account only. |
+| **104** | Adjustments (Sales). | Manual entry or custom field | ⚠️ GAP | ERPNext has no standard "HST adjustment" field. Requires custom field or Journal Entry tracking. |
+| **105** | Total GST/HST and adjustments for period. | Calculated: Line 103 + Line 104 | ✅ CLEAN | Auto-calculated in report. |
+| **106** | Input tax credits (ITCs). | `Purchase Taxes and Charges.base_tax_amount` WHERE `account_head` = HST Payable account | ✅ CLEAN | Sum from Purchase Invoice taxes child table. Same account as Line 103. |
+| **107** | Adjustments (Purchases). | Manual entry or custom tracking | ⚠️ GAP | Rare: includes capital asset ITCs, vehicle allowances. Not in standard ERPNext. |
+| **108** | Total ITCs and adjustments. | Calculated: Line 106 + Line 107 | ✅ CLEAN | Auto-calculated in report. |
+| **109** | Net Tax. | Calculated: Line 105 - Line 108 | ✅ CLEAN | Auto-calculated. Positive = owe CRA, negative = refund. |
+| **110** | Instalments and other annual filer payments. | `Payment Entry` WHERE `payment_type` = 'Pay' AND `party_type` = 'Supplier' AND `party` = 'CRA' | ⚠️ GAP | Requires tagging instalment payments to CRA as supplier. Not auto-tracked. |
+| **111** | Rebates. | Manual entry or N/A | ⚠️ GAP | Hamilton is not a pension entity. Field can remain null. |
+| **112** | Total other credits. | Calculated: Line 110 + Line 111 | ✅ CLEAN | Auto-calculated in report. |
+| **113A** | Balance. | Calculated: Line 109 - Line 112 | ✅ CLEAN | First balance calculation. Can be positive (owe) or negative (refund). |
+| **205** | GST/HST due on acquisition of taxable real property. | `Purchase Invoice` with custom category or manual flag | ⚠️ GAP | Only for taxable real property >50% commercial use. Rare for Hamilton. Requires manual flagging. |
+| **405** | Other GST/HST to be self-assessed. | Manual entry or N/A | ⚠️ GAP | Not applicable for Hamilton operations. |
+| **113B** | Total other debits. | Calculated: Line 205 + Line 405 | ✅ CLEAN | Auto-calculated in report. |
+| **113C** | Balance. | Calculated: Line 113A + Line 113B | ✅ CLEAN | **FINAL BALANCE.** Positive = amount owing, negative = refund. |
 
 ---
 
