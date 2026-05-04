@@ -32,7 +32,7 @@ The guiding principle from ChatGPT's review:
 
 ## Operations readiness
 
-- [ ] Can two tablets attempt to assign the same key, and only one succeeds with a clear error message that the second staff member can act on?
+- [x] **N/A for Hamilton (DEC-114).** ~~Can two tablets attempt to assign the same key, and only one succeeds with a clear error message that the second staff member can act on?~~ Hamilton operates with a single front-desk tablet (DEC-111); concurrent assignment from a second tablet is not physically possible. Re-evaluate when DC / Philly open.
 - [ ] If a payment succeeds but the session fails to open, is there a written recovery procedure that any front desk staff can execute?
 - [ ] Can a refund or void be processed by trained staff (or escalated within 5 minutes)?
 - [ ] If end-of-shift cash count does not match expected, do staff know the variance threshold rules and reporting procedure?
@@ -164,6 +164,10 @@ Ranked by likelihood × customer-facing impact during the first 48 hours.
 ---
 
 ## #6 — Race condition: two tablets, one key, simultaneous assignment
+
+> **N/A for Hamilton's go-live (DEC-114).** Hamilton runs **one** front-desk tablet (DEC-111). Concurrent assignment of the same key from two tablets is not physically possible at this venue. No pre-launch chaos test, Playwright script, or three-tab manual race is required.
+>
+> The risk and its remediations below remain canonical for **multi-tablet venues** (DC and Philly per current rollout plans). Re-activate this section when those venues open and seed `anvil_tablet_count > 1`.
 
 **The failure:** 3 tablets at front desk. Two staff scan the same physical key into the system within 200ms of each other. Either the lock system rejects the second assignment cleanly (good), or it allows both (catastrophic).
 

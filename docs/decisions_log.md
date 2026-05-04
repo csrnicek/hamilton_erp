@@ -1177,6 +1177,19 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 **What changed.** JSON edits to four DocType definitions: `cash_drop.json` (reconciled, shift_date), `cash_reconciliation.json` (variance_flag), `shift_record.json` (shift_date), `venue_session.json` (session_start). `bench migrate` REQUIRED. Bundle into the next Phase 3 migrate window with #168 / #170 / #171 / #172 / #174 / #192 (DEC-078 sibling).
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F4.2; skill `frappe-syntax-doctypes`; DEC-078 (sibling Link-field pass).
+## Amendment 2026-05-04 — DEC-114: Mark dual-tablet race-condition risk as N/A for Hamilton
+
+**Decision.** The "two tablets, one key, simultaneous assignment" race-condition check (Risk #6 in `HAMILTON_LAUNCH_PLAYBOOK.md`) is marked **N/A for Hamilton's go-live**. The corresponding Operations-readiness checklist row is also marked N/A. No pre-launch concurrency test, chaos test, or Playwright script is required for Hamilton.
+
+**Why.** Per DEC-111, Hamilton runs **one** front-desk tablet. Concurrent assignment of the same physical key from two tablets is not physically possible at this venue. The original Risk #6 was written as a future-proof multi-tablet concern; DEC-111 confirmed Hamilton's actual hardware footprint is single-tablet, which makes the risk inapplicable to this site.
+
+**Scope.** This DEC marks the risk N/A for **Hamilton only**. The original Risk #6 section content stays in the playbook unedited below the N/A banner — it remains the canonical reference for **DC and Philly** when those venues open and seed `anvil_tablet_count > 1`. The single source of truth for "is this venue multi-tablet?" is the per-site config key `anvil_tablet_count`; if Hamilton ever expands to a second tablet, this DEC must be reversed (per the Part 12 protocol) and the Risk #6 chaos test re-introduced as a launch blocker.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — Operations-readiness checklist row marked `[x] N/A for Hamilton (DEC-114)` with strikethrough on the original question. Risk #6 section prepended with an N/A banner explaining the single-tablet rationale and reactivation criterion for multi-tablet venues.
+- `docs/decisions_log.md` — this entry.
+
+**References.** DEC-111 (Hamilton tablet count = 1). `anvil_tablet_count` site config seeded to 1 in `seed_hamilton_env.execute`. Risk #6 in `HAMILTON_LAUNCH_PLAYBOOK.md` (preserved in full below the N/A banner for DC/Philly use).
 
 ---
 
