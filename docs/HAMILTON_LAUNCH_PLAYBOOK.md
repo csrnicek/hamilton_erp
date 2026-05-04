@@ -32,33 +32,33 @@ The guiding principle from ChatGPT's review:
 
 ## Operations readiness
 
-- [x] **N/A for Hamilton (DEC-114).** ~~Can two tablets attempt to assign the same key, and only one succeeds with a clear error message that the second staff member can act on?~~ Hamilton operates with a single front-desk tablet (DEC-111); concurrent assignment from a second tablet is not physically possible. Re-evaluate when DC / Philly open.
-- [ ] If a payment succeeds but the session fails to open, is there a written recovery procedure that any front desk staff can execute?
-- [ ] Can a refund or void be processed by trained staff (or escalated within 5 minutes)?
-- [ ] If end-of-shift cash count does not match expected, do staff know the variance threshold rules and reporting procedure?
-- [ ] If the internet drops for 30 minutes, can Hamilton continue to take check-ins on paper and reconcile later?
-- [ ] If Chris does not respond to a page for 30 minutes, is there a tier-2 person who can perform the basic recovery procedures?
-- [ ] Can the audit log reconstruct who did what, on which device, with what payment ID, after an incident?
+- [x] **N/A for Hamilton (DEC-114).** ~~Can two tablets attempt to assign the same key, and only one succeeds with a clear error message that the second staff member can act on?~~ Hamilton operates with a single front-desk tablet (DEC-111); concurrent assignment from a second tablet is not physically possible. Re-test on first multi-tablet venue (DC, 3 tablets).
+- [ ] If a payment succeeds but the session fails to open, is there a written recovery procedure that any front desk staff can execute? — Chris — pre-launch week (RUNBOOK.md §1, drill with staff).
+- [ ] Can a refund or void be processed by trained staff (or escalated within 5 minutes)? — Chris + manager — pre-launch training shift.
+- [ ] If end-of-shift cash count does not match expected, do staff know the variance threshold rules and reporting procedure? — Chris — pre-launch training (cash variance policy printed at desk).
+- [ ] If the internet drops for 30 minutes, can Hamilton continue to take check-ins on paper and reconcile later? — Chris — pre-launch week (paper forms in `EMERGENCY_PAPER_FORMS.md`, drill with staff).
+- [x] If Chris does not respond to a page for 30 minutes, is there a tier-2 person who can perform the basic recovery procedures? — **CLOSED by DEC-108** (Tier-2 chain pinned: Craig → Austin LeFrense 905-920-0487).
+- [ ] Can the audit log reconstruct who did what, on which device, with what payment ID, after an incident? — *BLOCKED — depends on per-operator PIN provisioning (DEC-109, June 2026). Closed once PINs land + Document Versioning verified.*
 
 ## Technical readiness
 
-- [ ] CI is green on main (PR #9 merged, all subsequent merges still passing)
-- [ ] Frappe/payments dependency decision made for production (install or override-tests)
-- [ ] No untested scheduler jobs can fire in production (verify Frappe Cloud cron settings)
-- [ ] Permissions audit completed: front desk role cannot cancel/amend/delete operational records
-- [ ] Document Versioning + Audit Trail enabled on Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log
-- [ ] Backup tested by actual restore (not just "backup exists" — a real restore drill)
-- [ ] No unpinned `develop` branch dependencies in production deployment
+- [ ] CI is green on main (PR #9 merged, all subsequent merges still passing) — Chris — verify weekly until launch, ongoing.
+- [x] Frappe/payments dependency decision made for production (install or override-tests) — **CLOSED by DEC-096** (Path A — frappe/payments omitted).
+- [ ] No untested scheduler jobs can fire in production (verify Frappe Cloud cron settings) — Chris — pre-launch week (audit `scheduler_events` in hooks.py + Frappe Cloud cron dashboard).
+- [ ] Permissions audit completed: front desk role cannot cancel/amend/delete operational records — Chris — pre-launch week (see `docs/permissions_matrix.md`).
+- [ ] Document Versioning + Audit Trail enabled on Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log — Chris — pre-launch week (verify `track_changes=1` and Versions tab on each DocType).
+- [ ] Backup tested by actual restore (not just "backup exists" — a real restore drill) — Chris — pre-launch week (`RUNBOOK_BACKUP.md`).
+- [ ] No unpinned `develop` branch dependencies in production deployment — Chris — pre-launch week (CLAUDE.md production-pinning rule + `venue_rollout_playbook.md` Phase A step 2).
 
 ## Staff readiness
 
-- [ ] Each front desk staff has their own login PIN — no shared accounts (per-operator policy, see DEC-109)
-- [ ] Temporary PINs created per-operator in **June 2026** as a pre-launch setup step (one PIN per named operator; PINs change at first login)
-- [ ] Each staff has done at least 2 practice shifts on the actual tablets with actual workflows
-- [ ] Staff have practiced 6 failure scenarios: paid-but-no-session, wrong key, refund request, cash variance, internet drop, key already assigned
-- [ ] Staff have a printed runbook (Part 3 below) at the front desk
-- [ ] Staff have a phone number to reach Chris or tier-2 for emergencies
-- [ ] Manager is on the floor for opening weekend, not in the office
+- [x] Each front desk staff has their own login PIN — no shared accounts — **CLOSED by DEC-109** (per-operator PIN policy locked; provisioning June 2026).
+- [ ] Temporary PINs created per-operator in **June 2026** as a pre-launch setup step (one PIN per named operator; PINs change at first login).
+- [ ] Each staff has done at least 2 practice shifts on the actual tablets with actual workflows — Chris + manager — pre-launch week.
+- [ ] Staff have practiced 6 failure scenarios: paid-but-no-session, wrong key, refund request, cash variance, internet drop, key already assigned — Chris + manager — pre-launch week (drill on actual tablets).
+- [ ] Staff have a printed runbook (Part 3 below) at the front desk — Chris — pre-launch week (print + tape up).
+- [x] Staff have a phone number to reach Chris or tier-2 for emergencies — **CLOSED by DEC-108** (Tier-2 chain documented; pre-launch step is to write Chris's mobile + the chain on the desk card).
+- [ ] Manager is on the floor for opening weekend, not in the office — Chris — pre-launch week (schedule confirmation).
 
 **Rule:** If any item is "no", either fix it before opening OR document the manual fallback procedure. Opening with unanswered questions is the failure mode.
 
@@ -419,81 +419,81 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 
 ## CI / Code
 
-- [ ] PR #9 merged, all checks green on main
-- [ ] CI runs green on at least 3 consecutive commits to main
-- [ ] No skipped tests that would have caught opening-weekend issues (review the 56 currently skipped tests)
-- [ ] Lint cleanup completed; ruff `continue-on-error` flipped back off
-- [ ] Test fixtures factored into shared helpers (`make_test_venue_asset()`, etc.) — defers if needed but document the deferral
+- [ ] PR #9 merged, all checks green on main — Chris — verify weekly until launch.
+- [ ] CI runs green on at least 3 consecutive commits to main — Chris — verify weekly until launch.
+- [ ] No skipped tests that would have caught opening-weekend issues (review the 56 currently skipped tests) — Chris — pre-launch week.
+- [ ] Lint cleanup completed; ruff `continue-on-error` flipped back off — Chris — pre-launch week.
+- [ ] Test fixtures factored into shared helpers (`make_test_venue_asset()`, etc.) — defers if needed but document the deferral — Chris — pre-launch week (deferral acceptable per policy).
 
 ## Dependencies
 
-- [ ] Decision made on `frappe/payments` for production: install (pinned commit, NOT develop) OR don't install (override 6 IntegrationTestCase tests with Path 2)
-- [ ] No `develop` branch dependencies pinned in production deployment
-- [ ] Frappe and ERPNext versions pinned to specific minor versions (not "latest")
+- [x] Decision made on `frappe/payments` for production: install (pinned commit, NOT develop) OR don't install (override 6 IntegrationTestCase tests with Path 2) — **CLOSED by DEC-096** (Path A — frappe/payments omitted).
+- [ ] No `develop` branch dependencies pinned in production deployment — Chris — pre-launch week (CLAUDE.md production-pinning rule).
+- [ ] Frappe and ERPNext versions pinned to specific minor versions (not "latest") — Chris — pre-launch week (`venue_rollout_playbook.md` Phase A step 2).
 
 ## Frappe Cloud / Production
 
-- [ ] **Frappe Cloud update policy configured per DEC-112** (`docs/operations/frappe_cloud_update_policy.md`):
+- [x] **Frappe Cloud update policy configured per DEC-112** (`docs/operations/frappe_cloud_update_policy.md`) — **CLOSED by DEC-112**:
   - Update window: **Monday OR Tuesday, 9 AM – 5 PM EST** only.
   - Approval: **Owner approval required before each update — never auto-update.**
   - Blackout window: **Thursday midnight through Monday 9 AM EST is a hard no-update zone.**
   - Pre-launch setup step: configure update-window pinning + auto-update disable in the Frappe Cloud dashboard manually.
-- [ ] If the policy cannot be enforced via the dashboard: maintenance window negotiated directly with Frappe Cloud support, in writing.
-- [ ] Backup procedure tested by actual restore (real restore drill, not "backup file exists")
-- [ ] Restore time-to-recovery documented (how long does a full restore take?)
-- [ ] No untested scheduler jobs can fire (verify Frappe Cloud cron settings)
+- [x] If exclusion not possible: maintenance window negotiated with Frappe Cloud support — **CLOSED by DEC-112** (escalation path documented in the operations doc).
+- [ ] Backup procedure tested by actual restore (real restore drill, not "backup file exists") — Chris — pre-launch week (`RUNBOOK_BACKUP.md`).
+- [ ] Restore time-to-recovery documented (how long does a full restore take?) — Chris — pre-launch week (record after the restore drill above).
+- [ ] No untested scheduler jobs can fire (verify Frappe Cloud cron settings) — Chris — pre-launch week.
 
 ## Permissions
 
-- [ ] Front desk role: Read + Create + Submit on operational DocTypes only
-- [ ] Front desk role: NO Cancel/Amend/Delete on Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log
-- [ ] Manager role: can Cancel/Amend with reason field required
-- [ ] System Manager role: Chris only
-- [ ] Tested as non-Chris user — confirmed destructive actions blocked
+- [ ] Front desk role: Read + Create + Submit on operational DocTypes only — Chris — pre-launch week (verify against `docs/permissions_matrix.md`).
+- [ ] Front desk role: NO Cancel/Amend/Delete on Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log — Chris — pre-launch week.
+- [ ] Manager role: can Cancel/Amend with reason field required — Chris — pre-launch week.
+- [ ] System Manager role: Chris only — Chris — pre-launch week.
+- [ ] Tested as non-Chris user — confirmed destructive actions blocked — Chris — pre-launch week (test as a real Front Desk user, not just role-grep).
 
 ## Audit / Versioning
 
-- [ ] Document Versioning enabled on: Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log, Shift Record
-- [ ] Audit Trail captures: actor (PIN), timestamp, device/IP, before/after values
-- [ ] Tested with two-user modification — confirmed full attribution captured
+- [ ] Document Versioning enabled on: Venue Session, Bathhouse Assignment, Cash Drop, Comp Admission Log, Shift Record — Chris — pre-launch week (verify `track_changes=1`).
+- [ ] Audit Trail captures: actor (PIN), timestamp, device/IP, before/after values — *BLOCKED — depends on per-operator PIN provisioning (DEC-109, June 2026). Verify after PINs land.*
+- [ ] Tested with two-user modification — confirmed full attribution captured — *BLOCKED — depends on PIN provisioning (DEC-109).*
 
 ## Staff accounts
 
-- [ ] Each staff has unique login PIN (no shared "frontdesk" account) — **per-operator, no exceptions** (DEC-109)
+- [x] Each staff has unique login PIN (no shared "frontdesk" account) — **CLOSED by DEC-109** (per-operator PIN policy locked).
 - [ ] **Pre-launch setup (June 2026):** Chris generates a temporary PIN for each named operator before go-live. Operator changes the PIN on first login.
-- [ ] PINs are 4-digit minimum, not sequential, not birthdays
-- [ ] PIN list stored in password manager (not on a sticky note)
-- [ ] Staff trained: "you don't share your PIN, ever, even if it seems faster"
+- [ ] PINs are 4-digit minimum, not sequential, not birthdays — Chris — June 2026 (per DEC-109 setup step).
+- [ ] PIN list stored in password manager (not on a sticky note) — Chris — June 2026.
+- [ ] Staff trained: "you don't share your PIN, ever, even if it seems faster" — Chris + manager — pre-launch week.
 
 ## Tax / Accounting
 
-- [ ] Run 5 sample transactions: locker, room, upgrade, comp, retail
-- [ ] Confirm invoice item, company, tax rate, price list, payment method are correct on each
-- [ ] ~~Bookkeeper/accountant has reviewed at least one test day-close~~ **Deferred to Phase 2** — accounting integration ships in Phase 2, not Phase 1. Phase-1 launch does not require bookkeeper sign-off. (DEC-110)
-- [ ] Multi-location accounting setup verified (Hamilton vs other venues, if relevant)
+- [ ] Run 5 sample transactions: locker, room, upgrade, comp, retail — Chris — pre-launch week (test on staging first).
+- [ ] Confirm invoice item, company, tax rate, price list, payment method are correct on each — Chris — pre-launch week (Hamilton accounting per Amendment 2026-04-30 (b)).
+- [x] Bookkeeper/accountant has reviewed at least one test day-close — **CLOSED by DEC-110** (deferred to Phase 2; Phase-1 launch does not require bookkeeper sign-off).
+- [ ] Multi-location accounting setup verified (Hamilton vs other venues, if relevant) — *BLOCKED — multi-venue accounting ships in Phase 2; Hamilton-only verification suffices for Phase 1.*
 
 ## Hardware / Network
 
-- [ ] Hamilton tablet count confirmed at **1** (DEC-111; single front-desk station). All tablets tested on Hamilton's actual Wi-Fi (not just home)
-- [ ] Backup internet confirmed and tested (4G hotspot or secondary ISP)
-- [ ] Tablets have screen lock with timeout (don't leave them unlocked at front desk)
-- [ ] Stripe (or chosen processor) terminal hardware tested in Hamilton's actual network conditions
+- [ ] Hamilton tablet count confirmed at **1** (DEC-111; single front-desk station). All tablets tested on Hamilton's actual Wi-Fi (not just home) — Chris — pre-launch week.
+- [ ] Backup internet confirmed and tested (4G hotspot or secondary ISP) — Chris — pre-launch week.
+- [ ] Tablets have screen lock with timeout (don't leave them unlocked at front desk) — Chris — pre-launch week.
+- [ ] Stripe (or chosen processor) terminal hardware tested in Hamilton's actual network conditions — *BLOCKED — Hamilton runs the existing Fiserv standalone terminal in Phase 1 (DEC-106). Integrated-terminal testing ships with Phase 2 hardware track (DEC-107).*
 
 ## People
 
-- [ ] Tier-2 person identified and trained on the 5 basic recovery procedures
-- [ ] Tier-2 has Frappe Cloud access (read-only minimum, full admin if trusted)
-- [ ] Manager scheduled on the floor for opening Friday + Saturday + Sunday (no exceptions)
-- [ ] Chris available by phone for the entire opening weekend (no flights, no off-grid)
+- [x] Tier-2 person identified and trained on the 5 basic recovery procedures — **Identified by DEC-108** (Craig + Austin LeFrense). Training is OPERATIONAL — Chris — pre-launch week (walk both contacts through the 5 recovery procedures).
+- [ ] Tier-2 has Frappe Cloud access (read-only minimum, full admin if trusted) — Chris — pre-launch week (provision per DEC-108 chain).
+- [ ] Manager scheduled on the floor for opening Friday + Saturday + Sunday (no exceptions) — Chris — pre-launch week.
+- [ ] Chris available by phone for the entire opening weekend (no flights, no off-grid) — Chris — pre-launch week.
 
 ## Documentation
 
-- [ ] Front Desk Runbook (Part 3) printed and at every tablet station
-- [ ] Refund procedure printed and at front desk
-- [ ] Overtime policy printed and at front desk
-- [ ] Cash variance policy printed and at front desk
-- [ ] Tier-2 phone number written somewhere staff will find it at 11pm
-- [ ] Chris phone number same
+- [ ] Front Desk Runbook (Part 3) printed and at every tablet station — Chris — pre-launch week.
+- [ ] Refund procedure printed and at front desk — Chris — pre-launch week.
+- [ ] Overtime policy printed and at front desk — Chris — pre-launch week.
+- [ ] Cash variance policy printed and at front desk — Chris — pre-launch week.
+- [x] Tier-2 phone number written somewhere staff will find it at 11pm — **Source CLOSED by DEC-108** (Craig + Austin LeFrense 905-920-0487). Printing the desk card is OPERATIONAL — Chris — pre-launch week.
+- [ ] Chris phone number same — Chris — pre-launch week (write on the same desk card).
 
 ---
 

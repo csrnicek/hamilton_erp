@@ -1280,6 +1280,22 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 **What changed.** JSON edits to four DocType definitions: `cash_drop.json`, `cash_reconciliation.json`, `comp_admission_log.json`, `venue_session.json`. `bench migrate` REQUIRED — DocType JSON `search_index` adds create new MariaDB indices. Bundle into the next Phase 3 migrate window with #168 / #170 / #171 / #172 / #174.
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F4.1; skill `frappe-syntax-doctypes` (search_index hygiene).
+## Amendment 2026-05-04 — DEC-113: LAUNCH_PLAYBOOK checklist audit
+
+**Decision.** Every checkbox in `docs/HAMILTON_LAUNCH_PLAYBOOK.md` is classified as **CLOSED by code/DEC**, **OPERATIONAL TASK** (Chris or front-desk action), or **BLOCKED** (depends on hardware, external party, or Phase 2). Annotations live inline next to each row; the structure is unchanged.
+
+**Why.** The playbook was written as a flat list of "things to verify before opening." With 5 DEC entries landing today (DEC-108 through DEC-112), several rows are now satisfied by code or policy and should not appear in Chris's pre-launch task list. Annotating each row in place preserves the playbook as the single source of truth and lets a reader instantly see what is done versus what is left.
+
+**Summary count.** Across the Go/No-Go (Part 1) and Pre-Launch Audit (Part 4) checklists:
+
+- **CLOSED: 11** (rows resolved by DEC-096, DEC-108, DEC-109, DEC-110, DEC-112).
+- **BLOCKED: 6** (rows pending PIN provisioning per DEC-109 / June 2026, multi-tablet venue rollout per DEC-111, Phase 2 multi-venue accounting, Phase 2 integrated terminal testing per DEC-106/107).
+- **OPERATIONAL: 46** — Chris (or Chris + manager) pre-launch-week tasks. None require code changes.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — every Part 1 + Part 4 checkbox row annotated with classification + owner + timing or DEC reference. No structural changes; row order preserved.
+
+**References.** DEC-096 (frappe/payments Path A). DEC-108 (Tier-2 contacts). DEC-109 (PIN policy). DEC-110 (bookkeeper deferred). DEC-111 (Hamilton tablet count = 1). DEC-112 (Frappe Cloud update policy). DEC-106 / DEC-107 (Hamilton terminal + integrated terminal track).
 
 ---
 
