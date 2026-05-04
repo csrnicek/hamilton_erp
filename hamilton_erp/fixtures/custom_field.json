@@ -591,5 +591,18 @@
   "translatable": 0,
   "unique": 0,
   "width": null
+ },
+ {
+  "docstatus": 0,
+  "doctype": "Custom Field",
+  "dt": "Item",
+  "fieldname": "hamilton_square_token",
+  "fieldtype": "Data",
+  "label": "Square Token",
+  "insert_after": "hamilton_is_admission",
+  "read_only": 1,
+  "translatable": 0,
+  "unique": 0,
+  "hidden": 1
  }
 ]
