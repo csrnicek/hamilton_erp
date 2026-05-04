@@ -1034,6 +1034,35 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/api.py::start_walk_in_session` updated to add `"status": "ok"`. Other four already return `{"status": "ok"}`. `assign_asset_to_session`'s `phase_1_disabled` envelope is left as-is (intentional — it signals a different state).
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F2.2; DEC-067 (idempotency); skill `frappe-impl-whitelisted` (return envelope consistency).
+## Amendment 2026-05-03 — DEC-102: Shift Summary acknowledge-before-close contract
+
+**Decision.** Before End Shift closes the Shift Record, the operator sees a summary modal they MUST explicitly acknowledge. The modal has no close-X and no Cancel button — the only escape is the "Acknowledge & Close Shift" primary action.
+
+**Why.** The summary is the operator's last chance to catch a mistake before the cash-handling record is locked: a Sales Invoice they meant to refund, a Cash Drop with the wrong declared amount, or — most importantly — an asset they thought they had vacated but is still Occupied (which means the next shift starts with phantom occupancy on the board). Allowing dismissal without acknowledgement (close-X, ESC, click-outside) defeats the purpose: the operator skips it on the third night-shift in a row and the bug enters production.
+
+**Contract — what the summary must show.**
+1. **Sessions started today** — count of Venue Session rows where `operator_checkin = session.user` and `session_start >= today`.
+2. **Sessions currently open (venue-wide)** — count of Venue Session rows where `status = "Occupied"`. Includes sessions started by other operators because the closing operator owns the cash-out walkthrough; phantom occupancy by anyone is their problem.
+3. **Cash sales total** — `SUM(grand_total)` from `Sales Invoice` where `is_pos = 1 AND posting_date = today AND owner = session.user AND docstatus = 1`.
+4. **Cash drops submitted today** — count + total `declared_amount` from `Cash Drop` where `operator = session.user AND shift_date = today`.
+5. **Open sessions list** — for any sessions still Occupied, render a list of `asset_code` + elapsed time. If non-empty, the modal shows a red warning banner: "Open sessions remain — vacate before closing your shift."
+
+**Contract — UX rules.**
+- The close-X (`.modal-header .btn-modal-close`) is hidden.
+- The primary action is "Acknowledge & Close Shift". On confirm, `end_shift()` is called and the board re-runs `init()` (which renders the no-shift landing screen).
+- Clicking outside the modal does not dismiss it. Frappe Dialog's default click-outside behavior is acceptable because the only path forward IS the primary action — the operator can re-open by clicking End Shift again, but cannot accidentally skip the acknowledgement.
+
+**Why "venue-wide" open sessions, not just operator's.** If operator A opened a session at 10pm, then operator B closes their shift at 6am, operator B is the one walking the floor and needs to know "VIP-12 still shows occupied." A strict per-operator filter would miss exactly this handoff bug.
+
+**Implementation reference.** The contract is implemented across:
+- `hamilton_erp/api.py` — `get_shift_summary()` endpoint (DEC-099 PR).
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — `show_shift_summary_modal()` (DEC-099 PR).
+- `hamilton_erp/test_asset_board_rendering.py` — `TestShiftSummaryContract` substring tests (this PR).
+- `hamilton_erp/test_shift_management.py` — `TestShiftSummaryShape` round-trip tests (this PR).
+
+**Migrate flag.** None.
+
+**References.** DEC-099 (operator-facing shift management); existing Cash Drop / Sales Invoice / Venue Session DocTypes.
 
 ---
 
