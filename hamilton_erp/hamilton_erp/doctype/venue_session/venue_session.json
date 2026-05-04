@@ -196,22 +196,25 @@
   },
   {
    "default": "not_applicable",
-   "description": "Forward compatibility \u2014 null at Hamilton.",
+   "description": "Forward compatibility — null at Hamilton. permlevel 1 hides this from Hamilton Operator at the API layer (PIPEDA PII per docs/research/pipeda_venue_session_pii.md). See TestVenueSessionPIIMasking.",
    "fieldname": "identity_method",
    "fieldtype": "Data",
-   "label": "Identity Method"
+   "label": "Identity Method",
+   "permlevel": 1
   },
   {
-   "description": "Forward compatibility \u2014 null at Hamilton.",
+   "description": "Forward compatibility — null at Hamilton. permlevel 1 hides this from Hamilton Operator at the API layer (PIPEDA PII).",
    "fieldname": "member_id",
    "fieldtype": "Link",
    "label": "Member ID",
-   "options": "Customer"
+   "options": "Customer",
+   "permlevel": 1
   },
   {
    "fieldname": "full_name",
    "fieldtype": "Data",
-   "label": "Full Name"
+   "label": "Full Name",
+   "permlevel": 1
   },
   {
    "fieldname": "column_break_forward_compat",
@@ -220,7 +223,8 @@
   {
    "fieldname": "date_of_birth",
    "fieldtype": "Date",
-   "label": "Date of Birth"
+   "label": "Date of Birth",
+   "permlevel": 1
   },
   {
    "fieldname": "membership_status",
@@ -230,7 +234,8 @@
   {
    "fieldname": "block_status",
    "fieldtype": "Data",
-   "label": "Block Status"
+   "label": "Block Status",
+   "permlevel": 1
   },
   {
    "collapsible": 1,
@@ -241,7 +246,8 @@
   {
    "fieldname": "arrears_amount",
    "fieldtype": "Currency",
-   "label": "Arrears Amount"
+   "label": "Arrears Amount",
+   "permlevel": 1
   },
   {
    "default": "0",
@@ -266,7 +272,8 @@
   {
    "fieldname": "eligibility_snapshot",
    "fieldtype": "Text",
-   "label": "Eligibility Snapshot"
+   "label": "Eligibility Snapshot",
+   "permlevel": 1
   }
  ],
  "index_web_pages_for_search": 0,
@@ -301,6 +308,16 @@
    "report": 1,
    "role": "Hamilton Admin",
    "write": 1
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Manager"
+  },
+  {
+   "permlevel": 1,
+   "read": 1,
+   "role": "Hamilton Admin"
   }
  ],
  "search_fields": "session_number,venue_asset,status",

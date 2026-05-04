@@ -1025,6 +1025,183 @@ class TestCashDropOwnerIsolation(IntegrationTestCase):
 			)
 
 
+# ---------------------------------------------------------------------------
+# Field masking audit — gap #5 (Task 25 item 7 / Venue Session PII per PIPEDA)
+# ---------------------------------------------------------------------------
+
+
+_VENUE_SESSION_JSON = (
+	PACKAGE_ROOT
+	/ "hamilton_erp"
+	/ "doctype"
+	/ "venue_session"
+	/ "venue_session.json"
+)
+
+
+class TestVenueSessionPIIMasking(IntegrationTestCase):
+	"""Field masking audit gap #5 — Venue Session PII fields must be
+	hidden from Hamilton Operator at the API layer.
+
+	Same shape as gap #2 (Comp Admission Log / PR #98): permlevel 1
+	on each PII field + Manager/Admin permlevel-1 read rows in the
+	perm grid. Different from gap #3 (Cash Drop / PR #99) which used
+	if_owner because the field is operator-typed at create time —
+	these PII fields are forward-compat fields populated by Phase 2
+	scanner / membership flows running with elevated perms; operators
+	never enter them by hand.
+
+	Why: per ``docs/research/pipeda_venue_session_pii.md``, these
+	fields will carry Personally Identifiable Information (full
+	name, DOB, member ID, etc.) once Philadelphia rollout begins
+	populating them. They are null at Hamilton today, but the schema
+	is shared across venues — the moment any venue begins populating,
+	every Hamilton Operator with row-level read on Venue Session
+	would see PII they have no operational need for. Closing the
+	gap before Philadelphia ships is the design intent.
+
+	The 7 fields covered:
+	  - full_name, date_of_birth, member_id, identity_method,
+	    block_status, arrears_amount, eligibility_snapshot
+
+	scanner_data is DELIBERATELY EXCLUDED from this PR. It needs
+	``permlevel: 1`` PLUS encryption-at-rest; encrypt-at-rest needs
+	a key-management session and is deferred to Phase 2 per Chris
+	2026-05-01.
+
+	Static JSON parse — same philosophy as gap #1 / #2 / #3 tests.
+	"""
+
+	# All PII fields that must carry permlevel: 1.
+	# scanner_data deferred to Phase 2 — encrypt-at-rest required.
+	PII_FIELDS = (
+		"full_name",
+		"date_of_birth",
+		"member_id",
+		"identity_method",
+		"block_status",
+		"arrears_amount",
+		"eligibility_snapshot",
+	)
+	REQUIRED_PERMLEVEL = 1
+	MUST_HAVE_PERMLEVEL_READ = ("Hamilton Manager", "Hamilton Admin")
+	MUST_NOT_HAVE_PERMLEVEL_READ = ("Hamilton Operator",)
+
+	def setUp(self):
+		self.schema = _json.loads(_VENUE_SESSION_JSON.read_text())
+		self.fields_by_name = {
+			f.get("fieldname"): f for f in self.schema.get("fields", [])
+		}
+
+	def test_all_pii_fields_have_permlevel_1(self):
+		"""Every PII field must declare permlevel: 1.
+
+		Loops over PII_FIELDS so a field added to that tuple
+		automatically gets the same assertion. If a future
+		contributor adds a new PII field to Venue Session, add it
+		to the tuple here AND to the JSON schema together.
+		"""
+		missing_field = []
+		wrong_permlevel = []
+		for fname in self.PII_FIELDS:
+			fdef = self.fields_by_name.get(fname)
+			if fdef is None:
+				missing_field.append(fname)
+				continue
+			if fdef.get("permlevel") != self.REQUIRED_PERMLEVEL:
+				wrong_permlevel.append(
+					f"{fname} (permlevel={fdef.get('permlevel')!r})"
+				)
+		self.assertEqual(
+			missing_field, [],
+			f"PII fields no longer exist on Venue Session: "
+			f"{missing_field}. Either renamed (update PII_FIELDS) "
+			"or removed (revisit PIPEDA research first).",
+		)
+		self.assertEqual(
+			wrong_permlevel, [],
+			f"Venue Session PII fields missing "
+			f"permlevel: {self.REQUIRED_PERMLEVEL}: {wrong_permlevel}. "
+			"Without permlevel, every Hamilton Operator with row-level "
+			"read on Venue Session sees the PII the moment any venue "
+			"begins populating these fields (Philadelphia rollout). "
+			"PIPEDA gap.",
+		)
+
+	def test_managers_have_permlevel_1_read(self):
+		"""Manager + Admin must have permlevel-1 read rows.
+
+		Without these, the PII fields are invisible to the very
+		roles authorized to review them.
+		"""
+		permlevel_reads = {
+			p.get("role")
+			for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+		}
+		missing = [r for r in self.MUST_HAVE_PERMLEVEL_READ
+			if r not in permlevel_reads]
+		self.assertEqual(
+			missing, [],
+			f"Venue Session permission grid is missing permlevel-"
+			f"{self.REQUIRED_PERMLEVEL} read rows for {missing}. "
+			"Without these, the PII fields are hidden from the "
+			"managers/admins who need to see them. Add a permission "
+			'row {"permlevel": '
+			f'{self.REQUIRED_PERMLEVEL}, "read": 1, "role": '
+			'<role>} for each missing role.',
+		)
+
+	def test_operator_does_not_have_permlevel_1_read(self):
+		"""Hamilton Operator must NOT have permlevel-1 read.
+
+		The actual security invariant. A future fixture that adds
+		Operator at level 1 (by accident or misunderstanding the
+		PIPEDA design) is caught here before merge.
+		"""
+		offenders = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("permlevel") == self.REQUIRED_PERMLEVEL
+			and p.get("read")
+			and p.get("role") in self.MUST_NOT_HAVE_PERMLEVEL_READ
+		]
+		self.assertEqual(
+			offenders, [],
+			f"Venue Session grants permlevel-"
+			f"{self.REQUIRED_PERMLEVEL} read to a role that must not "
+			f"have it: {[p.get('role') for p in offenders]}. The PII "
+			"fields are PIPEDA-protected — Manager+ only. Remove the "
+			"offending permlevel row.",
+		)
+
+	def test_scanner_data_phase2_deferral_documented(self):
+		"""scanner_data is DELIBERATELY excluded from PII_FIELDS in
+		this PR; this test pins that exclusion and the Phase 2
+		deferral reason so a future session knows why it isn't here.
+
+		If scanner_data lands on this list (encrypt-at-rest done +
+		permlevel applied), update PII_FIELDS AND remove this test.
+		"""
+		self.assertNotIn(
+			"scanner_data", self.PII_FIELDS,
+			"scanner_data is in PII_FIELDS — but the masking PR "
+			"deferred its encrypt-at-rest to Phase 2 (key management "
+			"needs its own session). If you've completed the encrypt-"
+			"at-rest work AND added permlevel: 1, add scanner_data to "
+			"PII_FIELDS and remove this test.",
+		)
+		# Also assert the field still exists on the DocType so we
+		# don't silently lose it.
+		self.assertIn(
+			"scanner_data", self.fields_by_name,
+			"scanner_data field has disappeared from Venue Session. "
+			"Either it was renamed (update PII research and this "
+			"test), or removed (PIPEDA forward-compat plan needs "
+			"revisiting before any Philadelphia work).",
+		)
+
+
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
 
