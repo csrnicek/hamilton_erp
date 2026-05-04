@@ -398,8 +398,9 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 | Situation | Contact |
 |---|---|
 | Operational question, peak hours | Manager (on floor) |
-| Manager unavailable, system issue | Tier-2: [name + phone] |
-| Tier-2 unavailable, urgent | Chris: [phone] |
+| Manager unavailable, system issue (Tier-2 first call) | **Craig** (existing on-call contact — see venue front-desk binder for number) |
+| Tier-2 first call unreachable (Tier-2 second call) | **Austin LeFrense — 905-920-0487** |
+| Both Tier-2 contacts unreachable | Chris: [phone] |
 | Cash variance over $100 | Chris directly |
 | Wrong key + reconciliation looks broken | Chris directly |
 | Internet down + Stripe also down | Chris directly |

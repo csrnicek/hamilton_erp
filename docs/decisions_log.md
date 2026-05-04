@@ -1002,6 +1002,108 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **Migrate flag.** None.
 
 **References.** `frappe.realtime.socket` (Socket.IO client wrapper); `navigator.onLine` MDN; DEC-101 (overtime banner — different colour palette + animation, intentionally distinct).
+## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
+
+**Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.
+
+### Per-venue processor stack
+
+| Venue | Country | Stack | Processor relationship |
+|---|---|---|---|
+| **Hamilton** (Hamilton, ON) | Canada | Clover Flex C405 (per DEC-106) | **Fiserv direct** (Hamilton's existing MID, Direct Platform / Canada EMV) |
+| **DC** (Washington, DC) | USA | Slice/Clover terminal | **Fiserv ISO** (Slice Merchant Services rails through Fiserv) |
+| **Philadelphia** | USA | Slice/Clover terminal | **Fiserv ISO** (same as DC) |
+| Dallas, TX (Phase 3+) | USA | TBD | Per DEC-063 — venue-time decision |
+
+DC and Philadelphia share **identical adapter code** — same Slice/Clover stack, same Fiserv ISO upstream, same Commerce Hub / Rapid Connect API surface. One driver, two site configs.
+
+### Adapter region keying — `anvil_venue_id` only, no separate `fiserv_region` key
+
+The Fiserv adapter region (CA vs US) is **derived from `frappe.conf.anvil_venue_id`** at adapter init. No parallel `fiserv_region` config key (contrary to DEC-105's proposal). The mapping lives in the adapter module:
+
+```python
+_VENUE_TO_REGION = {
+    "hamilton": "CA",
+    "dc": "US",
+    "philadelphia": "US",
+    # Phase 3+: dallas, toronto, washington-backup, etc.
+}
+```
+
+**Why no separate key.** The venue is already the source of truth for everything region-specific — currency (CAD vs USD), tax rate, legal entity, CRA registration vs IRS EIN. A parallel `fiserv_region` key would risk drift: a misconfigured site could declare itself `anvil_venue_id="hamilton"` but `fiserv_region="US"` and silently route Hamilton transactions through the US driver. Deriving region from venue eliminates that drift class.
+
+**This supersedes DEC-105's open question 1.** When PR #221 lands, the adapter implementation reads `anvil_venue_id`; no `fiserv_region` key is added.
+
+### Build order for the US driver
+
+The Fiserv-USA driver builds **first for Philadelphia** as part of Philly's go-live. Same code is reused verbatim for DC when DC opens — no per-venue branching beyond the venue→region map. **Philly drives the timeline; DC inherits.**
+
+The Fiserv-CA driver (Hamilton) is the **Phase 2 hardware track** — answers DEC-105's open question 2. Hamilton's existing C405 runs standalone today (operator types the cart amount manually); the integrated path lands as part of Phase 2 alongside the receipt printer (DEC-098). No code in Phase 1 depends on the integrated path.
+
+### "Slice" — dual-pricing UX angle and the Fiserv-ISO rail-sharing finding
+
+The original Slice interest was the **dual-pricing UX model** (cash-discount / surcharge presentation that Slice's pizza POS made operationally clean for SAB merchants). Hamilton's interest was the *user-experience pattern* — how Slice presents transparent dual pricing at the terminal — not the upstream rails.
+
+Rail-sharing — the discovery that Slice/Clover (specifically **Slice Merchant Services**, not the Adyen-backed pizza-consumer app) routes through **Fiserv ISO** in the US — was a **separate, later research discovery** while evaluating DC/Philly options. It happens to align with Hamilton's existing Fiserv relationship (Canada side), which is why DC and Philly inherit the Fiserv adapter pattern.
+
+**Naming-collision warning preserved.** "Slice" appears in three commercial contexts:
+
+1. **Slice (consumer pizza POS)** — runs on Adyen. Not relevant to Hamilton.
+2. **Slice Merchant Services** — separate commercial entity; ISO routing through Fiserv. **This is the Slice that matters for DC and Philly.**
+3. **Slice / Clover terminals** — hardware sold under the Slice Merchant Services umbrella; same Clover hardware family as Hamilton's C405, different processor relationship (ISO vs direct).
+
+Future research that mentions "Slice" must disambiguate which entity is meant.
+
+### Per-site config shape
+
+Each site's `site_config.json`:
+
+```json
+{
+  "anvil_venue_id": "hamilton" | "dc" | "philadelphia" | ...,
+  "card_terminal_ip": "192.168.0.136",
+  "card_terminal_serial": "C045UQ24930247",
+  "fiserv_merchant_id": "1131224"
+}
+```
+
+Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDriver` or `FiservUSADriver`, dispatches to the terminal at `card_terminal_ip` using `fiserv_merchant_id`. No region-specific code paths in the calling app.
+
+### What this DEC closes
+
+- DEC-105 Q1 (config key name) → **no separate key; derive from `anvil_venue_id`**.
+- DEC-105 Q2 (Fiserv-CA driver placement) → **Phase 2 hardware track**.
+- DEC-105 Q3 (first US venue) → **Fiserv ISO via Slice/Clover for Philadelphia first**; same code reused for DC.
+- DEC-105 Q4 (Slice interest) → **dual-pricing UX**; rail-sharing is a separate, complementary finding for DC/Philly.
+
+### What this DEC does NOT promise
+
+- Does NOT define the Fiserv-USA driver implementation. Ships at DC's Phase 2 card-go-live.
+- Does NOT decide Dallas / Washington-backup / Toronto. Per DEC-063, those are venue-time choices.
+- Does NOT lock the dual-pricing UX implementation. That's a separate Phase 2+ design decision.
+
+### References
+
+- DEC-062 — Hamilton ERP / ANVIL Corp business classification.
+- DEC-063 — per-venue primary processor choice.
+- DEC-064 — primary + backup processor mandate.
+- DEC-096 — frappe/payments omitted (Path A).
+- DEC-105 — Pasigono / Fiserv research (the open questions answered here).
+- DEC-106 — Hamilton terminal Clover Flex C405; SAQ-A scope.
+
+---
+
+## Amendment 2026-05-04 — DEC-108: Tier-2 escalation contacts
+
+**Decision.** When Chris is unreachable, the front desk escalates in this order: (1) **Craig** — existing on-call contact, number in the venue front-desk binder; (2) **Austin LeFrense — 905-920-0487**.
+
+**Why.** The launch playbook and emergency runbook previously listed "Tier-2: [name + phone]" as a placeholder. With opening weekend approaching, the Tier-2 chain needs concrete names and a documented order so a stressed operator at 11pm does not have to guess. Two named fallbacks in series gives Hamilton a realistic chance of reaching a human inside the 30-minute SLA when Chris is on a flight or asleep.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — "Who to call" table now lists Craig as Tier-2 first call and Austin LeFrense (905-920-0487) as Tier-2 second call.
+- `docs/RUNBOOK_EMERGENCY.md` — added a "Tier-2 Escalation Chain" block under the contact header at the top of the file so the chain is visible from the first triage page.
+
+**References.** None — this is the first decision pinning the Tier-2 contact list. Future amendments to either contact (number change, replacement person) supersede this DEC.
 
 ---
 
