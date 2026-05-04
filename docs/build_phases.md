@@ -74,6 +74,13 @@ Sequenced build order for the Hamilton ERP custom Frappe app. Each phase must be
 - [ ] Realtime updates via `frappe.publish_realtime` (with `after_commit=True`) so board refreshes across tabs
 - [ ] Realtime listener cleanup when leaving the asset board page
 - [ ] Overtime overlay on tiles when session exceeds configured duration
+- [ ] **Reporting suite (Tasks 26-30)** — Manager-level operational reports required before production deployment:
+  - [ ] Daily Manager Report (Task 26)
+  - [ ] Shift Close / Cash Reconciliation Report (Task 27)
+  - [ ] Transaction Exception Report (Task 28)
+  - [ ] Payment Settlement Report (Task 29)
+  - [ ] Night Audit / Day Close Report (Task 30)
+  - **Status:** Currently deferred pending design decisions. Must be completed before production go-live.
 
 ### Test criteria
 
@@ -267,7 +274,6 @@ These items are explicitly deferred per build spec §14. Do not build them:
 - Local membership cache and sync
 - Shared terminal clerk model
 - Manager override hierarchy
-- Shift / day / weekly review reports (basic reporting only)
 - Vacant reversal and move guest
 - Maintenance condition overlay
 - Stripe payment integration
