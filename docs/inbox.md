@@ -2,6 +2,25 @@
 
 ## Queued
 
+### Pasigono / Fiserv research findings (2026-05-03)
+
+Research deliverable for DEC-105 — see `docs/research/merchant_processor_comparison.md` (sections "Slice (US venues) — likely on Adyen, NOT Fiserv/First Data", "Fiserv Canada vs USA — multi-venue card-adapter implications", "Architectural patterns from Pasigono") and `docs/decisions_log.md` DEC-105.
+
+Most actionable findings:
+
+- **Slice → Adyen, NOT Fiserv.** The hypothesis that nearby US restaurants on Slice share Hamilton's upstream Fiserv rails is **refuted**. Slice's pizza-POS partnered with Adyen in July 2021 (https://www.adyen.com/press-and-media/slice-partners-with-adyen-to-enhance-pos-payment-solutions). Hamilton-USA on Fiserv and Slice on Adyen are separate rails. Naming-collision warning: "Slice Merchant Services" is a separate Fiserv reseller, not the same company.
+- **Fiserv Canada and Fiserv USA are different products.** Canada uses the Direct Platform (message-encoded, Hamilton's 10-field EMV spec from 2026-04-28); USA uses Commerce Hub (REST/JSON) or Rapid Connect (legacy). Auth model, CVM rules, contactless caps, settlement, refund / void semantics, and currency all diverge per region.
+- **Interac Flash caps are $250 CAD per tap / $500 CAD per day cumulative.** PIN bypass is NOT permitted on Interac. The Canadian driver in the adapter must surface PIN prompts via the Clover Flex SDK; the US driver can accept No-CVM below network floors.
+- **Pasigono has no merchant abstraction — that is the gap Hamilton's adapter fills.** Borrow Pasigono's POS-Profile-as-config-source pattern for *station-level* settings. Reject the silent-failure receipt printing, the inlined Stripe SDK calls in `submit_invoice`, the global `window.*` state mutation, and the `frappe.dom.freeze()` during terminal init.
+- **Custom Fiserv adapter implementation is gated on this research being captured.** DEC-105 documents one-adapter / two-driver / per-site config (`frappe.conf.fiserv_region`). Implementation lands in a future PR — do NOT start coding the adapter until DEC-105 is merged.
+
+Open questions for Chris (deferred to implementation PR):
+- Confirm `frappe.conf.fiserv_region` as the config key name, vs alternatives like `country_code` or `anvil_country`.
+- Confirm Hamilton's Phase 2 hardware track is the right place for Fiserv-CA driver work, or whether it should be a standalone PR.
+- US-side: is the first US venue going to launch on Fiserv-US (Commerce Hub) per DEC-063, or is the Stripe Terminal recommendation in `merchant_processor_comparison.md` still the active plan? The adapter shape works for both, but which driver to build first depends on this answer.
+
+---
+
 Fix two CI failures — commit to existing PR branches, do not open new PRs:
 1. **PR #122**: `tip_pull_currency` returns "CAD" instead of reading `frappe.conf.anvil_currency` — find where it gets set and wire it through. Run failing test to confirm.
 2. **PR #123**: `_ensure_test_item()` in `test_zero_value_invoice.py` missing `stock_uom` on Item fixture — add `stock_uom = "Nos"` before insert. Run failing tests to confirm.

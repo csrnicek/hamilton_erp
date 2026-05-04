@@ -976,6 +976,110 @@ The skill package documents *generic Frappe patterns*. Hamilton's `decisions_log
 
 ---
 
+## Amendment 2026-05-03 — DEC-105: Multi-venue Fiserv adapter — config-driven CA / USA routing
+
+**Decision.** Hamilton's custom Fiserv card adapter (per DEC-096, since `frappe/payments` is omitted) ships as **one adapter class with two driver implementations**, selected at runtime by a per-site `frappe.conf.fiserv_region` value (`"CA"` or `"US"`) carried in `site_config.json`. App-level code calls `adapter.authorize(...)`, `adapter.capture(...)`, `adapter.void(...)`, `adapter.refund(...)`, `adapter.get_status(...)` and never branches on region.
+
+**Why one adapter, two drivers.** The four venues split across two regulatory regions: Hamilton (Canada) on Fiserv-CA / Direct Platform; Philadelphia / DC / Dallas / Washington (USA) on Fiserv-US (Commerce Hub or Rapid Connect). Per the research in `docs/research/merchant_processor_comparison.md` ("Fiserv Canada vs USA — multi-venue card-adapter implications" section, added 2026-05-03), the two regions differ on transport (Direct Platform message vs Commerce Hub REST), CVM rules (Canada Interac mandates PIN; US allows signature-CVM and No-CVM below network floors), contactless caps (Interac Flash $250 CAD per tap / $500 CAD per day cumulative vs US per-network $50-100 USD floors), required EMV fields (Hamilton's 10-field spec from `docs/inbox.md` 2026-04-28 vs Commerce Hub's tag set), settlement / refund / void semantics, currency (CAD-only on the CA MID, USD-only on the US MID), and compliance overhead (PIPEDA on the CA side, state-by-state PCI on the US side). Putting region branches inside app-level code would scatter region knowledge across `submit_retail_sale`, refund flows, reconciliation, and reporting. Containing them inside the driver pair keeps app-level code region-agnostic.
+
+**Why per-site config, not per-MID detection.** A site is a venue. A venue is in exactly one region for the lifetime of its lease. `site_config.json` is the venue's identity file and is read at app startup. Detecting region from MID prefix would couple the adapter to merchant-account numbering conventions that Fiserv can change. `frappe.conf.fiserv_region` is explicit, auditable, and trivially overridable in tests.
+
+**Driver responsibilities (region-internal):**
+- Transport (Direct Platform message-encoded vs Commerce Hub REST/JSON)
+- Auth (per-MID credentials + PIN-block + SRED on CA; API key + HMAC on US)
+- CVM rules (Canada PIN-mandatory for Interac; US signature-CVM-or-No-CVM per network floor)
+- EMV field assembly (Hamilton 10-field spec vs Commerce Hub tag set, both built from terminal SDK output)
+- Currency enforcement (CAD-only / USD-only; mismatch raises a clear error)
+- Refund / void semantics (Interac PIN-required for refund-with-card-present; Visa/MC reference-only)
+- Settlement reporting normalized to a common shape: `{net, gross, fees, count, currency, date}`
+
+**App-level adapter API (region-agnostic):**
+
+```python
+adapter = FiservAdapter()  # __init__ reads frappe.conf.fiserv_region
+adapter.authorize(amount, currency, terminal_id, idempotency_key) -> AuthResult
+adapter.capture(transaction_id, amount) -> CaptureResult
+adapter.void(transaction_id) -> VoidResult
+adapter.refund(transaction_id, amount) -> RefundResult
+adapter.get_status(transaction_id) -> StatusResult
+adapter.daily_settlement_report(date) -> SettlementReport
+```
+
+**Why not implement Pasigono's pattern?** Pasigono (https://github.com/aisenyi/pasigono) is the closest community-visible example of an ERPNext-app POS with Stripe Terminal + raw printing. Per the "Architectural patterns from Pasigono" section in `docs/research/merchant_processor_comparison.md`, Pasigono has **no merchant abstraction layer at all** — Stripe SDK calls are inlined in `submit_invoice`, payment state is inspected by manual loops over `frm.doc.payments[]`, and global state is mutated on `window.*`. For a single-pizzeria customer with one processor that is sufficient. For Hamilton's two-region four-venue rollout (DEC-062 / DEC-063 / DEC-064) it would create the exact app-level branching this decision is rejecting. Borrow Pasigono's POS-Profile-as-config-source idea for *station-level* config (printer name, terminal serial); reject Pasigono's no-abstraction shape.
+
+**Rejected alternative — separate `HamiltonFiservCAAdapter` and `HamiltonUSAdapter` classes with no shared API.** Considered. Rejected because the resulting app-level code is `if site.country == "CA": ...` branching, which is exactly the region-knowledge-leak this decision is preventing. The two-driver-one-interface pattern keeps app code branch-free.
+
+**Rejected alternative — wait until US venues launch to design the abstraction.** Considered. Rejected because Hamilton (CA) ships first. If the adapter is written with no driver abstraction, the second venue's launch becomes a refactor instead of a config change. Per `docs/lessons_learned.md` LL-031 ("the abstraction you skip ships as the integration you regret"), the abstraction is cheaper to build at first-implementation than to retrofit.
+
+**What changed.** Documentation only — no code change in this PR. DEC-105 added; `docs/research/merchant_processor_comparison.md` extended with three new sections (Slice → Adyen finding, Fiserv CA vs US delta table, Pasigono patterns); `docs/inbox.md` updated under "Queued" with the actionable findings.
+
+**Implementation gating.** The custom Fiserv adapter implementation (Phase 2 hardware track) is **gated on this research being captured**. Implementation lands in a future PR; this PR is design-time documentation only.
+
+**References.**
+- `docs/research/merchant_processor_comparison.md` (sections "Slice (US venues) — likely on Adyen, NOT Fiserv/First Data", "Fiserv Canada vs USA — multi-venue card-adapter implications", "Architectural patterns from Pasigono", added 2026-05-03)
+- DEC-062 — Hamilton ERP / ANVIL Corp business classification
+- DEC-063 — Per-venue primary processor choice
+- DEC-064 — Every venue must have a primary AND backup processor
+- DEC-096 — `frappe/payments` omitted; Hamilton custom adapter
+- DEC-098 — receipt-printing pipeline (Epson TM-T20III, TCP/9100, `python-escpos`)
+- Pasigono repo: https://github.com/aisenyi/pasigono
+- Slice + Adyen partnership: https://www.adyen.com/press-and-media/slice-partners-with-adyen-to-enhance-pos-payment-solutions
+- Fiserv Canada EMV: https://developer.fiserv.com/product/DirectPlatformSpecifications/docs/?path=docs/EMV/EMVCanadaImplementationGuide.md
+- Fiserv Commerce Hub EMV (US): https://developer.fiserv.com/product/CommerceHub/docs/?path=docs/In-Person/Encrypted-Payments/EMV.md
+- Interac Flash $250/$500 limits: https://blog.rospertech.com/interac-flash-pos-canada-guide/
+
+---
+
+## Amendment 2026-05-04 — DEC-106: Hamilton terminal confirmed Clover Flex C405; SAQ-A PCI scope
+
+**Decision.** Hamilton's installed payment terminal is a **Clover Flex C405**. Phase-2 card-adapter integration uses the **Clover Connect API over WiFi**. PCI scope is **SAQ-A**.
+
+**Hardware confirmed 2026-05-04:**
+- **Model:** Clover Flex C405
+- **Serial:** `C045UQ24930247`
+- **Hardware revision:** 1.01
+- **OS:** Android 10
+- **SRED:** Enabled (Secure Reading and Exchange of Data)
+- **Network:** Venue WiFi at `192.168.0.136`
+
+**Why SAQ-A.** SRED hardware on the C405 encrypts card data inside the terminal. The iPad / Hamilton ERP adapter receives an **encrypted token only** — never raw PAN, never CVV, never card-data-in-transit. Under PCI-DSS, that puts Hamilton in **SAQ-A** (the simplest of the SAQ tiers). Avoids:
+- Annual PCI-DSS QSA assessment ($5–50k/year)
+- Network-segmentation audit
+- CDE (cardholder data environment) ASV scans
+- The full SAQ-D quarterly evidence pack
+
+**Why SAQ-A is durable, not aspirational.** SRED is hardware-enabled at the C405 level — not a software setting an operator can flip. Every transaction routes through the encryption boundary; there's no code path where the iPad could observe raw card data even if the adapter had a bug. SAQ-A is the floor, not the ceiling — the PCI assessment defends itself by hardware design, not by application code.
+
+**Phase-2 adapter design (target).**
+1. Receive cart total from `submit_retail_sale`.
+2. Push the amount to the C405 via Clover Connect API.
+3. C405 prompts the customer for tap / chip / swipe; performs the EMV transaction; returns auth code + last 4 + txn ID + encrypted token.
+4. Adapter writes those four fields into the Sales Invoice payment line.
+5. Operator never types the amount. Reconciliation has a system-side audit trail tying ERPNext's amount to the C405's batch report.
+
+The adapter MUST NOT log the encrypted token verbatim, MUST NOT persist it beyond the SI payment row, and MUST treat the WiFi connection as untrusted (TLS validation strict; no cert pinning bypasses).
+
+**Multi-venue rollout.** Per DEC-062 / DEC-063 / DEC-064, each US venue gets its own Clover Flex on its own venue WiFi. The adapter pattern is one-config-per-venue: each site's `Hamilton Settings.card_terminal_ip` / `card_terminal_serial` live on the per-site singleton, no per-venue code branches.
+
+**What this DEC closes.**
+- TBD on Hamilton's terminal model — closed.
+- "iPad-integration design deferred until model confirmed" gate — opened. Phase-2 adapter work has a concrete hardware target.
+- PCI scope question — pinned at SAQ-A.
+
+**What this DEC does NOT promise.**
+- Does NOT define the Phase-2 adapter implementation. That ships as a separate code PR after the Pasigono / Fiserv research (DEC-105) lands.
+- Does NOT fix any Phase 1 code path. Hamilton operates today with a standalone C405 — operator types the cart amount manually. Phase-2 eliminates the typing.
+
+**References.**
+- `docs/design/pos_hardware_spec.md` §2 Card Reader.
+- `docs/design/cash_reconciliation_phase3.md` — Hamilton's confirmed terminal section.
+- `docs/research/merchant_processor_comparison.md` — Clover Flex C405 entry.
+- DEC-062 / DEC-063 / DEC-064 — multi-venue rollout architecture.
+- DEC-096 — frappe/payments omitted (Path A).
+- DEC-105 — Pasigono / Fiserv research (in flight).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:

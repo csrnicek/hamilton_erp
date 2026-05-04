@@ -55,14 +55,14 @@ Key insight: **one scanner covers both use cases.** The Voyager 1602g reads:
 - 30-day termination notice (vs zero-day for processors with stricter perception)
 - Lower-risk MATCH-list exposure (R-009)
 
-**Hamilton's existing terminal status (NEW 2026-05-01):** Hamilton currently has a **rented, standalone Fiserv terminal** at the front desk. Specific model is **TBD — Chris will provide it later**. iPad-integration design for Hamilton is **deferred until the model is confirmed**. Once known, the next research step is whether that specific model has an iPad-integrated SDK (Clover Connect compatible? other?). If yes → design the integration. If no → recommend swap at lease renewal to a Clover Flex or equivalent (per `docs/research/merchant_processor_comparison.md` "Fiserv / Clover terminal hardware" section).
+**Hamilton's terminal — CONFIRMED 2026-05-04 (DEC-106).** **Clover Flex C405**. Serial `C045UQ24930247`, hardware revision 1.01, Android 10, **SRED enabled**, on the venue WiFi at `192.168.0.136`. iPad integration uses the **Clover Connect API over WiFi**. SRED confirms **SAQ-A PCI scope** — the adapter receives an encrypted token only, never raw card data. See DEC-106 in `docs/decisions_log.md` for the full spec + SAQ-A reasoning + Phase-2 integration plan.
 
 **Card-present rule (NEW 2026-05-01):** Hamilton (and all ANVIL venues) accept **card-present transactions only** — physical card chip / tap / swipe OR digital wallets (Apple Pay, Google Pay, contactless). **No card-not-present (manual key-in) anywhere.** Every recommended terminal MUST support **NFC / contactless** as a hard requirement. This rules out older Fiserv FD150/FD130 and any terminal without NFC.
 
 **Hardware integration paths (in preference order):**
 
-1. **Fiserv-supplied terminal** — physical pole-mounted or counter-mounted EMV+NFC pad. Cleanest integration if the model supports the iPad SDK path (Clover Connect API for Clover-line models). Currently TBD pending Hamilton's existing-model confirmation.
-2. **Clover Flex** (handheld via Clover Connect API) — recommended if Hamilton needs a fresh purchase / lease alongside the existing Fiserv MID. Per `merchant_processor_comparison.md` Fiserv / Clover terminal section.
+1. **Fiserv-supplied terminal** — physical pole-mounted or counter-mounted EMV+NFC pad. ~~Currently TBD pending Hamilton's existing-model confirmation.~~ **2026-05-04: CONFIRMED — Hamilton runs a Clover Flex C405 (option 2 below). DEC-106.**
+2. **Clover Flex C405** (handheld via Clover Connect API) — **Hamilton's installed terminal** as of 2026-05-04 (DEC-106). Serial `C045UQ24930247`, HW 1.01, Android 10, SRED enabled, WiFi @ 192.168.0.136. Phase-2 adapter integrates via Clover Connect API over WiFi.
 3. **Stripe Terminal** (BBPOS WisePOS E or Stripe S700) — well-documented fallback for new venues that don't inherit Hamilton's Fiserv MID. Works in CA + US.
 4. **Square Terminal** — skip per DEC-062 / DEC-063 rationale: Square's TOS is stricter on bathhouse-hospitality merchants (their internal stance, not Hamilton's classification — but it raises termination risk).
 5. **Helcim Smart Terminal** — Helcim is Canadian-flagship and explicit-friendly toward bathhouse-hospitality businesses. Useful as Hamilton's Phase 2 backup processor (per DEC-064) even though Hamilton itself is standard-classified.
@@ -243,7 +243,7 @@ This spec is for Phase 2+ work. Phase 1 (current) ships with no hardware integra
 
 ## Open questions for Chris
 
-1. **Existing Fiserv terminal hardware:** Is there a specific Fiserv pole-mount model already in use at Hamilton, or is the relationship at the MID level only (no installed terminal yet)? This determines whether to defer to the existing model or recommend Stripe Terminal as the new install.
+1. ~~**Existing Fiserv terminal hardware:** Is there a specific Fiserv pole-mount model already in use at Hamilton, or is the relationship at the MID level only (no installed terminal yet)? This determines whether to defer to the existing model or recommend Stripe Terminal as the new install.~~ **CLOSED 2026-05-04 (DEC-106):** Clover Flex C405, serial `C045UQ24930247`, SRED enabled, WiFi @ 192.168.0.136. Adapter integrates via Clover Connect API. SAQ-A scope.
 2. **DC's 3-tablet setup:** Confirm the 3 tablets are 3 independent transaction stations (each with own scanner / printer / drawer / card reader)? If so, the cost estimate above is correct. If they share peripherals, the cost is lower.
 3. **Label printer use case for Hamilton specifically:** Locker key tags are the primary use case — is that sufficient justification, or are there additional Hamilton flows (kitchen, retail SKU labels) that change the requirements?
 4. **Receipt printer LAN/WiFi:** Can each Hamilton station get a wired LAN drop, or is WiFi required? Wired is more reliable; WiFi is more flexible. Both Epson TM-T20III variants support both.
