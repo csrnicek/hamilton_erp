@@ -1,5 +1,9 @@
 # Inbox
 
+## Pending from Chris
+
+- **URGENT — retail item list needed this week.** 25+ food / drink / retail items with prices and HST status (taxable vs exempt). Required before go-live to seed the POS item catalogue. Chris to provide by end of week.
+
 ## Queued
 
 Fix two CI failures — commit to existing PR branches, do not open new PRs:
