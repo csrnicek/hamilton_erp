@@ -4,6 +4,31 @@
 
 - **URGENT — retail item list needed this week.** 25+ food / drink / retail items with prices and HST status (taxable vs exempt). Required before go-live to seed the POS item catalogue. Chris to provide by end of week.
 
+## Overnight queue — 2026-05-03
+
+### Pre-go-live UI fix — Asset Board timestamps must show full date and time
+
+All timestamps displayed in the Asset Board UI currently render as time-only (e.g. `"by ADMINISTRATOR at 01:50 PM"`). Pre-go-live, every visible timestamp must include the date so operators reading older audit trail rows aren't confused about which day an event happened.
+
+**Target format:** `"Returned to service by ADMINISTRATOR at 01:50 PM · May 3, 2026"`
+(Date format `MMM D, YYYY` separated from the time by a middle-dot ` · `.)
+
+**Scope — audit every place the UI renders a timestamp and update to date+time format.** Known surfaces that need to be checked (not exhaustive):
+
+- OOS / Return-to-Service modal "SET" line — `hamilton_erp/public/js/asset_board.js`
+- Audit log row rendering (Asset Status Log) — same file or a sibling
+- Dirty-tile elapsed-time labels — currently relative ("26h 24m elapsed") which is fine; do NOT change those, but confirm nothing relies on bare time strings
+- Tile expanded-view metadata
+- Cart drawer / receipt preview timestamps
+- Shift Summary modal
+- Any `frappe.format(...)` or `moment(...)` calls that produce a bare time string
+
+**Implementation note:** add a single helper (e.g. `formatAssetBoardTimestamp(ts)` in `asset_board.js`) that all callers route through. That way one change point updates every surface and a future format adjustment is a one-line edit.
+
+**Test:** add a contract test in `test_asset_board_rendering.py` that asserts the helper output matches the `"HH:MM AM/PM · MMM D, YYYY"` shape for a known input. Pin the format so future changes don't regress.
+
+**One PR. Auto-merge enabled.**
+
 ## Queued
 
 Fix two CI failures — commit to existing PR branches, do not open new PRs:
