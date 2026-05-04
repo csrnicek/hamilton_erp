@@ -907,6 +907,123 @@ class TestCompAdmissionLogRuntimeMasking(IntegrationTestCase):
 			"missing permlevel-1 row on Hamilton Manager before merging.",
 		)
 
+# ---------------------------------------------------------------------------
+# Field masking audit — gap #3 (Task 25 item 7 / Cash Drop owner-isolation)
+# ---------------------------------------------------------------------------
+
+
+_CASH_DROP_JSON = (
+	PACKAGE_ROOT
+	/ "hamilton_erp"
+	/ "doctype"
+	/ "cash_drop"
+	/ "cash_drop.json"
+)
+
+
+class TestCashDropOwnerIsolation(IntegrationTestCase):
+	"""Field-masking audit gap #3 — Hamilton Operator must only see
+	Cash Drop rows they own.
+
+	Different shape from gaps #1 and #2: those used permlevel for
+	field-level masking. Cash Drop's ``declared_amount`` is operator-
+	typed at create time (``reqd: 1``), so permlevel won't work — it
+	gates both read and write, breaking the create flow.
+
+	The right shape is row-level isolation via ``if_owner: 1`` on the
+	Operator perm row. This restricts Operator's CRUD to their own
+	rows; peer-Operators see no rows at all (stricter than the audit's
+	"mask the field" framing — entire row hidden, not just
+	declared_amount). Manager and Admin perm rows have no if_owner
+	constraint and continue to see all rows for shift reconciliation
+	and audit.
+
+	The audit's stricter outcome is intentional. Cash Drop is a
+	write-once event from any single operator's perspective (create,
+	save, walk away); the reconciliation / audit flow is Manager-
+	scope. Hiding the row entirely from peer-Operators removes the
+	margin-leak signal AND any incidental info (timestamp, who-drop-
+	when) that peer-visibility would carry.
+
+	Static JSON parse — same philosophy as the gap #1 / #2 tests.
+	"""
+
+	OPERATOR_ROLE = "Hamilton Operator"
+	MUST_NOT_HAVE_IF_OWNER = ("Hamilton Manager", "Hamilton Admin")
+
+	def setUp(self):
+		self.schema = _json.loads(_CASH_DROP_JSON.read_text())
+
+	def test_operator_perm_has_if_owner(self):
+		"""The operator row MUST have if_owner: 1.
+
+		Without it, every Hamilton Operator sees every other
+		operator's Cash Drop rows — peer margin-leak path the audit
+		gap #3 is closing.
+		"""
+		rows = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("role") == self.OPERATOR_ROLE
+		]
+		self.assertEqual(
+			len(rows), 1,
+			f"Expected exactly one perm row for {self.OPERATOR_ROLE!r} "
+			f"on Cash Drop; found {len(rows)}. Test assumes single-row "
+			"model — if multi-row perms get added, update this test.",
+		)
+		self.assertEqual(
+			rows[0].get("if_owner"), 1,
+			f"Cash Drop {self.OPERATOR_ROLE!r} perm row is missing "
+			"if_owner: 1. Without it, Operator sees every other "
+			"operator's drops — gap #3 margin-leak path. Add "
+			'"if_owner": 1 to the existing perm row.',
+		)
+
+	def test_managers_and_admins_do_not_have_if_owner(self):
+		"""The negative case: Manager and Admin must NOT have
+		if_owner.
+
+		Manager/Admin must see all rows for end-of-shift
+		reconciliation and audit. A future fixture that accidentally
+		narrows Manager/Admin scope is caught here.
+		"""
+		offenders = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("role") in self.MUST_NOT_HAVE_IF_OWNER
+			and p.get("if_owner")
+		]
+		self.assertEqual(
+			offenders, [],
+			f"Cash Drop has if_owner: 1 on a role that must see all "
+			f"rows: {[p.get('role') for p in offenders]}. Manager and "
+			"Admin need cross-operator visibility for reconciliation "
+			"and audit — remove the if_owner from those rows.",
+		)
+
+	def test_operator_retains_read_write(self):
+		"""Sanity: operator-row's existing read+write+create must
+		still be present.
+
+		if_owner narrows the scope of an existing perm; it doesn't
+		replace it. If a future edit accidentally drops read/write/
+		create while adding if_owner, Operators can't make their own
+		drops anymore — the create flow breaks silently.
+		"""
+		rows = [
+			p for p in self.schema.get("permissions", [])
+			if p.get("role") == self.OPERATOR_ROLE
+		]
+		self.assertEqual(len(rows), 1, "expected single Operator row")
+		row = rows[0]
+		for flag in ("read", "write", "create"):
+			self.assertEqual(
+				row.get(flag), 1,
+				f"Cash Drop {self.OPERATOR_ROLE!r} lost {flag!r} when "
+				"if_owner was added. The create flow needs all three; "
+				"if_owner only narrows the row scope, it doesn't "
+				"remove these CRUD flags.",
+			)
+
 
 def tearDownModule():
 	"""Restore dev state wiped by this module's tests.
