@@ -256,13 +256,22 @@ The standalone-terminal failure modes are real and operator-training cannot full
 
 **Phase 2+: integrate the card terminal with ERPNext via the Clover Connect API. ERPNext pushes the cart amount to the terminal. The operator cannot change it. The transaction completes against the system-of-record amount. The terminal's response (auth code, last 4, txn ID) is captured directly into the Sales Invoice payment line, so reconciliation has a system-side audit trail.**
 
-### Hamilton's current terminal — confirmed Clover Flex C405
+### Hamilton's current terminal — confirmed Clover Flex C405 (DEC-106, 2026-05-04)
 
-Hamilton's existing Fiserv MID is paired with a **Clover Flex C405** (Fiserv-owned hardware, Clover-branded, supports Clover Connect API integration). This was confirmed in the 2026-05-01 session — the morning audit (PART 1 row #4) flagged the model as "TBD"; it is now identified.
+Hamilton's existing Fiserv MID is paired with a **Clover Flex C405**, confirmed 2026-05-04 in DEC-106:
 
-The C405 is integration-capable: it supports the Clover Connect API for push-cart-from-POS integration, which is exactly the path needed to eliminate operator typing. This means Phase 2's iPad-to-terminal integration work has a concrete target — design against the C405's Clover Connect API documentation, not against a hypothetical "some Fiserv terminal."
+- **Serial:** `C045UQ24930247`
+- **Hardware revision:** 1.01
+- **OS:** Android 10
+- **SRED:** Enabled
+- **Network:** Venue WiFi at `192.168.0.136`
+- **Integration path:** Clover Connect API over WiFi
 
-This finding should be captured in `docs/decisions_log.md` (or appended to the existing Fiserv terminal entry in `docs/inbox.md`'s open-tasks list) before this design intent is referenced as authoritative. Flagged as a follow-up, not landed in this PR.
+**SRED → SAQ-A PCI scope.** The terminal performs Secure Reading and Exchange of Data; the iPad / Hamilton ERP adapter receives an encrypted token only, never raw card data. This puts Hamilton in **SAQ-A PCI scope** (the simplest tier) — the expensive PCI-DSS QSA assessment + network-segmentation audit work ($5–50k/year) is avoided.
+
+**Phase 2 integration target.** The card-adapter design pushes the cart amount to the C405 via Clover Connect API, the operator confirms on the terminal screen, the C405 performs the EMV transaction, and returns auth code + last 4 + txn ID + encrypted token to the iPad. The adapter writes those four fields into the Sales Invoice payment line. Operator never types the amount. Reconciliation has a system-side audit trail tying ERPNext's amount to the C405's batch report.
+
+See DEC-106 in `docs/decisions_log.md` for the full spec, the SAQ-A reasoning, and the Phase-2 adapter integration plan.
 
 ### Settlement reconciliation as audit layer
 
