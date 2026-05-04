@@ -1223,6 +1223,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.1; skill `tob-sharp-edges`.
 
+## Amendment 2026-05-04 — DEC-094: Document `assign_asset_to_session` permission contract (audit S5.2)
+
+**Decision.** Keep the `frappe.has_permission("Venue Asset", "write", throw=True)` gate at the top of `assign_asset_to_session` — it matches the Phase-2 contract. Update the docstring so the role-gate-then-no-op behavior is explicit: authorized callers see `{"status": "phase_1_disabled", ...}`; unauthorized callers see a 403. The two response shapes are intentional, not a UX inconsistency.
+
+**Why.** Audit S5.2 flagged that operators see different shapes depending on role. The audit's recommendation is documentation, not behavior change. The gate stays because Phase 2 needs it and removing it would expose an unguarded surface; the docstring now states the contract clearly.
+
+**What changed.** `hamilton_erp/api.py::assign_asset_to_session` docstring extended with an Authorization paragraph referencing DEC-094 and DEC-080.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S5.2; DEC-080 (Phase-2 SI-owner check).
+
 ## Amendment 2026-05-04 — DEC-097: Club Hamilton GST/HST registration number — known value, entered via Desk
 
 **Decision.** Club Hamilton's CRA-issued GST/HST registration number is **`105204077RT0001`**. This value is the source of truth for the receipt-printing flow, customer-facing tax documents, and any CRA-mandated disclosure. It lives on the `Hamilton Settings` singleton in a field called `gst_hst_registration_number` (added by the receipt-printing PR). The value is entered **via Frappe Desk on first production install** — it is NOT hardcoded anywhere in the repository.

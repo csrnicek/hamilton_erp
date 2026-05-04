@@ -353,6 +353,16 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	   instead of stranding the operator with an exception.
 
 	Phase 2 will replace this body with the real assignment flow.
+
+	Authorization (DEC-094 / S5.2 documentation): the
+	``frappe.has_permission("Venue Asset", "write", throw=True)`` gate
+	below is intentional and survives into Phase 2. Authorized callers
+	(Hamilton Operator+) reach the logged no-op return; unauthorized
+	callers receive a 403. The phase_1_disabled envelope is therefore
+	**not** a guarantee that every caller sees the same response — it
+	is the response shape for callers who hold the role gate. See
+	DEC-080 for the additional Phase-2 SI-owner check that will layer
+	on top of this perm check.
 	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
 	# DEC-089 / S4.1: single f-string covering the whole message. The previous
