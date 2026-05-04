@@ -131,12 +131,19 @@ def get_asset_board_data() -> dict:
 		a["name"] for a in assets if a["status"] == "Out of Service"
 	]
 	oos_operators: dict[str, str] = {}
+	oos_log_reasons: dict[str, str] = {}
 	if oos_asset_names:
 		# Fetch all OOS-transition log entries for these assets in one
 		# query, then keep the most-recent per asset.
+		# Also pluck `reason` from the same row — it's a durable
+		# fallback when Venue Asset.reason is empty (legacy / migrated
+		# rows OOS'd before the asset-row reason persistence landed,
+		# or a future code path that fails to write it). The audit log
+		# always carries the reason because set_asset_out_of_service
+		# throws if reason is blank (lifecycle.py:433).
 		log_rows = frappe.get_all(
 			"Asset Status Log",
-			fields=["venue_asset", "operator", "timestamp"],
+			fields=["venue_asset", "operator", "timestamp", "reason"],
 			filters={
 				"venue_asset": ["in", oos_asset_names],
 				"new_status": "Out of Service",
@@ -152,6 +159,8 @@ def get_asset_board_data() -> dict:
 				continue
 			seen.add(asset_name)
 			latest_by_asset[asset_name] = r["operator"] or ""
+			if r.get("reason"):
+				oos_log_reasons[asset_name] = r["reason"]
 			if r["operator"]:
 				operator_user_ids.add(r["operator"])
 		# Resolve user IDs to full names in a single query.
@@ -174,6 +183,13 @@ def get_asset_board_data() -> dict:
 			oos_operators.get(a["name"])
 			if a["status"] == "Out of Service" else None
 		)
+		# Reason fallback: if Venue Asset.reason is empty for an OOS row,
+		# pull the most-recent Asset Status Log entry's reason. Closes
+		# the "Reason unknown" UI bug for legacy / migrated assets where
+		# the asset-row reason was never persisted but the audit log
+		# captured the reason at OOS-entry time.
+		if a["status"] == "Out of Service" and not a.get("reason"):
+			a["reason"] = oos_log_reasons.get(a["name"]) or a.get("reason")
 
 	# V9.1 retail amendment: enrich payload with retail Items grouped by
 	# Item Group when the venue has `retail_tabs` configured in
