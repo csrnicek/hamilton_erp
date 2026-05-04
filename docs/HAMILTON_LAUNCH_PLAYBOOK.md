@@ -463,7 +463,7 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 
 ## Hardware / Network
 
-- [ ] All tablets tested on Hamilton's actual Wi-Fi (not just home)
+- [ ] Hamilton tablet count confirmed at **1** (DEC-111; single front-desk station). All tablets tested on Hamilton's actual Wi-Fi (not just home)
 - [ ] Backup internet confirmed and tested (4G hotspot or secondary ISP)
 - [ ] Tablets have screen lock with timeout (don't leave them unlocked at front desk)
 - [ ] Stripe (or chosen processor) terminal hardware tested in Hamilton's actual network conditions
