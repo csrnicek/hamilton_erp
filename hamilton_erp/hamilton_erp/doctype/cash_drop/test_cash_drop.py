@@ -210,10 +210,28 @@ class TestCashDropTipPullSchema(IntegrationTestCase):
 	def tearDown(self):
 		frappe.db.rollback()
 
+	def _make_shift(self, operator: str = "Administrator") -> object:
+		"""Create an Open Shift Record. Cash Drop validates shift_record presence
+		(T1-4) so every drop in this class needs one — same pattern as
+		TestCashDrop._make_shift above."""
+		return frappe.get_doc(
+			{
+				"doctype": "Shift Record",
+				"operator": operator,
+				"shift_date": today(),
+				"status": "Open",
+				"shift_start": now_datetime(),
+				"float_expected": 300,
+			}
+		).insert(ignore_permissions=True)
+
 	def _make_drop(self, **overrides):
+		operator = overrides.get("operator", "Administrator")
+		shift_record = overrides.pop("shift_record", None) or self._make_shift(operator=operator).name
 		base = {
 			"doctype": "Cash Drop",
-			"operator": "Administrator",
+			"operator": operator,
+			"shift_record": shift_record,
 			"shift_date": today(),
 			"shift_identifier": "Evening",
 			"drop_type": "Mid-Shift",
