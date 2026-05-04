@@ -1232,6 +1232,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/api.py::assign_asset_to_session` docstring extended with an Authorization paragraph referencing DEC-094 and DEC-080.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S5.2; DEC-080 (Phase-2 SI-owner check).
+## Amendment 2026-05-04 — DEC-095: Accept client-side cart name display (audit S5.3)
+
+**Decision.** The cart drawer continues to render `c.item_name` from client-side state. The operator confirmation modal does not switch to displaying server-resolved `item_name`. The server-side rate authority on `submit_retail_sale` (api.py:570-580) remains the integrity backstop on price; `item_code` is the validated identifier the SI line uses.
+
+**Why.** Audit S5.3 is informational — exploiting requires browser-side compromise of the operator's terminal. Hamilton's threat model treats the operator terminal as semi-trusted (DEC-005 blind cash assumes the operator can read whatever the screen shows). A modal redesign to surface server-resolved names would add a round trip on every cart confirm and change the operator UX flow for a theoretical attack vector. Phase-2 follow-up: when the cash-payment confirmation flow refactor lands, route the modal through the server-resolved item shape — defer until then.
+
+**What changed.** Documentation only. DEC-095 added.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S5.3; DEC-005 (blind cash / terminal trust); skill `cybersecurity` (STRIDE / Tampering).
 
 ## Amendment 2026-05-04 — DEC-097: Club Hamilton GST/HST registration number — known value, entered via Desk
 
