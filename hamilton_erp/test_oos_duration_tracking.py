@@ -21,7 +21,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 				"doctype": "Venue Asset",
 				"name": "TEST-OOS-ASSET",
 				"asset_code": "TEST-OOS-001",
-				"asset_type": "Locker",  # Lockers don't require tier validation
+				"asset_category": "Locker",  # Lockers don't require tier validation
 				"status": "Available"
 			})
 			asset.insert(ignore_permissions=True)
