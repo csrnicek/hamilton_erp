@@ -1196,6 +1196,36 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F3.1; skill `frappe-syntax-hooks` (asset scoping); existing comment in `hamilton_erp/hooks.py:13-17`.
 
+## Amendment 2026-05-04 — DEC-097: Club Hamilton GST/HST registration number — known value, entered via Desk
+
+**Decision.** Club Hamilton's CRA-issued GST/HST registration number is **`105204077RT0001`**. This value is the source of truth for the receipt-printing flow, customer-facing tax documents, and any CRA-mandated disclosure. It lives on the `Hamilton Settings` singleton in a field called `gst_hst_registration_number` (added by the receipt-printing PR). The value is entered **via Frappe Desk on first production install** — it is NOT hardcoded anywhere in the repository.
+
+**Why this DEC exists separately from the receipt-printer PR.**
+
+The number is sensitive in the same way merchant credentials are sensitive: rotating it (or mistyping it) requires either a CRA correction process or visible refunds. Pinning the value here, with the rule that it lives only in Settings, means:
+
+1. **Anyone who needs the value knows where to find it.** Future Claude session, future Chris, future contractor — all read this DEC, not the source code.
+2. **The "don't hardcode" rule is durable.** A future contributor who sees the number missing from a print template won't be tempted to inline it; the DEC says "blank in code, entered via Desk."
+3. **Multi-venue hygiene is preserved.** When Phase 2 expands to DC / Toronto / Philadelphia / Dallas / Washington, each venue will have its own CRA registration; the per-site `Hamilton Settings.gst_hst_registration_number` model lets each venue's site hold its own number without per-venue code branches.
+
+**Operational rule.** The first production install of `hamilton_erp` to a Hamilton-Hamilton site MUST include a Settings step that pastes `105204077RT0001` into `gst_hst_registration_number` before any cash sale runs. The receipt-printing flow validates the field is non-empty at print time; an empty field blocks the sale (same blocking pattern as the cash-drop label, per R-012).
+
+**Value reference.**
+- **CRA registration:** `105204077RT0001`
+- **Legal entity:** Club Hamilton (per DEC-062 — business classification)
+- **Effective date:** registered before 2026; assumed valid through Phase 1 launch and beyond.
+
+**What changes downstream.**
+
+- The receipt-printing PR adds `gst_hst_registration_number` to `Hamilton Settings` JSON. No default value.
+- The receipt template reads from Settings at print time, never hardcoded.
+- The launch-day production-install procedure (per `HAMILTON_LAUNCH_PLAYBOOK.md`) gains one step: "Open Hamilton Settings → Cash & Receipts section → paste GST/HST registration number from DEC-097."
+
+**References.**
+- DEC-062 — business classification (Hamilton ERP / ANVIL Corp).
+- Receipt-printing spec — `docs/inbox.md` "Receipt printing — Epson TM-T20III".
+- CRA receipt requirements — `docs/inbox.md` same section.
+
 ## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
 
 **Decision.** `_create_session`'s UniqueValidationError handler now checks both `exc.args[-1]` (the underlying MariaDB IntegrityError, which carries the locale-stable key name) and the legacy `str(exc)` substring as a fallback. The retry only fires when the collision is on `session_number`.
