@@ -46,6 +46,10 @@ fixtures = [
 		"dt": "Role",
 		"filters": [["name", "in", ["Hamilton Operator", "Hamilton Manager", "Hamilton Admin"]]],
 	},
+	{
+		"dt": "Custom DocPerm",
+		"filters": [["parent", "=", "Item"]],
+	},
 ]
 
 # ---------------------------------------------------------------------------

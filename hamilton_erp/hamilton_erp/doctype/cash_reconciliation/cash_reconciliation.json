@@ -88,6 +88,7 @@
    "fieldname": "system_expected",
    "fieldtype": "Currency",
    "label": "System Expected",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -95,6 +96,7 @@
    "fieldname": "operator_declared",
    "fieldtype": "Currency",
    "label": "Operator Declared",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -102,6 +104,7 @@
    "fieldname": "variance_amount",
    "fieldtype": "Currency",
    "label": "Variance Amount",
+   "permlevel": 1,
    "read_only": 1
   },
   {
@@ -114,6 +117,7 @@
    "in_list_view": 1,
    "label": "Variance Flag",
    "options": "\nClean\nPossible Theft or Error\nOperator Mis-declared\nMulti-source Variance\nPending Phase 3",
+   "permlevel": 1,
    "read_only": 1,
    "search_index": 1
   },
@@ -173,6 +177,11 @@
    "role": "Hamilton Admin",
    "submit": 1,
    "write": 1
+  },
+  {
+   "read": 1,
+   "role": "Hamilton Manager",
+   "permlevel": 1
   }
  ],
  "sort_field": "timestamp",

@@ -1827,3 +1827,35 @@ Before making ANY change to the asset board, search this document first. If the 
 5. Only then change the code
 
 The point of this document is to stop re-opening settled questions. Respect it.
+
+---
+
+## Amendment 2026-05-04 — DEC-115: Item catalogue and Venue Asset create/edit/delete restricted to Manager+
+
+**Decision.** Hamilton Operators have **read-only** access to the Item catalogue (ERPNext core Item DocType) and the Venue Asset list. Only Hamilton Manager, Hamilton Admin, and System Manager can create, edit, or delete records in either DocType.
+
+**Permission matrix.**
+
+| DocType | Hamilton Operator | Hamilton Manager | Hamilton Admin |
+|---|---|---|---|
+| Item | Read only | Full access | Full access |
+| Venue Asset | Read only | Full access | Full access |
+
+**Implementation.**
+- **Item:** Custom DocPerm records added via fixtures (`hamilton_erp/fixtures/custom_docperm.json`). These override ERPNext's default Item permissions to restrict Hamilton Operator to read/report only.
+- **Venue Asset:** Permissions array updated in the DocType JSON (`venue_asset.json`). Hamilton Operator permissions changed from `create=1, write=1` to `create=0, write=0`. Hamilton Manager gained `delete=1` (previously 0).
+
+**Rationale.** Item records drive retail pricing and HST classification; Venue Asset records control the operational asset inventory. Both are foundational master data that should not be modified by front-desk operators during routine operations. Operators need read access to look up item details and asset information, but create/edit/delete operations are supervisor-level actions that require manager approval and oversight.
+
+**Scope boundary.** This restriction applies to the **master data records** (creating a new Item, editing an existing Venue Asset). Operators retain full permissions for **operational transactions** that reference these master records:
+- Sales Invoices (including item selection and pricing)
+- Asset lifecycle actions (assign, vacate, mark clean, set OOS, return to service)
+- Shift Records and Cash Drops
+The restriction is on the master data layer, not the transactional layer.
+
+**Migration path.** Custom DocPerm fixtures are applied on `bench migrate` after this PR ships. No operator-facing disruption — operators never had a UI workflow for creating Items or Venue Assets in the Phase 1 operational surface (Asset Board + POS). The permission tightening formalizes what was already an implicit access pattern.
+
+**References.**
+- Task 25 (pre-go-live checklist) — this addresses a permissions-audit gap identified during launch preparation
+- DEC-054 (role matrix) — extends the Hamilton Operator vs Hamilton Manager capability boundary already established for bulk operations
+
