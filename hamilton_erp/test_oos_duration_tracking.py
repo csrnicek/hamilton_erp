@@ -16,17 +16,21 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 	def setUp(self):
 		"""Create a test venue asset."""
-		if not frappe.db.exists("Venue Asset", "TEST-OOS-ASSET"):
-			asset = frappe.get_doc({
-				"doctype": "Venue Asset",
-				"name": "TEST-OOS-ASSET",
-				"asset_code": "TEST-OOS-001",
-				"asset_name": "Test OOS Locker",
-				"asset_category": "Locker",  # Lockers don't require tier validation
-				"status": "Available"
-			})
-			asset.insert(ignore_permissions=True)
+		# Clean up any existing test asset with this asset_code first
+		if frappe.db.exists("Venue Asset", {"asset_code": "TEST-OOS-001"}):
+			frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 			frappe.db.commit()
+
+		asset = frappe.get_doc({
+			"doctype": "Venue Asset",
+			"name": "TEST-OOS-ASSET",
+			"asset_code": "TEST-OOS-001",
+			"asset_name": "Test OOS Locker",
+			"asset_category": "Locker",  # Lockers don't require tier validation
+			"status": "Available"
+		})
+		asset.insert(ignore_permissions=True)
+		frappe.db.commit()
 
 	def test_oos_start_time_populated_when_entering_oos(self):
 		"""When asset enters OOS, oos_start_time is set."""
@@ -170,5 +174,5 @@ class TestOOSDurationTracking(IntegrationTestCase):
 	def tearDown(self):
 		"""Clean up test data."""
 		frappe.db.delete("Asset Status Log", {"venue_asset": "TEST-OOS-ASSET"})
-		frappe.db.delete("Venue Asset", {"name": "TEST-OOS-ASSET"})
+		frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 		frappe.db.commit()
