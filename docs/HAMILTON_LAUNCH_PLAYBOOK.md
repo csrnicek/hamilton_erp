@@ -458,7 +458,7 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 
 - [ ] Run 5 sample transactions: locker, room, upgrade, comp, retail
 - [ ] Confirm invoice item, company, tax rate, price list, payment method are correct on each
-- [ ] Bookkeeper/accountant has reviewed at least one test day-close
+- [ ] ~~Bookkeeper/accountant has reviewed at least one test day-close~~ **Deferred to Phase 2** — accounting integration ships in Phase 2, not Phase 1. Phase-1 launch does not require bookkeeper sign-off. (DEC-110)
 - [ ] Multi-location accounting setup verified (Hamilton vs other venues, if relevant)
 
 ## Hardware / Network
