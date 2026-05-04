@@ -14,6 +14,11 @@ def after_install():
 	subsequent ``bench migrate`` calls, never during the initial ``bench install-app``.
 
 	Order matters:
+	  0. ``_ensure_site_config_defaults`` — pin ``hamilton_company``,
+	     ``hamilton_walkin_customer``, and ``retail_tabs`` in
+	     ``site_config.json`` so downstream helpers (which read
+	     ``frappe.conf``) get sane defaults on a fresh install. Runs first
+	     because ``_ensure_hamilton_accounting`` reads ``hamilton_company``.
 	  1. ``_ensure_erpnext_prereqs`` — root records (Customer Group, Territory,
 	     Item Group, UOM) needed by Walk-in Customer and retail Items.
 	  2. ``_ensure_hamilton_accounting`` — Company + Standard CoA + Hamilton
@@ -32,6 +37,7 @@ def after_install():
 	state immediately after ``bench install-app`` — without depending on a
 	follow-up ``bench migrate`` to fire the after_migrate hook.
 	"""
+	_ensure_site_config_defaults()
 	_ensure_erpnext_prereqs()
 	_ensure_hamilton_accounting()
 	_seed_hamilton_data()
@@ -86,6 +92,36 @@ def _ensure_no_setup_wizard_loop():
 		frappe.db.set_value(
 			"Installed Application", ia.name, "is_setup_complete", 1
 		)
+
+
+def _ensure_site_config_defaults():
+	"""Write Hamilton's site_config.json defaults on fresh installs.
+
+	Three keys back per-venue overrides for the Hamilton stack:
+	  - ``hamilton_company`` — Company name read by ``_ensure_hamilton_company``
+	    when resolving the venue's ERPNext Company. Defaults to ``"Club Hamilton"``.
+	  - ``hamilton_walkin_customer`` — Customer used for anonymous POS sales,
+	    read by ``api.submit_retail_sale`` and ``patches/v0_1/seed_hamilton_env``.
+	    Defaults to ``"Walk-in"``.
+	  - ``retail_tabs`` — Item Group tabs surfaced in the Asset Board retail
+	    rail (``api.get_asset_board_data``). Defaults to ``["Drink/Food"]``.
+
+	Idempotent and non-destructive: only writes a key if ``frappe.conf`` does
+	not already have it. That preserves any per-venue pin Chris has set via
+	``bench --site SITE set-config <key> <value>`` for non-Hamilton venues
+	(e.g. Philadelphia overriding ``hamilton_company`` to a different name).
+	"""
+	from frappe.installer import update_site_config
+
+	defaults = {
+		"hamilton_company": "Club Hamilton",
+		"hamilton_walkin_customer": "Walk-in",
+		"retail_tabs": ["Drink/Food"],
+	}
+
+	for key, value in defaults.items():
+		if frappe.conf.get(key) is None:
+			update_site_config(key, value, validate=False)
 
 
 def _ensure_erpnext_prereqs():
