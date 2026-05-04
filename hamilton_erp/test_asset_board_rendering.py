@@ -1256,6 +1256,22 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 			"asset_board.js missing hamilton-retail-oos grey state class.",
 		)
 
+	def test_js_out_of_stock_tile_click_opens_restock_or_manager_alert(self):
+		"""DEC-100 (restock overlay): the OOS retail tile click no longer
+		shows a passive 'Out of stock' toast. Manager+ users see the
+		restock overlay; everyone else sees a 'Manager required to
+		restock' alert. Pin the new contract."""
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"show_restock_overlay", src,
+			"_bind_tile_events doesn't open the DEC-100 restock overlay.",
+		)
+		self.assertIn(
+			'__("Manager required to restock")', src,
+			"_bind_tile_events doesn't fall back to the manager-required alert.",
+		)
+
 	def test_js_defines_render_and_bind_for_drawer(self):
 		with open(self._js_path()) as f:
 			src = f.read()
@@ -1724,6 +1740,51 @@ class TestShiftManagementContract(IntegrationTestCase):
 			".btn-modal-close", source,
 			"Shift summary modal must hide its close-X to enforce the "
 			"DEC-102 acknowledge-only contract.",
+		)
+
+
+
+
+class TestRestockOverlayContract(IntegrationTestCase):
+	"""DEC-100 — guard the OOS retail tile → Manager Restock overlay surface."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	def test_js_defines_show_restock_overlay(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"show_restock_overlay", source,
+			"show_restock_overlay() missing — DEC-100 requires the Manager+ "
+			"restock entry point on the OOS retail tile.",
+		)
+
+	def test_js_role_gate_on_oos_retail_tile(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_is_manager_or_admin", source,
+			"OOS retail tile branch must check _is_manager_or_admin per DEC-100.",
+		)
+
+	def test_js_operator_sees_manager_required_toast(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"Manager required to restock", source,
+			"Operator-fallback toast text missing — DEC-100 contract.",
+		)
+
+	def test_js_calls_restock_item_endpoint(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton_erp.api.restock_item", source,
+			"Restock overlay must call restock_item per DEC-100.",
 		)
 
 

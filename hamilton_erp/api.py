@@ -1471,3 +1471,113 @@ def comp_admission(asset_name: str, reason: str) -> dict:
 		"comp_admission_log": log.name,
 		"asset_name": asset_name,
 	}
+
+
+# Restocking (DEC-100) — Manager+ in-place restock for OOS retail tiles
+# ---------------------------------------------------------------------------
+# Operators tap an OOS retail tile to bump stock without opening Frappe
+# Desk. Inserts a Material Receipt Stock Entry mirroring the seed pattern
+# in test_retail_sales_invoice._seed_stock and the install path. Restock
+# is a Manager-or-Admin action: Hamilton Operator gets a "Manager
+# required" toast on the JS side and is rejected here as defense in
+# depth.
+
+
+def _is_manager_or_admin_user() -> bool:
+	"""Hamilton Manager / Hamilton Admin / System Manager.
+
+	System Manager bypasses every Hamilton role check (Frappe convention).
+	"""
+	roles = set(frappe.get_roles())
+	return (
+		"System Manager" in roles
+		or "Hamilton Admin" in roles
+		or "Hamilton Manager" in roles
+	)
+
+
+def _resolve_hamilton_company() -> str | None:
+	"""Resolve the Hamilton company name for Stock Entry creation.
+
+	Mirrors the helper in test_retail_sales_invoice — site_config pin
+	first, then known names, then a wildcard match. Returns None when
+	no Company has been seeded yet (fresh install before setup wizard).
+	"""
+	pinned = frappe.conf.get("hamilton_company")
+	if pinned and frappe.db.exists("Company", pinned):
+		return pinned
+	for candidate in ("Club Hamilton", "Hamilton", "Hamilton Club"):
+		if frappe.db.exists("Company", candidate):
+			return candidate
+	matches = frappe.get_all(
+		"Company",
+		filters={"company_name": ["like", "%Hamilton%"]},
+		fields=["name"],
+		limit=1,
+	)
+	return matches[0]["name"] if matches else None
+
+
+@frappe.whitelist(methods=["POST"])
+def restock_item(item_code: str, qty: float | str) -> dict:
+	"""Manager+ — bump stock of `item_code` via a Material Receipt Stock Entry.
+
+	Mirrors the `_seed_stock` pattern (see test_retail_sales_invoice and
+	setup/install.py). The same Stock Entry Type — Material Receipt —
+	the install seed uses is reused so the venue's chart of accounts and
+	stock posting wiring stays consistent. No new Stock Entry Type is
+	introduced.
+
+	Role gate: System Manager / Hamilton Admin / Hamilton Manager. The
+	Asset Board UI hides the overlay for Operators; this server check
+	is defense in depth (don't rely on the JS gate).
+	"""
+	if not _is_manager_or_admin_user():
+		frappe.throw(
+			_("Restock requires Hamilton Manager or Hamilton Admin role."),
+			frappe.PermissionError,
+		)
+
+	if not item_code:
+		frappe.throw(_("item_code is required."))
+
+	qty_f = flt(qty)
+	if qty_f <= 0:
+		frappe.throw(_("Restock quantity must be greater than zero."))
+
+	if not frappe.db.exists("Item", item_code):
+		frappe.throw(_("Item {0} not found.").format(item_code))
+
+	company = _resolve_hamilton_company()
+	if not company:
+		frappe.throw(_("No Hamilton Company found — cannot create Stock Entry."))
+
+	warehouse = frappe.db.get_single_value("Stock Settings", "default_warehouse")
+	if not warehouse:
+		frappe.throw(_("Stock Settings.default_warehouse is not configured."))
+
+	se = frappe.new_doc("Stock Entry")
+	se.update({
+		"company": company,
+		"stock_entry_type": "Material Receipt",
+		"purpose": "Material Receipt",
+	})
+	se.append("items", {
+		"item_code": item_code,
+		"qty": qty_f,
+		"t_warehouse": warehouse,
+		# basic_rate of 1.00 mirrors the seed/test path: a non-zero
+		# placeholder so ERPNext's stock-valuation guards don't reject
+		# the entry. Real cost-of-goods comes from purchase invoices in
+		# Phase 2; restocks today are treated as opening-balance bumps.
+		"basic_rate": 1.00,
+	})
+	se.insert(ignore_permissions=True)
+	se.submit()
+
+	return {
+		"status": "ok",
+		"stock_entry": se.name,
+		"item_code": item_code,
+		"qty": qty_f,
+	}
