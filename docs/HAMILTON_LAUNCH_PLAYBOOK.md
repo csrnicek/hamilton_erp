@@ -427,8 +427,12 @@ Per **DEC-066** (decisions_log.md). Audit logs (`Asset Status Log`, `Comp Admiss
 
 ## Frappe Cloud / Production
 
-- [ ] Frappe Cloud auto-update schedule confirmed and excluded from Hamilton peak hours (Friday 9pm – Sunday 6am)
-- [ ] If exclusion not possible: maintenance window negotiated with Frappe Cloud support
+- [ ] **Frappe Cloud update policy configured per DEC-112** (`docs/operations/frappe_cloud_update_policy.md`):
+  - Update window: **Monday OR Tuesday, 9 AM – 5 PM EST** only.
+  - Approval: **Owner approval required before each update — never auto-update.**
+  - Blackout window: **Thursday midnight through Monday 9 AM EST is a hard no-update zone.**
+  - Pre-launch setup step: configure update-window pinning + auto-update disable in the Frappe Cloud dashboard manually.
+- [ ] If the policy cannot be enforced via the dashboard: maintenance window negotiated directly with Frappe Cloud support, in writing.
 - [ ] Backup procedure tested by actual restore (real restore drill, not "backup file exists")
 - [ ] Restore time-to-recovery documented (how long does a full restore take?)
 - [ ] No untested scheduler jobs can fire (verify Frappe Cloud cron settings)

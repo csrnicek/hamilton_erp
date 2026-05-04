@@ -1005,6 +1005,20 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 ---
 
+## Amendment 2026-05-04 — DEC-112: Frappe Cloud update policy
+
+**Decision.** Frappe Cloud updates to the Hamilton production bench may run **only Monday or Tuesday, 9 AM – 5 PM EST**, **only with prior owner (Chris) approval**, and **never automatically**. Thursday midnight through Monday 9 AM EST is a hard no-update blackout window. The policy is configured in the Frappe Cloud dashboard as a pre-launch setup step.
+
+**Why.** Hamilton's revenue concentrates Thursday evening through Sunday. An auto-pulled minor release that breaks a workflow during peak revenue is the worst possible time to debug. Restricting updates to early-week business hours gives 4–5 days of operational distance to identify and roll back a bad update before the next peak. Owner approval per update aligns with the production-pinning rule in CLAUDE.md ("manual promotion after staging soak; ~10 fixes/month land in `version-16` HEAD and auto-pulling them invites production churn").
+
+**What changed.**
+- `docs/operations/frappe_cloud_update_policy.md` — new doc capturing the window, approval rule, blackout window, pre-launch setup steps, and violation procedure.
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — Frappe Cloud / Production checklist row replaced with the explicit policy from this DEC, citing the operations doc.
+
+**References.** CLAUDE.md → "Production version pinning — tagged v16 minor release, NEVER branch HEAD or develop." `docs/venue_rollout_playbook.md` Phase A step 2 (production version pin). DEC-098 (receipt printer). `RUNBOOK_EMERGENCY.md` (post-violation paging).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
