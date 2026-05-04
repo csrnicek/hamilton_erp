@@ -43,3 +43,4 @@ To update the status of an item: edit the line below to add or change the marker
 21. ✅ DONE — Replace 36× `frappe.flags.in_test` → `frappe.in_test` (PR #79 audit: premise was wrong; codebase already correct)
 22. ✅ DONE — `extend_doctype_class` fix in `hooks.py:69` (already correct on main; memory observation 1063 was stale)
 23. ✅ DONE — Audit `== "1"` / `== "0"` string comparisons (PR #80 audit: zero violations found)
+24. Asset Status Log OOS duration tracking — oos_start_time, oos_end_time, oos_duration_minutes fields + controller logic + tests (Task 25 item 24)
