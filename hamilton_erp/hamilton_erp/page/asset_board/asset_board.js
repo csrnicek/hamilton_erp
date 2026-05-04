@@ -1209,9 +1209,14 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		// audit format ("by NAME at HH:MM AM/PM"). hamilton_last_status_change
 		// is always populated by every state transition, so the timestamp
 		// renders even when the days-ago row would be empty.
+		// Bug #2 (2026-05-03): uppercase oos_set_by so the SET line matches
+		// the OOS audit-log format ("Set out of service by ADMINISTRATOR at
+		// HH:MM AM/PM" emitted by _open_oos_modal). Without the upper-case
+		// the RTS modal renders "by Administrator" while the audit row reads
+		// "by ADMINISTRATOR" — a visible drift between the two surfaces.
 		const set_at_time = this._format_oos_set_time(asset);
 		const who_part = asset.oos_set_by
-			? `${__("by")} ${frappe.utils.escape_html(asset.oos_set_by)}`
+			? `${__("by")} ${frappe.utils.escape_html(asset.oos_set_by.toUpperCase())}`
 			: "";
 		const time_part = set_at_time
 			? `${__("at")} ${frappe.utils.escape_html(set_at_time)}`

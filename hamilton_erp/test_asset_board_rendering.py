@@ -924,6 +924,19 @@ class TestV9BrowserTestAmendments(IntegrationTestCase):
 			"asset_board.js doesn't translate the 'at' connector — RTS SET line format may not match OOS audit.",
 		)
 
+	def test_js_rts_set_line_uppercases_oos_set_by(self):
+		"""The RTS modal SET line uppercases oos_set_by to match the OOS audit format
+		(e.g. "by ADMINISTRATOR at HH:MM AM/PM"). Without this the RTS modal shows
+		"by Administrator" while the OOS modal audit row reads "by ADMINISTRATOR".
+		"""
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"asset.oos_set_by.toUpperCase()", source,
+			"_open_return_modal doesn't uppercase oos_set_by — RTS SET line drifts "
+			"from OOS audit-log format ('by ADMINISTRATOR').",
+		)
+
 	# A29-5 — Dirty tile shows "Dirty for Xm" timer
 	def test_dirty_tiles_render_elapsed_timer(self):
 		with open(self._js_path()) as f:
