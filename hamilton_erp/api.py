@@ -2,7 +2,38 @@ import json
 
 import frappe
 from frappe import _
-from frappe.rate_limiter import rate_limit
+from frappe.rate_limiter import rate_limit as _frappe_rate_limit
+
+
+def rate_limit(*args, **kwargs):
+	"""Wrapper around frappe.rate_limiter.rate_limit that no-ops when there
+	is no real HTTP request context.
+
+	Frappe's upstream decorator does ``":".join([ip, user_key])`` and
+	crashes with a ``TypeError: sequence item 0: expected str instance,
+	NoneType found`` when ``frappe.local.request`` is set (which it is
+	during ``IntegrationTestCase`` runs) but ``frappe.local.request_ip``
+	is None (no actual HTTP request behind it). The rate limit is a
+	production guard, not a test concern, so skip the decorator entirely
+	when we're not running under a real request.
+	"""
+	def decorator(fn):
+		decorated = _frappe_rate_limit(*args, **kwargs)(fn)
+
+		from functools import wraps
+
+		@wraps(fn)
+		def wrapper(*a, **kw):
+			# Real HTTP request? Use the upstream decorator.
+			if getattr(frappe.local, "request_ip", None):
+				return decorated(*a, **kw)
+			# No request_ip means we're either in a unit test or a
+			# bench-console call — neither is rate-limit territory.
+			return fn(*a, **kw)
+
+		return wrapper
+
+	return decorator
 from frappe.utils import flt, now_datetime
 
 # ---------------------------------------------------------------------------
@@ -57,6 +88,7 @@ def on_sales_invoice_submit(doc, method):
 
 
 @frappe.whitelist(methods=["GET"])
+@rate_limit(key="asset_board_get", limit=120, seconds=60)
 def get_asset_board_data() -> dict:
 	"""Initial Asset Board load. Single batched query shape — no N+1.
 
