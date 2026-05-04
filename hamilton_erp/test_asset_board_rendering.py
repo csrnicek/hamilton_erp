@@ -1110,19 +1110,24 @@ class TestV91RetailFoundation(IntegrationTestCase):
 		)
 
 	def test_css_defines_retail_tile_classes(self):
+		# Finding #2 (DEC-071, 2026-05-03) removed `.hamilton-retail-code`
+		# from the retail tile — operators sell by name + price, not SKU.
+		# Added `.hamilton-retail-oos` + `.hamilton-retail-oos-label` for
+		# the grey OOS state that replaces the previous red Occupied reuse.
 		with open(self._css_path()) as f:
 			src = f.read()
 		for cls in (
 			".hamilton-retail-grid",
 			".hamilton-retail-tile",
-			".hamilton-retail-code",
 			".hamilton-retail-stock",
 			".hamilton-retail-name",
 			".hamilton-retail-price",
+			".hamilton-retail-oos",
+			".hamilton-retail-oos-label",
 		):
 			self.assertIn(
 				cls, src,
-				f"asset_board.css missing {cls!r} — V9.1-D6 retail tile styling absent.",
+				f"asset_board.css missing {cls!r} — DEC-071 retail tile styling absent.",
 			)
 
 
@@ -1223,12 +1228,19 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 		self.assertIn("hamilton-retail-incart", src)
 		self.assertIn("_cart_qty_for", src)
 
-	def test_js_out_of_stock_tile_click_shows_alert_not_add(self):
+	def test_js_out_of_stock_tile_renders_grey_label(self):
+		"""Per finding #2 (retail OOS tile grey label): the toast alert
+		was replaced by an in-tile OUT OF STOCK label so the operator
+		sees stock state at a glance, not after a click."""
 		with open(self._js_path()) as f:
 			src = f.read()
 		self.assertIn(
-			'__("Out of stock")', src,
-			"_bind_tile_events doesn't show Out-of-stock alert for stock<=0.",
+			'__("OUT OF STOCK")', src,
+			"asset_board.js doesn't render OUT OF STOCK label on the tile.",
+		)
+		self.assertIn(
+			"hamilton-retail-oos", src,
+			"asset_board.js missing hamilton-retail-oos grey state class.",
 		)
 
 	def test_js_defines_render_and_bind_for_drawer(self):

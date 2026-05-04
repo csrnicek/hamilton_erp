@@ -477,16 +477,28 @@ hamilton_erp.AssetBoard = class AssetBoard {
 	}
 
 	_render_retail_tile(item) {
-		// Stock state palette per V9.1-D6:
-		//   in stock (>=4) → green (matches asset Available)
-		//   low (1-3)      → amber (matches asset Dirty)
-		//   out (0)        → red   (matches asset Occupied)
+		// Layout per finding #2 (Asset Board UI walkthrough 2026-05-03):
+		//   item name centered at the top
+		//   price centered at the bottom (OR "OUT OF STOCK" when stock <= 0)
+		//   stock count in the corner (small, secondary)
+		//   no SKU code on the tile — operators sell by name + price
+		//
+		// Color states (no red anywhere — red is reserved for asset
+		// Occupied elsewhere on the board):
+		//   in stock (>=1)  → green (hamilton-status-available)
+		//   out (0)         → grey  (hamilton-retail-oos)
+		// The previous low-stock amber state was removed — operators
+		// don't price-discriminate on "running low," just on "any vs
+		// none." Stock count in the corner remains for awareness.
 		const stock = Number(item.stock || 0);
-		let state_cls = "hamilton-status-available";
-		if (stock <= 0) state_cls = "hamilton-status-occupied";
-		else if (stock <= 3) state_cls = "hamilton-status-dirty";
+		const out_of_stock = stock <= 0;
+		const state_cls = out_of_stock ? "hamilton-retail-oos" : "hamilton-status-available";
 
 		const price = (Number(item.standard_rate) || 0).toFixed(2);
+		const bottom_html = out_of_stock
+			? `<div class="hamilton-retail-oos-label">${__("OUT OF STOCK")}</div>`
+			: `<div class="hamilton-retail-price">$${price}</div>`;
+
 		// V9.1-D9: tap retail tile = add to cart. Show "in cart: N" pill on
 		// tiles that already have a line so operators can see what's been
 		// added without opening the drawer.
@@ -498,12 +510,9 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			<div class="hamilton-tile hamilton-retail-tile ${state_cls}"
 			     data-item-code="${frappe.utils.escape_html(item.item_code)}"
 			     data-stock="${stock}">
-				<div class="hamilton-retail-row1">
-					<span class="hamilton-retail-code">${frappe.utils.escape_html(item.item_code || "")}</span>
-					<span class="hamilton-retail-stock">${stock}</span>
-				</div>
 				<div class="hamilton-retail-name">${frappe.utils.escape_html(item.item_name || "")}</div>
-				<div class="hamilton-retail-price">$${price}</div>
+				<div class="hamilton-retail-stock">${stock}</div>
+				${bottom_html}
 				${cart_pill}
 			</div>
 		`;
@@ -795,10 +804,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				if (!item_code) return;
 				const stock = Number($tile.data("stock") || 0);
 				if (stock <= 0) {
-					frappe.show_alert({
-						message: __("Out of stock"),
-						indicator: "red",
-					});
+					// Finding #2/#3 (DEC-071): the tile already shows
+					// "OUT OF STOCK" in place of the price (and the tile
+					// is grey, not red), so a tap-only toast was
+					// redundant noise. Silent no-op — operator already knows.
 					return;
 				}
 				this._cart_add(item_code);
