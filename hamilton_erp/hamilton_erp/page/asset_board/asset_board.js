@@ -1024,19 +1024,32 @@ hamilton_erp.AssetBoard = class AssetBoard {
 				// Return / Rounds). Tap "Vacate" to expand, sub-buttons
 				// appear in styled .hamilton-vacate-subs container.
 				// Mockup parallel: V9_CANONICAL_MOCKUP.html lines 1090-1097.
-				const vacate_subs_class = this.vacate_subs_open
-					? "hamilton-vacate-subs hamilton-vacate-subs-shown"
-					: "hamilton-vacate-subs";
-				const parent_label = this.vacate_subs_open
-					? __("Cancel Vacate")
-					: __("Vacate");
-				buttons = `
-					<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-toggle">${parent_label}</button>
-					<div class="${vacate_subs_class}">
-						<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-key">${__("Key Return")}</button>
-						<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-rounds">${__("Rounds")}</button>
-					</div>
-				`;
+				//
+				// Finding #5 (DEC-071): on the Watch tab, skip the parent
+				// "Vacate" toggle and surface Key Return / Rounds inline.
+				// Watch tab tiles are by definition overtime/OOS attention
+				// items \u2014 operators shouldn't have to two-tap their way to
+				// the action they came here to perform.
+				if (this.active_tab === "watch") {
+					buttons = `
+						<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-rounds">${__("Vacate (Rounds)")}</button>
+						<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-key">${__("Vacate (Key Return)")}</button>
+					`;
+				} else {
+					const vacate_subs_class = this.vacate_subs_open
+						? "hamilton-vacate-subs hamilton-vacate-subs-shown"
+						: "hamilton-vacate-subs";
+					const parent_label = this.vacate_subs_open
+						? __("Cancel Vacate")
+						: __("Vacate");
+					buttons = `
+						<button class="hamilton-action-btn hamilton-btn-red" data-action="vacate-toggle">${parent_label}</button>
+						<div class="${vacate_subs_class}">
+							<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-key">${__("Key Return")}</button>
+							<button class="hamilton-action-btn hamilton-vacate-sub-btn" data-action="vacate-rounds">${__("Rounds")}</button>
+						</div>
+					`;
+				}
 				break;
 			}
 			case "Dirty":
