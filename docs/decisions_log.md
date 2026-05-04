@@ -1222,6 +1222,15 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-04 — DEC-088: Document `session_number` as the de-facto operator identifier (audit F4.3)
+
+**Decision.** `Venue Session.session_number` field gains a `description` pinning the invariant: it is the human-readable identifier maintained by `_create_session`; the DocType `name` is a hash for URL stability (per DEC-056 midnight-boundary correctness). The Random `naming_rule` + `autoname: hash` are intentional and stay.
+
+**Why.** Audit F4.3 flagged that the JSON does not state the contract: future developers reading `venue_session.json` see `naming_rule: Random` and could assume the operator-facing identifier is the hash, leading them to refactor `session_number` away. The description field is the lowest-touch way to surface the invariant in the schema.
+
+**What changed.** `venue_session.json`: `session_number` field gains a `description` text. `bench migrate` REQUIRED — DocType field metadata changes apply through migrate.
+
+**References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F4.3; DEC-056 (midnight-boundary fix); skill `frappe-syntax-doctypes` (naming patterns).
 ## Amendment 2026-05-04 — DEC-112: Frappe Cloud update policy
 
 **Decision.** Frappe Cloud updates to the Hamilton production bench may run **only Monday or Tuesday, 9 AM – 5 PM EST**, **only with prior owner (Chris) approval**, and **never automatically**. Thursday midnight through Monday 9 AM EST is a hard no-update blackout window. The policy is configured in the Frappe Cloud dashboard as a pre-launch setup step.
