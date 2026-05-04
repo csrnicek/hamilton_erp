@@ -110,6 +110,16 @@ bumped to bookkeep the V9.1 retail amendment, whose spec lives in
 - Verify in browser that production matches the mockup
 - Add regression tests guarding the ported pattern
 
+---
+
+## Phase Awareness — Read Before Suggesting Any Work
+
+Before suggesting or building anything, check docs/build_phases.md 
+to confirm it belongs to the current phase.
+
+If a task appears out of scope for the current phase, 
+stop and flag it to Chris before proceeding.
+
 ## Frappe v16 Conventions
 
 When writing any Frappe code, consult these sources before writing:
