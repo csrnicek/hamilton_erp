@@ -26,7 +26,12 @@
   "section_cash_recon",
   "cash_variance_tolerance_percent",
   "column_break_cash_recon",
-  "cash_variance_tolerance_minimum"
+  "cash_variance_tolerance_minimum",
+  "section_receipts",
+  "receipt_printer_ip",
+  "receipt_printer_enabled",
+  "column_break_receipts",
+  "gst_hst_registration_number"
  ],
  "fields": [
   {
@@ -139,7 +144,7 @@
   },
   {
    "default": "2.0",
-   "description": "Variance tolerance as a percentage of the larger amount in the three-way comparison. Lower values flag smaller variances; raise this when high-volume cash days produce noisy false positives. Default 2.0% per the original variance contract — see decisions_log.md amendment 2026-05-03 (DEC-068).",
+   "description": "Variance tolerance as a percentage of the larger amount in the three-way comparison. Lower values flag smaller variances; raise this when high-volume cash days produce noisy false positives. Default 2.0% per the original variance contract \u2014 see decisions_log.md amendment 2026-05-03 (DEC-068).",
    "fieldname": "cash_variance_tolerance_percent",
    "fieldtype": "Percent",
    "label": "Cash Variance Tolerance (%)"
@@ -150,10 +155,38 @@
   },
   {
    "default": "1.00",
-   "description": "Minimum variance tolerance floor in dollars. The effective tolerance for any reconciliation is max(percent * larger_amount, minimum). A flat $0.05 floor is too strict for real cash handling — a single mis-counted bill would flag a $500 drop as non-Clean. Default $1.00.",
+   "description": "Minimum variance tolerance floor in dollars. The effective tolerance for any reconciliation is max(percent * larger_amount, minimum). A flat $0.05 floor is too strict for real cash handling \u2014 a single mis-counted bill would flag a $500 drop as non-Clean. Default $1.00.",
    "fieldname": "cash_variance_tolerance_minimum",
    "fieldtype": "Currency",
    "label": "Cash Variance Tolerance Minimum ($)"
+  },
+  {
+   "fieldname": "section_receipts",
+   "fieldtype": "Section Break",
+   "label": "Receipts"
+  },
+  {
+   "description": "IP address of the Epson TM-T20III thermal receipt printer (Ethernet/WiFi). Required when Receipt Printer Enabled is checked. See DEC-098.",
+   "fieldname": "receipt_printer_ip",
+   "fieldtype": "Data",
+   "label": "Receipt Printer IP"
+  },
+  {
+   "default": "1",
+   "description": "Enable receipt printing. When unchecked the dispatch is short-circuited (dev escape hatch \u2014 see DEC-098).",
+   "fieldname": "receipt_printer_enabled",
+   "fieldtype": "Check",
+   "label": "Receipt Printer Enabled"
+  },
+  {
+   "fieldname": "column_break_receipts",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "CRA-issued GST/HST registration number printed on every receipt (per DEC-097). No default \u2014 paste in via Desk on first install. Blank value blocks cash sales (no receipt = no completed sale, per DEC-098 / R-012 precedent).",
+   "fieldname": "gst_hst_registration_number",
+   "fieldtype": "Data",
+   "label": "GST/HST Registration Number"
   }
  ],
  "index_web_pages_for_search": 0,

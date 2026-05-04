@@ -20,6 +20,13 @@ app_include_css = [
 	"/assets/hamilton_erp/css/asset_board.css",
 ]
 
+# Per-doctype client extensions. sales_invoice_extensions.js adds the
+# DEC-098 "Reprint Receipt" button on submitted POS Sales Invoices for
+# Hamilton Manager / Hamilton Admin / System Manager.
+doctype_js = {
+	"Sales Invoice": "public/js/sales_invoice_extensions.js",
+}
+
 # ---------------------------------------------------------------------------
 # Fixtures — synced on bench migrate
 # ---------------------------------------------------------------------------

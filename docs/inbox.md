@@ -1654,37 +1654,7 @@ V9.1 Phase 2 retail cart shipped with cash-only single-tender (PR #49). The foll
 
 ### Receipt printing — Epson TM-T20III
 
-**Hardware:** Epson TM-T20III thermal receipt printer. Ethernet + WiFi capable. Same integration pattern as the Brother label printer (DEC-011) — IP address configured per-venue in Hamilton Settings, not hard-coded.
-
-**Behavior:** Print every transaction automatically after payment confirms. The receipt content includes:
-- Sale line items + totals (HST broken out)
-- Asset assignment (room number / locker number) when the sale is part of a check-in flow
-- Sales Invoice ID and timestamp
-- Cash given / change due (or last-4 of card pan if Card)
-
-**Operational pattern — receipt as physical control token.** The paper receipt printed at point-of-sale doubles as the asset-board control token. The operator hangs the receipt on the assigned key hook. Receipt-on-hook = room/locker is occupied. This keeps the physical state visible without the operator having to look at a screen, and survives system outages — if the asset board is down, the hooks still tell you what's free.
-
-**Design implications:**
-- Receipt printer config lives in Hamilton Settings: `receipt_printer_ip` (string), `receipt_printer_enabled` (check). Mirror Brother label printer fields.
-- Print job is a side-effect, not part of the Sales Invoice transaction. If the printer is offline, the sale must still complete; queue the print job to retry, surface a "printer offline" indicator on the board.
-- Test path: a `print_receipt(sales_invoice_name)` whitelisted endpoint that takes a Sales Invoice and renders to ESC/POS. Backend does the formatting; client just triggers.
-
-**v16 PRINT-FORMAT GOTCHA — load by name, do not rely on UI selection.** ERPNext v16 issue [#53857](https://github.com/frappe/erpnext/issues/53857) ("Add Sales Invoice support to POS Profile print format filter") is open as of 2026-04-30: the POS Profile's print-format filter UI doesn't show Sales Invoice formats, only POS Invoice formats. Hamilton's path uses Sales Invoice (via the v16 `is_pos=1` architecture). This means **the receipt printer code path MUST specify the print format programmatically** — load the Print Format by name (`frappe.get_doc("Print Format", "<Hamilton Receipt>")`), render the SI through `frappe.get_print(doctype, name, print_format=...)`, and send the rendered output to the printer. Do NOT depend on `pos_profile.print_format` being set correctly via the Desk UI; that field's filter is broken in v16 and will silently stay empty for Sales-Invoice-flavored POS profiles.
-
-**Concrete pattern:**
-```python
-def print_receipt(sales_invoice_name: str):
-    si = frappe.get_doc("Sales Invoice", sales_invoice_name)
-    html = frappe.get_print(
-        doctype="Sales Invoice",
-        name=sales_invoice_name,
-        print_format="Hamilton Receipt",  # explicit, NOT pos_profile.print_format
-    )
-    escpos_bytes = render_html_to_escpos(html)
-    send_to_printer(hamilton_settings.receipt_printer_ip, escpos_bytes)
-    # Also: store escpos_bytes on the SI per the receipt-bytes retention rule above.
-```
-The "Hamilton Receipt" Print Format is created as a fixture in the Hamilton ERP app and referenced by name. When ERPNext fixes #53857 (likely a v16.x patch), the workaround stays correct — it doesn't break, just becomes redundant.
+Closed: see DEC-098 (`docs/decisions_log.md`). Implementation shipped in PR feat/dec-098-receipt-printing-epson-tm-t20iii — Hamilton Settings fields, `Hamilton Cash Receipt` print format, `hamilton_erp/printing.py` orchestrator, reprint endpoint + button, and the test suite pinning the no-receipt-no-sale blocking rule. The CRA-compliance subsection below remains the authoritative spec for receipt CONTENT and is referenced by DEC-098.
 
 ### CRA compliance — mandatory receipt content (Ontario / Canada)
 
