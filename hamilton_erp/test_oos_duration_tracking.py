@@ -21,6 +21,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 				"doctype": "Venue Asset",
 				"name": "TEST-OOS-ASSET",
 				"asset_code": "TEST-OOS-001",
+				"asset_name": "Test OOS Locker",
 				"asset_category": "Locker",  # Lockers don't require tier validation
 				"status": "Available"
 			})
