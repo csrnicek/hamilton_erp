@@ -53,7 +53,7 @@ Specific enough that Claude Code can follow it autonomously.
    Reference table:
    | Venue        | venue_id     | tax_mode | currency | membership | tablets |
    |--------------|--------------|----------|----------|------------|---------|
-   | Hamilton     | hamilton     | CA_HST   | CAD      | 0          | 1       |
+   | Hamilton     | hamilton     | CA_HST   | CAD      | 0          | 1 (DEC-111) |
    | Philadelphia | philadelphia | US_NONE  | USD      | 0          | 1       |
    | DC           | dc           | US_NONE  | USD      | 1          | 3       |
    | Dallas       | dallas       | US_NONE  | USD      | 0          | 1       |

@@ -93,7 +93,7 @@ Why standard 10th-gen:
 **Existing tablet design spec:** Search `docs/design/` returns no prior tablet spec — V9 Decision 3.8 references "iPad viewport constraints" but doesn't lock a model. **This spec is the canonical model recommendation.**
 
 **Per-venue tablet count** (from `docs/venue_rollout_playbook.md` Phase B reference table):
-- Hamilton: 1
+- Hamilton: **1** — confirmed by DEC-111 (single front-desk station, single transaction lane).
 - Philadelphia: 1
 - DC: 3
 - Dallas: 1

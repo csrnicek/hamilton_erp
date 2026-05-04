@@ -1005,6 +1005,21 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 
 ---
 
+## Amendment 2026-05-04 — DEC-111: Hamilton tablet count = 1
+
+**Decision.** Hamilton runs **one** front-desk tablet — a single transaction lane with one scanner, one card reader, one receipt printer, one cash drawer, one label printer.
+
+**Why.** Hamilton's floor traffic and front-desk geometry support a single transaction station. The asset board, cart drawer, and key-assignment flows are designed for portrait/landscape on a 10.9-inch standard iPad and a single operator at the desk. Confirming the count at 1 closes off any drift toward a multi-tablet purchase order and pins the Phase-B seed value (`anvil_tablet_count = 1`) and the per-venue reference table. This DEC also clarifies that "two tablets racing for the same key" scenarios in the launch playbook are written as future-proof / multi-venue concurrency tests, not Hamilton's actual hardware footprint.
+
+**What changed.**
+- `docs/design/pos_hardware_spec.md` — per-venue tablet count list now annotates Hamilton's "1" with a DEC-111 reference.
+- `docs/venue_rollout_playbook.md` — Phase B reference table cell for Hamilton's tablet count cites DEC-111.
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — Hardware / Network checklist row prepended with a Hamilton-tablet-count = 1 confirmation pointing to DEC-111.
+
+**References.** `seed_hamilton_env.execute` patch (`bench --site {site} set-config anvil_tablet_count 1`). `docs/design/pos_hardware_spec.md` §3 (Standard iPad rationale). DEC-098 (receipt printer). DEC-106 (Hamilton terminal).
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
