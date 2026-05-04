@@ -655,6 +655,10 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		const classes = ["hamilton-tile", status_cls];
 		if (ts === "countdown") classes.push("hamilton-countdown");
 		if (ts === "overtime") classes.push("hamilton-overtime");
+		// DEC-103 — comp visual indicator. Distinct gold/amber outline so
+		// operators scanning the board see "this is a comp" without
+		// clashing with the existing Occupied red.
+		if (asset.is_comp) classes.push("hamilton-tile-comp");
 
 		// Corner badge — only on overtime tiles. V9 Decision 3.4 mandates
 		// tab-on-top-border position (corner placement was REJECTED).
@@ -1114,6 +1118,12 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			} else if (action === "return") {
 				this.collapse_expanded();
 				this._open_return_modal(asset);
+			} else if (action === "comp") {
+				// DEC-103 — Comp flow. Modal prompts for required reason text;
+				// on confirm, comp_admission() inserts the audit row, occupies
+				// the asset, and stamps comp_flag=1 on the session.
+				this.collapse_expanded();
+				this._open_comp_modal(asset);
 			} else if (action === "vacate-toggle") {
 				// V9 Decision 4.6: tap Vacate parent → expand sub-buttons.
 				// Tap again ("Cancel Vacate") → collapse them.
@@ -1230,12 +1240,19 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		let buttons = "";
 
 		switch (asset.status) {
-			case "Available":
+			case "Available": {
+				// DEC-103 — Comp button visible only to Manager+ (System Manager,
+				// Hamilton Admin, Hamilton Manager). Operators don't see it.
+				const comp_btn = this._is_manager_or_admin()
+					? `<button class="hamilton-action-btn hamilton-btn-amber" data-action="comp">${__("Comp")}</button>`
+					: "";
 				buttons = `
 					<button class="hamilton-action-btn hamilton-btn-green" data-action="assign">${__("Assign Guest")}</button>
+					${comp_btn}
 					<button class="hamilton-action-btn hamilton-btn-grey hamilton-btn-sm" data-action="oos">${__("Set OOS")}</button>
 				`;
 				break;
+			}
 			case "Occupied": {
 				// V9 Decision (mockup): guest-info panel above Vacate buttons.
 				// Mockup parallel: V9_CANONICAL_MOCKUP.html line 1086 (guest-info).
@@ -1941,4 +1958,40 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		if (hour >= 12 && hour < 18) return __("PM Shift");
 		return __("Night Shift");
 	}
+
+	// DEC-103 — Comp Admission modal. Required text reason; on confirm
+	// calls comp_admission() which occupies the asset, stamps comp_flag
+	// on the session, and inserts the Comp Admission Log audit row.
+	_open_comp_modal(asset) {
+		const dialog = new frappe.ui.Dialog({
+			title: __("Comp Admission — {0}", [asset.asset_code || asset.name]),
+			fields: [
+				{
+					fieldname: "reason",
+					label: __("Reason"),
+					fieldtype: "Small Text",
+					reqd: 1,
+					description: __("Manager-decision text. Required for the audit log."),
+				},
+			],
+			primary_action_label: __("Comp & Occupy"),
+			primary_action: async (values) => {
+				try {
+					await frappe.call({
+						method: "hamilton_erp.api.comp_admission",
+						args: { asset_name: asset.name, reason: values.reason },
+					});
+					dialog.hide();
+					frappe.show_alert({ message: __("Comp admission recorded"), indicator: "green" });
+					await this.fetch_board();
+					this.render_active_tab();
+					this._update_tab_badges();
+				} catch (e) {
+					// Server error surfaced as toast.
+				}
+			},
+		});
+		dialog.show();
+	}
+
 };

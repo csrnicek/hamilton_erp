@@ -1235,6 +1235,39 @@ The number is sensitive in the same way merchant credentials are sensitive: rota
 - Receipt-printing spec — `docs/inbox.md` "Receipt printing — Epson TM-T20III".
 - CRA receipt requirements — `docs/inbox.md` same section.
 
+## Amendment 2026-05-03 — DEC-103: Manager comp admissions from the Asset Board
+
+**Decision.** Hamilton Manager / Hamilton Admin grants a comp admission directly from an Available asset's expand overlay. Confirming inserts a Comp Admission Log audit row, occupies the asset via the existing `start_session_for_asset` lifecycle helper, and stamps `comp_flag = 1` on the resulting Venue Session. The board renders comp-occupied tiles with a gold/amber outline + ★ indicator so operators see "this is a comp" without opening the tile.
+
+**Role gate.** System Manager / Hamilton Admin / Hamilton Manager. The Comp button is hidden from the JS overlay for Operators; the server endpoint `comp_admission` re-checks the role and throws `frappe.PermissionError` as defense in depth — same pattern as DEC-100's restock gate.
+
+**Audit row creation.** `Comp Admission Log` row inserted with `reason_category = "Manager Decision"` (the canonical default for board-initiated comps) and `reason_note` carrying the manager's free-text reason. The `comp_value` field is left None — no admission item is sold on a comp from the board, and `comp_value` has permlevel:1 wiring intended for the Phase 2 admission_item flow. The audit row carries the decision, the operator, and the timestamp; that's the durable record.
+
+**Field reuse — comp_flag, not is_comp.** The spec asked us to "stamp the resulting Venue Session with `is_comp = 1` (custom field on Venue Session — add it via `fixtures/custom_field.json` if it doesn't already exist; check first)." We checked: the Venue Session DocType already has a Check field named `comp_flag`, which is the equivalent. Reusing the existing field avoids a Custom Field migration. The board API surfaces the value as `is_comp` (boolean) in the JSON payload so the JS doesn't need to know the underlying field name; if a future Phase renames the field, only the api.py mapping needs to change.
+
+**Visual indicator — `.hamilton-tile-comp` class.** Gold/amber (`#d97706`) outline ring (2 px) with a small ★ (gold) in the top-right corner. We chose:
+1. **Outline rather than border-color change** — the Occupied red border remains the dominant signal that the asset is in use; the outline sits *outside* the existing border so it adds information without overwriting the status palette.
+2. **Gold/amber over green** — green would clash with the Available palette (`.hamilton-status-available`). Amber is also already used by Dirty (`.hamilton-status-dirty`), but the *outline* form is unambiguous at the tile-scanning distance because Dirty uses fill, not outline.
+3. **★ in the corner** — the outline alone is subtle; the corner ★ adds explicit semantics ("comp") for the operator who isn't yet familiar with the outline convention.
+
+The alternative — a distinct fill colour — was rejected because it would break the four-color status palette the Asset Board has spent six iterations stabilizing (DEC-018 through DEC-071).
+
+**Mechanism — three-step flow.** `comp_admission()` runs:
+1. `start_session_for_asset(asset_name, operator=session.user)` — the existing lifecycle helper. Acquires the asset_status_lock, enforces Available → Occupied, creates the Venue Session, writes the Asset Status Log audit row.
+2. `frappe.db.set_value("Venue Session", session_name, "comp_flag", 1, update_modified=False)` — flip the comp flag without re-running the session validate chain. We avoid `frappe.get_doc(...).save()` because the session was just inserted and a second save() risks a TimestampMismatch under concurrent live-tick re-renders.
+3. Insert the Comp Admission Log row with `ignore_permissions=True` so the permlevel:1 `comp_value` field's elevated-write contract is respected (same pattern Phase 2 will use for the value-bearing case).
+
+**What changed.**
+- `hamilton_erp/api.py` — new `comp_admission(asset_name, reason)` endpoint. `get_asset_board_data` now exposes `is_comp` (boolean) on each asset payload.
+- `hamilton_erp/hamilton_erp/page/asset_board/asset_board.js` — Available expand-overlay shows a Comp button for Manager+. New `_open_comp_modal` helper. Tile class includes `hamilton-tile-comp` when `is_comp` is true.
+- `hamilton_erp/public/css/asset_board.css` — `.hamilton-tile-comp` outline + ★ marker.
+- `hamilton_erp/test_asset_board_rendering.py` — substring contract tests under `TestCompAdmissionContract`.
+- `hamilton_erp/test_comp_admission_endpoint.py` — round-trip tests for the endpoint.
+
+**Migrate flag.** None. `comp_flag` already exists on Venue Session.
+
+**References.** `Venue Session.comp_flag` (existing field); `Comp Admission Log` DocType with `permlevel:1` on `comp_value`; `start_session_for_asset` in `hamilton_erp/lifecycle.py:105`; DEC-100 (Manager+ role gate pattern).
+
 ## Amendment 2026-05-04 — DEC-090: Locale-stable session_number retry detection (audit S4.2)
 
 **Decision.** `_create_session`'s UniqueValidationError handler now checks both `exc.args[-1]` (the underlying MariaDB IntegrityError, which carries the locale-stable key name) and the legacy `str(exc)` substring as a fallback. The retry only fires when the collision is on `session_number`.

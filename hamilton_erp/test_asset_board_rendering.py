@@ -1600,6 +1600,62 @@ class TestShiftSummaryContract(IntegrationTestCase):
 		)
 
 
+class TestCompAdmissionContract(IntegrationTestCase):
+	"""DEC-103 — guard the Comp button + visual indicator surface."""
+
+	@classmethod
+	def _js_path(cls):
+		return frappe.get_app_path(
+			"hamilton_erp", "hamilton_erp", "page", "asset_board", "asset_board.js"
+		)
+
+	@classmethod
+	def _css_path(cls):
+		return frappe.get_app_path("hamilton_erp", "public", "css", "asset_board.css")
+
+	def test_js_defines_open_comp_modal(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"_open_comp_modal", source,
+			"_open_comp_modal() missing — DEC-103 requires a Comp modal helper.",
+		)
+
+	def test_js_comp_button_role_gated(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		# The Available case branches on _is_manager_or_admin to render
+		# the Comp button. If a refactor removes the gate, this fires.
+		self.assertIn(
+			"_is_manager_or_admin", source,
+			"Comp button must be role-gated per DEC-103.",
+		)
+
+	def test_js_comp_action_calls_endpoint(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton_erp.api.comp_admission", source,
+			"Comp modal must call comp_admission per DEC-103.",
+		)
+
+	def test_js_tile_comp_class(self):
+		with open(self._js_path()) as f:
+			source = f.read()
+		self.assertIn(
+			"hamilton-tile-comp", source,
+			"Comp tiles must get the .hamilton-tile-comp class per DEC-103.",
+		)
+
+	def test_css_defines_tile_comp_class(self):
+		with open(self._css_path()) as f:
+			source = f.read()
+		self.assertIn(
+			".hamilton-tile-comp", source,
+			".hamilton-tile-comp styling missing — DEC-103.",
+		)
+
+
 class TestShiftManagementContract(IntegrationTestCase):
 	"""DEC-099 — guard the Asset Board surfaces that gate on Shift Record.
 
