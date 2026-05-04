@@ -55,7 +55,8 @@ class AssetStatusLog(Document):
 						"oos_start_time": ["is", "set"]
 					},
 					fieldname=["name", "oos_start_time"],
-					order_by="timestamp desc"
+					order_by="timestamp desc",
+					as_dict=True
 				)
 
 				if last_oos_entry and isinstance(last_oos_entry, dict):
