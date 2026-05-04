@@ -16,10 +16,12 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 	def setUp(self):
 		"""Create a test venue asset."""
-		# Clean up any existing test asset with this asset_code first
+		# Clean up any existing test assets by both name and asset_code
+		if frappe.db.exists("Venue Asset", "TEST-OOS-ASSET"):
+			frappe.db.delete("Venue Asset", {"name": "TEST-OOS-ASSET"})
 		if frappe.db.exists("Venue Asset", {"asset_code": "TEST-OOS-001"}):
 			frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
-			frappe.db.commit()
+		frappe.db.commit()
 
 		asset = frappe.get_doc({
 			"doctype": "Venue Asset",
@@ -174,5 +176,9 @@ class TestOOSDurationTracking(IntegrationTestCase):
 	def tearDown(self):
 		"""Clean up test data."""
 		frappe.db.delete("Asset Status Log", {"venue_asset": "TEST-OOS-ASSET"})
-		frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
+		# Delete by both name and asset_code to ensure complete cleanup
+		if frappe.db.exists("Venue Asset", "TEST-OOS-ASSET"):
+			frappe.db.delete("Venue Asset", {"name": "TEST-OOS-ASSET"})
+		if frappe.db.exists("Venue Asset", {"asset_code": "TEST-OOS-001"}):
+			frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 		frappe.db.commit()
