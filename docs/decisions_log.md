@@ -1083,6 +1083,7 @@ _VENUE_TO_REGION = {
 ### Build order for the US driver
 
 The Fiserv-USA driver builds **first for Philadelphia** as part of Philly's go-live. Same code is reused verbatim for DC when DC opens — no per-venue branching beyond the venue→region map. **Philly drives the timeline; DC inherits.**
+The Fiserv-USA driver builds **first for DC** as part of DC's go-live. Same code is reused verbatim for Philadelphia when Philly opens — no per-venue branching beyond the venue→region map. **DC drives the timeline; Philly inherits.**
 
 The Fiserv-CA driver (Hamilton) is the **Phase 2 hardware track** — answers DEC-105's open question 2. Hamilton's existing C405 runs standalone today (operator types the cart amount manually); the integrated path lands as part of Phase 2 alongside the receipt printer (DEC-098). No code in Phase 1 depends on the integrated path.
 
@@ -1120,6 +1121,7 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 - DEC-105 Q1 (config key name) → **no separate key; derive from `anvil_venue_id`**.
 - DEC-105 Q2 (Fiserv-CA driver placement) → **Phase 2 hardware track**.
 - DEC-105 Q3 (first US venue) → **Fiserv ISO via Slice/Clover for Philadelphia first**; same code reused for DC.
+- DEC-105 Q3 (first US venue) → **Fiserv ISO via Slice/Clover for DC**, same code reused for Philly.
 - DEC-105 Q4 (Slice interest) → **dual-pricing UX**; rail-sharing is a separate, complementary finding for DC/Philly.
 
 ### What this DEC does NOT promise
