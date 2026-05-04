@@ -179,7 +179,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# Clean up using the dynamic asset name and asset_code
 		if hasattr(self, 'test_asset_name'):
 			frappe.db.delete("Asset Status Log", {"venue_asset": self.test_asset_name})
-			frappe.db.delete("Venue Asset", {"name": self.test_asset_name"})
+			frappe.db.delete("Venue Asset", {"name": self.test_asset_name})
 		# Also clean up by asset_code in case name wasn't stored
 		frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 		frappe.db.commit()
