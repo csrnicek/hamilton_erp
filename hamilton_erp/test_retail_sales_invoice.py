@@ -698,12 +698,17 @@ class TestSubmitRetailSaleHardening(IntegrationTestCase):
 	# ---------------------------------------------------------------
 
 	def test_insufficient_stock_rejected_before_submit(self):
-		"""Aggregate cart qty > Bin.actual_qty raises a clean ValidationError."""
-		# setUp seeded 10 units. Try to sell 100.
+		"""Aggregate cart qty > Bin.actual_qty raises a clean ValidationError.
+
+		Seed now provides 100 opening units of WAT-500 (per the retail
+		opening-stock seed change), and setUp adds another 10, so the
+		request qty must exceed any plausible accumulation. Use a number
+		well above what any fixture or repeated test run could produce.
+		"""
 		with self.assertRaises(frappe.ValidationError) as ctx:
 			submit_retail_sale(
-				items=[{"item_code": "WAT-500", "qty": 100, "unit_price": 3.50}],
-				cash_received=500.00,
+				items=[{"item_code": "WAT-500", "qty": 100000, "unit_price": 3.50}],
+				cash_received=500000.00,
 			)
 		msg = str(ctx.exception)
 		self.assertIn("Insufficient stock", msg)
