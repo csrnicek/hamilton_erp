@@ -17,6 +17,16 @@
 **Fiserv merchant support:** 1-800-872-7882 (24/7)
 **Frappe Cloud status page:** https://frappecloud.com/dashboard/status
 
+### Tier-2 Escalation Chain (when Chris is unreachable)
+
+When this runbook says "call Chris" but Chris cannot be reached, escalate in this order:
+
+1. **First call — Craig** (existing on-call contact; number kept in the venue front-desk binder).
+2. **Second call — Austin LeFrense — 905-920-0487.**
+3. If neither answers within 10 minutes, retry Chris and continue retrying every 5 minutes until contact is made.
+
+See DEC-108 for the rule. See `HAMILTON_LAUNCH_PLAYBOOK.md` "Who to call" table for the same chain in the launch context.
+
 ---
 
 ---

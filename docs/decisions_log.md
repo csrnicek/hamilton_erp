@@ -1093,6 +1093,20 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 
 ---
 
+## Amendment 2026-05-04 — DEC-108: Tier-2 escalation contacts
+
+**Decision.** When Chris is unreachable, the front desk escalates in this order: (1) **Craig** — existing on-call contact, number in the venue front-desk binder; (2) **Austin LeFrense — 905-920-0487**.
+
+**Why.** The launch playbook and emergency runbook previously listed "Tier-2: [name + phone]" as a placeholder. With opening weekend approaching, the Tier-2 chain needs concrete names and a documented order so a stressed operator at 11pm does not have to guess. Two named fallbacks in series gives Hamilton a realistic chance of reaching a human inside the 30-minute SLA when Chris is on a flight or asleep.
+
+**What changed.**
+- `docs/HAMILTON_LAUNCH_PLAYBOOK.md` — "Who to call" table now lists Craig as Tier-2 first call and Austin LeFrense (905-920-0487) as Tier-2 second call.
+- `docs/RUNBOOK_EMERGENCY.md` — added a "Tier-2 Escalation Chain" block under the contact header at the top of the file so the chain is visible from the first triage page.
+
+**References.** None — this is the first decision pinning the Tier-2 contact list. Future amendments to either contact (number change, replacement person) supersede this DEC.
+
+---
+
 ## Part 12 — How to use this document
 
 Before making ANY change to the asset board, search this document first. If the change touches a decision already locked here:
