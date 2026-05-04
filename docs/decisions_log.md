@@ -1167,6 +1167,16 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** `hamilton_erp/lifecycle.py`: handler reads `exc.args[-1]` (the original IntegrityError → contains "Duplicate entry ... for key 'session_number'", locale-stable) and ORs the legacy match for environments where the underlying exception is wrapped differently. No behaviour change in en-US; correctness preserved across locales.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.2; skill `tob-sharp-edges` (i18n-fragile error matching).
+
+## Amendment 2026-05-04 — DEC-092: Supply-chain audit via bench-venv `pip-audit` (audit S4.4)
+
+**Decision.** `[project] dependencies` stays empty. Frappe/ERPNext continue to be declared in `[tool.bench.frappe-dependencies]`. The supply-chain audit signal will come from a CI step that runs `pip list --format=json` from inside the bench venv and pipes the result into `pip-audit`. Implementation lands in a Phase-2 CI follow-up; this DEC pins the design.
+
+**Why.** Audit S4.4 flagged that `pip-audit` / Dependabot see an empty dependency tree because they don't parse `[tool.bench.frappe-dependencies]`. Two options: (a) duplicate Frappe/ERPNext pins in `[project] dependencies`, or (b) audit the live bench venv. Option (a) creates two sources of truth that can drift. Option (b) audits exactly what's installed. Inline comment added on `[tool.bench.frappe-dependencies]` so future contributors don't re-raise the gap without the context.
+
+**What changed.** `pyproject.toml`: comment block above `[tool.bench.frappe-dependencies]` referencing DEC-092 and the planned CI step. No behaviour change.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.4; LL-006 (frappe-dependencies correctness); skill `tob-supply-chain-risk-auditor`.
 ## Amendment 2026-05-04 — DEC-107: Multi-venue processor decisions; adapter region keying; Slice clarification
 
 **Decision.** Locks the per-venue card-processor stack for the four near-term venues, the Fiserv adapter region-keying scheme, the build order for the US driver, and the correct interpretation of "Slice" in Hamilton's research history. Supersedes the open questions raised by DEC-105.

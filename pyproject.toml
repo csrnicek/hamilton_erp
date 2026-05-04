@@ -16,6 +16,13 @@ dependencies = []
 test = ["hypothesis"]
 
 [tool.bench.frappe-dependencies]
+# DEC-092 / S4.4: Frappe and ERPNext are declared here (Frappe's bench-only
+# convention, honoured by `bench install-app`) and NOT in [project] dependencies.
+# Standard Python supply-chain tooling (pip-audit, safety, Dependabot) does not
+# parse this section, so an empty [project] dependencies array can silently
+# pass a CVE scan. Hamilton's mitigation is a CI step that runs
+# `pip list --format=json` from inside the bench venv and pipes the output
+# into `pip-audit` — see DEC-092 for the audit signal source.
 frappe = ">=16.0.0,<17.0.0"
 erpnext = ">=16.0.0,<17.0.0"
 
