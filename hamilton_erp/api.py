@@ -302,9 +302,9 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
 	frappe.logger().warning(
-		"assign_asset_to_session called in Phase 1 (no-op). "
+		f"assign_asset_to_session called in Phase 1 (no-op). "
 		f"sales_invoice={sales_invoice!r} asset_name={asset_name!r} "
-		"caller={caller!r}".format(caller=frappe.session.user)
+		f"caller={frappe.session.user!r}"
 	)
 	return {
 		"status": "phase_1_disabled",
