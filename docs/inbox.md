@@ -1877,3 +1877,23 @@ Total: 1-2 weeks of focused Phase 2 work after Sales Invoice creation lands.
 - Which processors are realistic backups for the Hamilton standard MID? Per DEC-062 Hamilton is a standard merchant via Fiserv; the question is which processor's perception-of-bathhouse risk model is least likely to terminate (Helcim is friendly to bathhouse-hospitality in Canada). Research backup adapters before committing to the abstraction layer.
 - Hardware: confirm TM-T20III can be sourced in Canada and supports both ethernet and WiFi (some sub-models are ethernet-only). Verify the ESC/POS command set is the standard one that python-escpos supports out of the box.
 - Receipt tape: brand + cost per roll + how many transactions per roll? Need this for the operations runbook.
+
+---
+
+## 2026-05-04 — Reporting Suite Deferred (Tasks 26-30)
+
+Reporting suite (5 reports) registered in Taskmaster but deferred to pre-go-live.
+Not building now per build_phases.md — reporting is explicitly deferred.
+
+### Task 27 (Shift Close / Cash Reconciliation Report) — Implementation Notes
+
+When building this report (future session):
+
+- **Visibility gate:** Report rows ONLY visible after `Cash Reconciliation.docstatus = 1` (submitted)
+- **Data capture:** Must show manager-recorded amounts from reconciliation
+- **Column addition:** Add "Shift End" column alongside "Shift Start" 
+- **Security:** Rows hidden from ALL roles until reconciliation is submitted (permlevel or query filter)
+
+Rationale: Blind-count integrity — operators must not see reconciliation data before manager completes blind count and submits the reconciliation document.
+
+---
