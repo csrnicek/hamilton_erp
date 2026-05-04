@@ -69,7 +69,38 @@
    "label": "Reason"
   },
   {
-   "description": "Traceability — which session caused this status change.",
+   "fieldname": "section_oos_tracking",
+   "fieldtype": "Section Break",
+   "label": "Out of Service Tracking",
+   "depends_on": "eval:doc.new_status=='Out of Service' || doc.previous_status=='Out of Service'"
+  },
+  {
+   "description": "Auto-populated when new_status = 'Out of Service'. Timestamp when asset entered OOS.",
+   "fieldname": "oos_start_time",
+   "fieldtype": "Datetime",
+   "label": "OOS Start Time",
+   "read_only": 1
+  },
+  {
+   "description": "Auto-populated when previous_status = 'Out of Service' (asset returning to service). Timestamp when asset left OOS.",
+   "fieldname": "oos_end_time",
+   "fieldtype": "Datetime",
+   "label": "OOS End Time",
+   "read_only": 1
+  },
+  {
+   "fieldname": "column_break_oos",
+   "fieldtype": "Column Break"
+  },
+  {
+   "description": "Auto-calculated: (oos_end_time - oos_start_time) in minutes. Only populated when asset returns to service.",
+   "fieldname": "oos_duration_minutes",
+   "fieldtype": "Int",
+   "label": "OOS Duration (minutes)",
+   "read_only": 1
+  },
+  {
+   "description": "Traceability \u2014 which session caused this status change.",
    "fieldname": "venue_session",
    "fieldtype": "Link",
    "label": "Venue Session",
