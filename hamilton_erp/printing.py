@@ -164,11 +164,18 @@ def print_cash_receipt(sales_invoice_name: str) -> dict:
 	  - ``{"status": "skipped", "reason": "disabled"}`` when the Hamilton
 	    Settings flag is unchecked (or Settings is missing entirely)
 	  - ``{"status": "printed", "ip": "<ip>"}`` on a successful dispatch
+	  - ``{"status": "queued_for_retry", "reason": "<error>"}`` when dispatch
+	    fails — the sale STILL COMPLETES; the failed receipt is logged to
+	    Error Log under the ``Receipt Print Retry Queue`` title for the
+	    Phase-2 retry worker to pick up, and the operator UI surfaces a
+	    persistent warning until the receipt prints successfully.
 
-	Throws ``frappe.ValidationError`` (via the underlying helpers) on
-	any failure outside the two short-circuit conditions. Callers that
-	hold a transaction open MUST let the throw bubble — a caught throw
-	would leave a submitted SI without a receipt, violating DEC-098.
+	Per DEC-098 (revised 2026-05-04 — Option B): printer dispatch failure
+	does NOT roll back the sale. The original "no receipt = no sale"
+	contract was overruled because the front desk cannot defer a paying
+	customer mid-checkout while waiting for a printer to come back online.
+	Cash sales must always complete; the receipt obligation is satisfied
+	asynchronously by the retry worker (Phase 2) or manually by reprint.
 	"""
 	# Test-mode escape hatch. We log via frappe.logger so the absence of
 	# a print is auditable in test logs without polluting the regular
@@ -186,8 +193,35 @@ def print_cash_receipt(sales_invoice_name: str) -> dict:
 		)
 		return {"status": "skipped", "reason": "disabled"}
 
+	# Render is local-only (CRA mandatory-content validation, ESC/POS bytes
+	# generation). Render failures are programmer errors (e.g. blank
+	# gst_hst_registration_number) and SHOULD still throw — they are not
+	# transient hardware faults.
 	rendered = _render_receipt(sales_invoice_name)
-	_dispatch_to_printer(rendered, ip)
+
+	# Dispatch is the failure surface that the soft-fail policy targets:
+	# network unreachable, printer offline, paper out, etc. Catch the
+	# throw, log to the retry queue, and return a queued status so the
+	# caller (submit_retail_sale) does NOT roll back the sale.
+	try:
+		_dispatch_to_printer(rendered, ip)
+	except Exception as exc:  # noqa: BLE001 — soft-fail per DEC-098 Option B
+		reason = str(exc) or exc.__class__.__name__
+		# Error Log entry serves as the Phase-1 retry queue. Title is
+		# stable so the Phase-2 retry worker can query
+		# `frappe.get_all("Error Log", filters={"method": "Receipt Print Retry Queue"})`
+		# and replay each failed dispatch.
+		frappe.log_error(
+			title="Receipt Print Retry Queue",
+			message=(
+				f"sales_invoice={sales_invoice_name}\n"
+				f"printer_ip={ip}\n"
+				f"reason={reason}\n"
+				f"rendered_bytes_len={len(rendered)}"
+			),
+		)
+		return {"status": "queued_for_retry", "reason": reason, "ip": ip}
+
 	return {"status": "printed", "ip": ip}
 
 

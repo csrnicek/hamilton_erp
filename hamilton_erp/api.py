@@ -1056,11 +1056,16 @@ def submit_retail_sale(
 			si.db_set("owner", real_user, update_modified=False)
 		si.submit()
 
-		# DEC-098 — no receipt = no completed sale. Render + dispatch the
-		# cash receipt to the Epson TM-T20III. If this throws (network,
-		# paper out, blank GST/HST), the exception bubbles out of the
-		# whitelisted method; Frappe's request-level rollback then reverses
-		# the SI submit. Same blocking pattern as R-012's cash-drop label.
+		# DEC-098 (revised 2026-05-04 — Option B): cash sales ALWAYS
+		# complete; the receipt obligation is satisfied asynchronously.
+		# print_cash_receipt now soft-fails on dispatch errors (network,
+		# paper out, printer offline) by logging to the Receipt Print
+		# Retry Queue Error Log and returning queued_for_retry. The
+		# Phase-2 retry worker replays queued receipts when the printer
+		# reconnects. Render failures (blank GST/HST registration, etc.)
+		# DO still throw — those are programmer errors, not transient
+		# hardware faults, and the sale should not commit with malformed
+		# receipt data.
 		# Test mode + receipt_printer_enabled=0 short-circuit inside
 		# print_cash_receipt — see hamilton_erp/printing.py docstring.
 		from hamilton_erp.printing import print_cash_receipt

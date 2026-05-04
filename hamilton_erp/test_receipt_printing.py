@@ -119,11 +119,18 @@ class TestPrintCashReceiptValidation(IntegrationTestCase):
 			_render_receipt("SI-DOES-NOT-MATTER-FOR-VALIDATION")
 		self.assertIn("GST/HST", str(ctx.exception))
 
-	def test_print_cash_receipt_blocks_on_printer_dispatch_failure(self):
-		"""Dispatch failure bubbles as ValidationError so the surrounding
-		transaction rolls back (no receipt = no sale). The render side
-		is mocked to a fixed string so this test isolates the dispatch
-		contract, not the print-format rendering.
+	def test_print_cash_receipt_queues_on_printer_dispatch_failure(self):
+		"""Per DEC-098 Option B (revised 2026-05-04): dispatch failure
+		does NOT throw and does NOT roll back the sale. Instead,
+		``print_cash_receipt`` catches the exception, logs an Error Log
+		entry titled ``Receipt Print Retry Queue`` (the Phase-1 queue),
+		and returns ``{"status": "queued_for_retry", ...}`` so the caller
+		(``submit_retail_sale``) commits the sale normally.
+
+		This was originally written as ``test_..._blocks_on_dispatch_failure``
+		to assert the opposite contract; the DEC-098 amendment overruled
+		that policy because the front desk cannot defer a paying customer
+		mid-checkout while waiting for a printer to come back online.
 		"""
 		self._set_settings(
 			receipt_printer_enabled=1,
@@ -135,9 +142,16 @@ class TestPrintCashReceiptValidation(IntegrationTestCase):
 				"hamilton_erp.printing._dispatch_to_printer",
 				side_effect=frappe.ValidationError("Receipt printer dispatch failed: simulated"),
 			):
-				with self.assertRaises(frappe.ValidationError) as ctx:
-					print_cash_receipt("SI-DISPATCH-FAILURE-TEST")
-		self.assertIn("dispatch failed", str(ctx.exception))
+				with patch("hamilton_erp.printing.frappe.log_error") as log_mock:
+					result = print_cash_receipt("SI-DISPATCH-FAILURE-TEST")
+		self.assertEqual(result["status"], "queued_for_retry")
+		self.assertIn("dispatch failed", result["reason"])
+		# Pin the retry-queue Error Log title so the Phase-2 worker can
+		# query for it.
+		log_mock.assert_called_once()
+		_, kwargs = log_mock.call_args
+		self.assertEqual(kwargs["title"], "Receipt Print Retry Queue")
+		self.assertIn("SI-DISPATCH-FAILURE-TEST", kwargs["message"])
 
 
 class TestReprintEndpointRoleGate(IntegrationTestCase):
@@ -239,33 +253,38 @@ class TestSubmitRetailSaleRollsBackOnPrintFailure(IntegrationTestCase):
 		frappe.flags.in_test = self._saved_in_test
 		super().tearDown()
 
-	def test_submit_retail_sale_rolls_back_on_print_failure(self):
-		"""When print_cash_receipt throws, submit_retail_sale must
-		propagate the throw — Frappe's request-level rollback then
-		reverses the SI submit. We assert the throw is propagated; the
-		SI rollback itself is the responsibility of Frappe's request
-		layer (which is not exercised in the IntegrationTestCase
-		harness, but is what production relies on).
+	def test_submit_retail_sale_completes_when_print_queued_for_retry(self):
+		"""Per DEC-098 Option B (revised 2026-05-04): a printer dispatch
+		failure is soft — ``print_cash_receipt`` returns
+		``{"status": "queued_for_retry"}`` instead of throwing — so
+		``submit_retail_sale`` MUST commit the sale normally.
+
+		Originally written as ``..._rolls_back_on_print_failure`` to assert
+		that the throw propagates and Frappe's request-level rollback
+		reverses the SI submit. The DEC-098 amendment overruled that
+		policy: cash sales must always complete at the front desk; the
+		receipt obligation is satisfied async via the retry queue or
+		manually via reprint.
 		"""
 		# Disable the test-mode short-circuit so the real path runs.
 		frappe.flags.in_test = False
 
+		queued_status = {
+			"status": "queued_for_retry",
+			"reason": "simulated dispatch failure",
+			"ip": "10.0.0.99",
+		}
 		with patch(
 			"hamilton_erp.printing.print_cash_receipt",
-			side_effect=frappe.ValidationError(
-				"Receipt printer dispatch failed: simulated for rollback test"
-			),
+			return_value=queued_status,
 		):
-			with self.assertRaises(frappe.ValidationError) as ctx:
-				submit_retail_sale(
-					items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
-					cash_received=10.00,
-				)
-		self.assertIn("dispatch failed", str(ctx.exception))
-		# Pin: the exception type is ValidationError (not a generic
-		# Exception) so Frappe's request layer recognises it as a
-		# user-facing error and emits the right rollback path.
-		self.assertIsInstance(ctx.exception, frappe.ValidationError)
+			result = submit_retail_sale(
+				items=[{"item_code": "WAT-500", "qty": 1, "unit_price": 3.50}],
+				cash_received=10.00,
+			)
+		# Sale completed — submit_retail_sale returns the SI envelope.
+		self.assertEqual(result.get("status"), "ok")
+		self.assertTrue(result.get("invoice"))
 		# Defensive sanity: the patched submit_retail_sale was reached
 		# (POS Profile + Walk-in customer prerequisites are met).
 		self.assertTrue(frappe.db.exists("POS Profile", HAMILTON_POS_PROFILE))
