@@ -355,10 +355,16 @@ def assign_asset_to_session(sales_invoice: str, asset_name: str) -> dict:
 	Phase 2 will replace this body with the real assignment flow.
 	"""
 	frappe.has_permission("Venue Asset", "write", throw=True)
+	# DEC-089 / S4.1: single f-string covering the whole message. The previous
+	# form mixed f-string interpolation with a trailing .format() call, which
+	# was a footgun for any future edit that adds another {placeholder} and
+	# forgets the .format() chain. The !r repr-renders defeat log-line-break
+	# injection on user-controlled inputs (sales_invoice / asset_name).
+	caller = frappe.session.user
 	frappe.logger().warning(
 		f"assign_asset_to_session called in Phase 1 (no-op). "
 		f"sales_invoice={sales_invoice!r} asset_name={asset_name!r} "
-		f"caller={frappe.session.user!r}"
+		f"caller={caller!r}"
 	)
 	return {
 		"status": "phase_1_disabled",

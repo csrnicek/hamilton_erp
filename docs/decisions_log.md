@@ -1204,6 +1204,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** Documentation only. The existing hooks.py comment is preserved.
 
 **References.** Audit `docs/audits/frappe_skills_audit_2026-05-04.md` § F3.1; skill `frappe-syntax-hooks` (asset scoping); existing comment in `hamilton_erp/hooks.py:13-17`.
+## Amendment 2026-05-04 — DEC-089: Collapse f-string + `.format()` in `assign_asset_to_session` logger (audit S4.1)
+
+**Decision.** The phase-1 no-op log line in `assign_asset_to_session` is now a single f-string covering the whole message, not an f-string concatenated with a trailing `.format()` call.
+
+**Why.** The audit S4.1 flagged the dual-interpolation pattern as a footgun for CWE-134 (Use of Externally-Controlled Format String): a future edit adding another `{name}` placeholder without removing the `.format()` chain could allow attribute-walking on attacker-controlled keys. The `!r` repr-render on user inputs is preserved.
+
+**What changed.** `hamilton_erp/api.py::assign_asset_to_session` log line refactored to a single f-string with explicit `caller = frappe.session.user` binding.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S4.1; skill `tob-sharp-edges`.
 
 ## Amendment 2026-05-04 — DEC-097: Club Hamilton GST/HST registration number — known value, entered via Desk
 
