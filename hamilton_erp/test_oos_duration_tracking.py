@@ -16,16 +16,14 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 	def setUp(self):
 		"""Create a test venue asset."""
-		# Clean up any existing test assets by both name and asset_code
-		if frappe.db.exists("Venue Asset", "TEST-OOS-ASSET"):
-			frappe.db.delete("Venue Asset", {"name": "TEST-OOS-ASSET"})
-		if frappe.db.exists("Venue Asset", {"asset_code": "TEST-OOS-001"}):
-			frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
+		# Clean up any existing test assets
+		frappe.db.delete("Asset Status Log", {"venue_asset": ["like", "%TEST-OOS%"]})
+		frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 		frappe.db.commit()
 
+		# Create asset without explicit name - let Frappe auto-generate
 		asset = frappe.get_doc({
 			"doctype": "Venue Asset",
-			"name": "TEST-OOS-ASSET",
 			"asset_code": "TEST-OOS-001",
 			"asset_name": "Test OOS Locker",
 			"asset_category": "Locker",  # Lockers don't require tier validation
@@ -34,11 +32,14 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		asset.insert(ignore_permissions=True)
 		frappe.db.commit()
 
+		# Store the auto-generated name for tests to use
+		self.test_asset_name = asset.name
+
 	def test_oos_start_time_populated_when_entering_oos(self):
 		"""When asset enters OOS, oos_start_time is set."""
 		log = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"previous_status": "Available",
 			"new_status": "Out of Service",
@@ -60,7 +61,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# First, create OOS entry
 		oos_entry = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"previous_status": "Available",
 			"new_status": "Out of Service",
@@ -72,7 +73,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# Now return to service
 		return_entry = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"previous_status": "Out of Service",
 			"new_status": "Available",
@@ -90,7 +91,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		two_hours_ago = add_to_date(now_datetime(), hours=-2)
 		oos_entry = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"timestamp": two_hours_ago,
 			"previous_status": "Available",
@@ -103,7 +104,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# Return to service now
 		return_entry = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"previous_status": "Out of Service",
 			"new_status": "Available",
@@ -124,7 +125,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# First OOS cycle
 		oos1 = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"timestamp": add_to_date(now_datetime(), hours=-3),
 			"previous_status": "Available",
@@ -135,7 +136,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 		return1 = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"timestamp": add_to_date(now_datetime(), hours=-2),
 			"previous_status": "Out of Service",
@@ -148,7 +149,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 		# Second OOS cycle (30 minutes ago to now)
 		oos2 = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"timestamp": add_to_date(now_datetime(), minutes=-30),
 			"previous_status": "Available",
@@ -160,7 +161,7 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 		return2 = frappe.get_doc({
 			"doctype": "Asset Status Log",
-			"venue_asset": "TEST-OOS-ASSET",
+			"venue_asset": self.test_asset_name,
 			"operator": "Administrator",
 			"previous_status": "Out of Service",
 			"new_status": "Available",
@@ -175,10 +176,10 @@ class TestOOSDurationTracking(IntegrationTestCase):
 
 	def tearDown(self):
 		"""Clean up test data."""
-		frappe.db.delete("Asset Status Log", {"venue_asset": "TEST-OOS-ASSET"})
-		# Delete by both name and asset_code to ensure complete cleanup
-		if frappe.db.exists("Venue Asset", "TEST-OOS-ASSET"):
-			frappe.db.delete("Venue Asset", {"name": "TEST-OOS-ASSET"})
-		if frappe.db.exists("Venue Asset", {"asset_code": "TEST-OOS-001"}):
-			frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
+		# Clean up using the dynamic asset name and asset_code
+		if hasattr(self, 'test_asset_name'):
+			frappe.db.delete("Asset Status Log", {"venue_asset": self.test_asset_name})
+			frappe.db.delete("Venue Asset", {"name": self.test_asset_name"})
+		# Also clean up by asset_code in case name wasn't stored
+		frappe.db.delete("Venue Asset", {"asset_code": "TEST-OOS-001"})
 		frappe.db.commit()
