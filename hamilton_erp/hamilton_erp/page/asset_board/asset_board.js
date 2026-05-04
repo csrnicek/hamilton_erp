@@ -1558,6 +1558,64 @@ hamilton_erp.AssetBoard = class AssetBoard {
 			(d) => this.apply_status_change(d));
 		frappe.realtime.on("hamilton_asset_board_refresh",
 			() => this.full_refresh());
+		// DEC-104 — Offline banner. Hook Frappe's realtime disconnect/reconnect
+		// AND the browser online/offline events so we catch both server-side
+		// outages (Socket.IO drop) and OS-level network loss (Wi-Fi off).
+		this._setup_offline_listeners();
+	}
+
+	// DEC-104 — register both Frappe Socket.IO and browser-level listeners.
+	// Bound methods are stashed on `this` so teardown() can detach them
+	// (anonymous handlers can't be unregistered by reference).
+	_setup_offline_listeners() {
+		this._on_offline = () => this._show_offline_banner();
+		this._on_online = () => this._hide_offline_banner();
+		window.addEventListener("offline", this._on_offline);
+		window.addEventListener("online", this._on_online);
+		// Frappe realtime exposes "disconnect" and "reconnect" via the
+		// underlying socket.io client. The frappe.realtime.socket reference
+		// is the socket instance; some Frappe builds also expose
+		// frappe.realtime.on("disconnect", ...) which routes through the
+		// same emitter. We register on whichever surface is available so
+		// this works across Frappe v14/v15/v16 without conditional version
+		// checks.
+		try {
+			if (frappe.realtime && frappe.realtime.socket) {
+				frappe.realtime.socket.on("disconnect", this._on_offline);
+				frappe.realtime.socket.on("connect", this._on_online);
+				frappe.realtime.socket.on("reconnect", this._on_online);
+			}
+		} catch (e) {
+			// frappe.realtime.socket not available — browser events still fire.
+		}
+		// If we load already-offline (Wi-Fi off when the operator opens
+		// the board), surface immediately rather than waiting for an event.
+		if (typeof navigator !== "undefined" && navigator.onLine === false) {
+			this._show_offline_banner();
+		}
+	}
+
+	// DEC-104 — full-width red banner above the tab bar. Distinct from
+	// the overtime banner (which is also red but has a different message
+	// and is dismissible by acting on assets). Offline banner clears
+	// itself on reconnect; operators cannot dismiss it manually.
+	_show_offline_banner() {
+		let $banner = this.wrapper.find(".hamilton-offline-banner");
+		if ($banner.length) return;
+		const label = __("System offline — do not process cash until reconnected.");
+		const $tabbar = this.wrapper.find(".hamilton-tab-bar");
+		const html = `<div class="hamilton-offline-banner" role="alert">${frappe.utils.escape_html(label)}</div>`;
+		if ($tabbar.length) {
+			$tabbar.before(html);
+		} else {
+			// Fallback for the no-shift gate (no tab bar). Insert after the header.
+			const $header = this.wrapper.find(".hamilton-header");
+			if ($header.length) $header.after(html);
+		}
+	}
+
+	_hide_offline_banner() {
+		this.wrapper.find(".hamilton-offline-banner").remove();
 	}
 
 	apply_status_change(payload) {
@@ -1583,6 +1641,24 @@ hamilton_erp.AssetBoard = class AssetBoard {
 		$(document).off("click.hamilton-board");
 		frappe.realtime.off("hamilton_asset_status_changed");
 		frappe.realtime.off("hamilton_asset_board_refresh");
+		// DEC-104 — detach offline listeners.
+		if (this._on_offline) {
+			window.removeEventListener("offline", this._on_offline);
+			try {
+				if (frappe.realtime && frappe.realtime.socket) {
+					frappe.realtime.socket.off("disconnect", this._on_offline);
+				}
+			} catch (e) { /* socket already torn down */ }
+		}
+		if (this._on_online) {
+			window.removeEventListener("online", this._on_online);
+			try {
+				if (frappe.realtime && frappe.realtime.socket) {
+					frappe.realtime.socket.off("connect", this._on_online);
+					frappe.realtime.socket.off("reconnect", this._on_online);
+				}
+			} catch (e) { /* socket already torn down */ }
+		}
 	}
 
 	// ── Sorting helpers ─────────────────────────────────────
