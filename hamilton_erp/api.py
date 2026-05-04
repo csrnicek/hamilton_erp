@@ -249,6 +249,15 @@ def get_asset_board_data() -> dict:
 		# captured the reason at OOS-entry time.
 		if a["status"] == "Out of Service" and not a.get("reason"):
 			a["reason"] = oos_log_reasons.get(a["name"]) or a.get("reason")
+		# OOS days: calculate elapsed days since asset went OOS. JS reads
+		# this to render "3 days ago" etc. in the OOS info panel. Uses
+		# hamilton_last_status_change (already in the payload) as the
+		# timestamp when the asset transitioned to Out of Service.
+		if a["status"] == "Out of Service" and a.get("hamilton_last_status_change"):
+			elapsed = now_datetime() - a["hamilton_last_status_change"]
+			a["oos_days"] = elapsed.days
+		else:
+			a["oos_days"] = None
 
 	# V9.1 retail amendment: enrich payload with retail Items grouped by
 	# Item Group when the venue has `retail_tabs` configured in
