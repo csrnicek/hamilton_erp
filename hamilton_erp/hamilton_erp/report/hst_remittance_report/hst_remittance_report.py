@@ -35,6 +35,8 @@ def validate_filters(filters):
 		frappe.throw(_("To Date is required"))
 	if not filters.get("company"):
 		frappe.throw(_("Company is required"))
+	if not filters.get("hst_account"):
+		frappe.throw(_("HST Account is required"))
 
 
 def get_summary_report(filters):
@@ -75,9 +77,7 @@ def calculate_cra_lines(filters):
 	company = filters.get("company")
 	from_date = filters.get("from_date")
 	to_date = filters.get("to_date")
-
-	# Get HST account name for this company
-	hst_account = get_hst_account(company)
+	hst_account = filters.get("hst_account")
 
 	# Line 101: Sales and other revenue (taxable supplies)
 	line_101 = get_taxable_sales_revenue(company, from_date, to_date, hst_account)
@@ -154,21 +154,6 @@ def calculate_cra_lines(filters):
 	]
 
 	return data
-
-
-def get_hst_account(company):
-	"""Get the HST Payable account name for the company."""
-	# Standard ERPNext HST account naming
-	account = frappe.db.get_value(
-		"Account",
-		{"company": company, "account_name": ["like", "%HST%"], "account_type": "Tax"},
-		"name"
-	)
-
-	if not account:
-		frappe.throw(_("HST Payable account not found for company {0}").format(company))
-
-	return account
 
 
 def get_taxable_sales_revenue(company, from_date, to_date, hst_account):
@@ -282,9 +267,37 @@ def get_detail_transactions(filters):
 	company = filters.get("company")
 	from_date = filters.get("from_date")
 	to_date = filters.get("to_date")
-	hst_account = get_hst_account(company)
+	hst_account = filters.get("hst_account")
 
 	transactions = []
+
+	# Get Sales Invoice HST collected
+	si_data = frappe.db.sql("""
+		SELECT
+			si.posting_date as date,
+			'Sales Invoice' as transaction_type,
+			si.name as voucher_no,
+			si.customer_name as memo,
+			si.customer as party,
+			'HST Collected' as tax_code,
+			stc.rate as tax_rate,
+			stc.base_net_amount as net_amount,
+			stc.base_tax_amount as tax_amount
+		FROM `tabSales Invoice` si
+		INNER JOIN `tabSales Taxes and Charges` stc ON stc.parent = si.name
+		WHERE si.docstatus = 1
+			AND si.company = %(company)s
+			AND si.posting_date BETWEEN %(from_date)s AND %(to_date)s
+			AND stc.account_head = %(hst_account)s
+		ORDER BY si.posting_date, si.name
+	""", {
+		"company": company,
+		"from_date": from_date,
+		"to_date": to_date,
+		"hst_account": hst_account
+	}, as_dict=1)
+
+	transactions.extend(si_data)
 
 	# Get Purchase Invoice ITCs
 	pi_data = frappe.db.sql("""

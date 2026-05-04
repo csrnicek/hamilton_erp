@@ -26,6 +26,21 @@ frappe.query_reports["HST Remittance Report"] = {
 			reqd: 1
 		},
 		{
+			fieldname: "hst_account",
+			label: __("HST Account"),
+			fieldtype: "Link",
+			options: "Account",
+			reqd: 1,
+			get_query: function() {
+				return {
+					filters: {
+						"account_type": "Tax",
+						"company": frappe.query_report.get_filter_value("company")
+					}
+				};
+			}
+		},
+		{
 			fieldname: "detail_view",
 			label: __("Detail View"),
 			fieldtype: "Check",
