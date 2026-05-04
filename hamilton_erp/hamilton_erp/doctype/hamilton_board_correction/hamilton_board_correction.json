@@ -5,7 +5,6 @@
  "creation": "2026-04-09 00:00:00.000000",
  "doctype": "DocType",
  "engine": "InnoDB",
- "istable": 1,
  "field_order": [
   "section_target",
   "target_doctype",
