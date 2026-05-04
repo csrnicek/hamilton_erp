@@ -29,12 +29,24 @@ CLAUDE.md is the source of truth for hard rules and PR template. This file compl
 
 ## Top of Mind — Current Focus
 
-- **Phase 1 Task 17** in progress: subtasks 17.1 + 17.2 done; 17.3-17.5 pending browser QA. Next priority work.
-- **Three-PR CI infrastructure day complete (2026-04-28).** PR #9 (CI), PR #11 (docs cleanup + Hamilton Launch Playbook), PR #12 (CLAUDE.md improvements) all merged. See history section below.
-- **Branch protection enforced on `main`.** Required status checks: `Server Tests` and `Linter`. Manual GitHub UI configuration; API-based setup blocked by token scope.
-- **Tier 0 production monitoring archived** until Hamilton launch is imminent. Plan lives in `docs/inbox.md` (committed via PR #11) and the Hamilton Launch Playbook. Do NOT prompt to start it preemptively.
-- **5 scratch notes** intentionally remain in working-tree `docs/inbox.md` (uncommitted): Throughput re-baseline, Test fixture factory, AoE bookmark, plus PR #11 + #12 MERGED audit entries. The PR MERGED entries are now promoted into this file (see history below) and can be deleted from inbox.md after PR #13 merges.
-- **Next priority:** Phase 1 Task 17 browser QA (17.3-17.5), then Tasks 18-25 toward launch readiness.
+**Last full checkpoint: 2026-05-03 evening (autonomous launch-prep run).** See bottom of file.
+
+- **Pre-launch hardening sprint complete.** 30+ PRs queued for auto-merge SQUASH against main, all driven by the 2026-05-04 Frappe-skills audit (`docs/audits/frappe_skills_audit_2026-05-04.md`) plus the security/anti-pattern audit. Decisions DEC-073 through DEC-114 logged in this push.
+- **Hardware stack locked** — Hamilton: Clover Flex C405 (DEC-106) + Fiserv direct + Epson TM-T20III (DEC-098) + Honeywell Voyager 1602g + 1 standard iPad (DEC-111). DC + Philly: Slice/Clover + Fiserv ISO (DEC-107). Build order: Philly first, DC reuses (DEC-107).
+- **GST/HST registration pinned** — Club Hamilton `105204077RT0001` (DEC-097). Receipts must show this number per CRA mandatory-content rules.
+- **`frappe/payments` decision: Path A** — omit from production (DEC-096 / T0-FC-9). Hamilton ships card-via-Clover-Connect (Phase 2), not via the `frappe/payments` gateway abstraction. Removes a major dependency surface.
+- **Site config defaults pinned in `after_install`** — `hamilton_company`, `hamilton_walkin_customer`, `retail_tabs` now seeded automatically on fresh installs (PR #230). Per-venue overrides via `bench set-config` are preserved.
+- **Local migrate verified clean** on `hamilton-test.localhost`. Production migrate is Chris's manual step (Frappe Cloud snapshot + Deploy click) once main settles.
+- **Five Phase-1-blocker PRs rebased + queued** — #99, #100, #105, #122, #124. Cash Drop owner-isolation, Venue Session PII masking, rollout Phase 0 docs, tip-pull schema (Task 34), orphan-invoice integrity check (Task 35). All conflicts resolved keep-both; force-with-lease pushed.
+- **Tasks 34, 35 marked in-progress in `tasks.json`** — actual code work is on the rebased PR branches; setting status reflects the auto-merge queue.
+- **Outstanding pre-launch gaps awaiting Chris's input** (no autonomous action possible):
+  1. **Retail item list (URGENT)** — 25+ items with prices and HST status. Required to seed POS catalogue.
+  2. **Backup processors decision** — Helcim was floated for the Hamilton standard MID; not yet logged.
+  3. **Receipt tape brand + cost-per-roll + transactions-per-roll** for ops runbook.
+  4. **TM-T20III sourcing** — confirm Canada availability with both ethernet AND WiFi (some sub-models are ethernet-only).
+  5. **Watch tab grouping by sub-category** — V9.1 amendment scope (Watch only vs all tabs) not confirmed; not yet a DEC.
+- **Tasks 18-21 (Asset Board UI verification) still untouched.** Yellow-list items requiring Chris's browser eyes; not autonomous-suitable.
+- **Two-AI cross-review pattern** still recommended for non-trivial PRs; not enforced for the docs-heavy Tier-1/Tier-2 audit drain.
 
 ---
 
@@ -841,3 +853,173 @@ None of the 8 problems are caused by this run's changes. Subsequent runs may sho
 4. Remaining green-list items not picked: SECURITY.md, README.md rewrite, CONTRIBUTING.md.
 
 **End-state:** Working tree clean. 8 of 9 PRs auto-merging once Server Tests passes. PR #55 awaiting Chris review.
+
+---
+
+## Checkpoint — 2026-05-03 evening — Pre-launch hardening + hardware lock-in run
+
+**Trigger.** Multi-day autonomous run driven by:
+1. The Frappe-skills audit (`docs/audits/frappe_skills_audit_2026-05-04.md`) — 11 findings spanning rate-limiting, query-builder hygiene, search indexes, search trust boundaries, install-hook failure modes, and bench-level multi-venue isolation.
+2. The Trail-of-Bits security skill audit + PR #165–#169 read-through (audit-synthesis cleanup).
+3. Hardware lock-in research (Pasigono + Fiserv-CA/USA) with Chris confirming Clover Flex C405 (`C045UQ24930247`) on receipt and Fiserv-direct as Hamilton's processor.
+4. Pre-launch operational items surfaced from `HAMILTON_LAUNCH_PLAYBOOK.md` — Tier-2 escalation contacts, staff PIN policy, bookkeeper review deferral, Frappe Cloud update policy, tablet count, OOS reason fallback, checklist audit.
+
+### Decisions logged in `decisions_log.md` this run
+
+| DEC | Subject |
+|-----|---------|
+| DEC-073 | Multi-venue isolation at the bench level (one bench per venue, separate Frappe Cloud sites). |
+| DEC-074 | Rate-limit mutating endpoints @ 60/min per IP. |
+| DEC-075 | Drop `current_session` from realtime broadcast payload. |
+| DEC-076 | Pin timestamp helpers inside lock invariant (lifecycle). |
+| DEC-077 | Accept `db_set` on Sales Invoice owner post-submit. |
+| DEC-078 | Add search_index on high-traffic Link fields. |
+| DEC-079 | Add search_index on status / date filter fields. |
+| DEC-081 | Rate-limit `get_asset_board_data`. |
+| DEC-082 | Pin Hamilton Cart Audit Log design. |
+| DEC-083 | Accept realtime payload trust boundary. |
+| DEC-084 | Enable Ruff S (flake8-bandit) ruleset. |
+| DEC-085 | Unified `status: ok` envelope on action endpoints. |
+| DEC-086 | Defer `extend_bootinfo`. |
+| DEC-087 | Accept `app_include_css` for Asset Board. |
+| DEC-088 | Document `session_number` invariant. |
+| DEC-089 | Collapse f-string + `.format()` footgun (S4.1). |
+| DEC-090 | Locale-stable `session_number` retry. |
+| DEC-091 | Malformed `session_number` alert plan. |
+| DEC-092 | Supply-chain audit design (S4.4). |
+| DEC-093 | Scope `on_sales_invoice_submit` to Hamilton POS Profile. |
+| DEC-094 | Document `assign_asset_to_session` perm gate. |
+| DEC-095 | Accept client-side cart name display (S5.3). |
+| DEC-096 | T0-FC-9 Path A — omit `frappe/payments` from production. |
+| DEC-097 | Pin Club Hamilton GST/HST registration: `105204077RT0001`. |
+| DEC-098 | Receipt-printing pipeline (Epson TM-T20III over ESC/POS, port 9100). |
+| DEC-099 | Operator-facing shift management on the Asset Board. |
+| DEC-100 | Manager+ restock overlay on OOS retail tiles. |
+| DEC-101 | Audible + persistent overtime alert. |
+| DEC-102 | Shift Summary acknowledge-before-close contract. |
+| DEC-103 | Manager comp admissions from the Asset Board. |
+| DEC-104 | Offline banner (non-blocking, cash-warning). |
+| DEC-105 | Pasigono + Fiserv CA/USA research; multi-venue card adapter map. Slice→Adyen claim refuted. |
+| DEC-106 | Hamilton terminal: Clover Flex C405 (serial `C045UQ24930247`, HW 1.01, Android 10, SRED, WiFi `192.168.0.136`, SAQ-A PCI scope). |
+| DEC-107 | Multi-venue processor decisions. **Build order: Philadelphia first, then DC reuses the same Fiserv-USA driver.** Hamilton uses Fiserv-direct (Canada). |
+| DEC-108 | Tier-2 escalation contacts (Craig + Austin LeFrense `905-920-0487`). |
+| DEC-109 | Staff PIN policy (per-operator, June 2026 setup). |
+| DEC-110 | Bookkeeper review deferred to Phase 2. |
+| DEC-111 | Hamilton tablet count = 1. |
+| DEC-112 | Frappe Cloud update policy + `docs/operations/frappe_cloud_update_policy.md`. |
+| DEC-113 | LAUNCH_PLAYBOOK checklist audit (11 CLOSED / 6 BLOCKED / 46 OPERATIONAL). |
+| DEC-114 | Mark dual-tablet race-condition risk N/A for Hamilton (single-tablet, follow-on to DEC-111). |
+
+### What shipped (merged to main this run)
+
+Highlights — full list at `gh pr list --state merged --search "merged:>=2026-05-03"`:
+
+- **PR #161** — track_changes regression-pin test for v16 audit mechanism (LL-038 backfill).
+- **PR #163** — runtime check for Comp Admission Log permlevel masking (COMP-RUN).
+- **PR #164** — T1-3 Hamilton Operator Asset Board access verified (closed as no-issue).
+- **PR #165** — `publish_realtime` exception fallback (defensive log).
+- **PR #166** — admission gate + `assign_asset_to_session` stub no-op (T1-1).
+- **PR #167** — reject duplicate Cash Reconciliations per Cash Drop (T1-5).
+- **PR #168** — Cash Drop immutability + shift validation + $5K cap (T0-4 + T1-4).
+- **PR #169** — LL-038 documentation (verify install-hook target fields).
+- **PR #170** — DEC-066: admin-correction endpoint + Cash Recon `on_cancel` handler.
+- **PR #171** — T0-1: idempotency token on `submit_retail_sale` (DEC-067).
+- **PR #172** — Tier-1 polish bundle: F1.4 + F3.5 + F3.8 (DEC-068).
+- **PR #173** — front desk operator cheat sheet.
+- **PR #174** — T0-2 Path B: disable variance classification until Phase 3.
+- **PR #175** — T3-1: replace `frappe.db.set_value` with Document API.
+- **PR #176** — delete dead `_ensure_audit_trail_enabled` install hook (LL-038).
+- **PR #177** — T3-5: surface lock TTL expiry to Error Log + RUNBOOK §4.4.
+- **PR #178** — DEC-070: `get_doc_before_save() is None` defensive bypass (soft-deprecate).
+- **PR #179** — finding #1: parse Frappe datetimes as UTC (DEC-071 / LL-040).
+- **PR #180** — finding #2: retail tile redesign (no SKU, name top, OOS overlay).
+- **PR #181** — seed realistic opening stock for retail items on fresh install.
+- **PR #182** — finding #4: Watch tab asset order matches tab bar order.
+- **PR #183** — finding #5: single-tap Vacate on Watch tab tiles (DEC-071).
+- **PR #184** — DEC-072: evaluate + adopt Frappe Claude Skill Package.
+- **PR #185** — Frappe skills anti-pattern audit (2026-05-04).
+- **PR #188** — security hardening audit (2026-05-04).
+- **PR #191** — DEC-077 (F1.1) accept `db_set` on SI owner post-submit.
+- **PR #215** — DEC-101: audible + persistent overtime alert.
+- **PR #218** — DEC-104: offline banner (non-blocking, cash-warning).
+- **PR #219** — OOS tile fallback to Asset Status Log for `reason` when asset-row reason is empty.
+- **PR #226** — DEC-111: Hamilton tablet count = 1 (cross-referenced in 3 docs).
+- **PR #228** — Pending from Chris: URGENT retail item list ask.
+
+### What's queued (open PRs, all auto-merge SQUASH armed)
+
+~50 PRs open at checkpoint time, working through CI:
+
+- **Audit DEC entries** (#186–#211): F-series (frontend) and S-series (security) audit findings DEC-073..DEC-095 plus DEC-097 (GST/HST).
+- **Six pre-launch features** (#212–#217): receipt-printing pipeline (DEC-098), shift management (DEC-099), restock overlay (DEC-100), shift summary contract (DEC-102), comp admissions (DEC-103) — DEC-101 + DEC-104 already merged.
+- **Hardware research + decisions** (#221, #222): Pasigono/Fiserv CA-USA research (DEC-105), multi-venue processor decisions (DEC-107).
+- **Overnight ops queue** (#223, #224, #225, #227, #229): DEC-108..DEC-113.
+- **Site config defaults** (#230): pin `hamilton_company` / `hamilton_walkin_customer` / `retail_tabs` in `after_install`.
+- **Inbox housekeeping** (#231): strip stale conflict markers; (#232): queue pre-go-live timestamp date+time format fix.
+- **UI bug fixes** (#233): RTS modal SET line case-match; (#234): Watch tab active-state styling.
+- **Code cleanup** (#236): collapse f-string + `.format()` mixing in `assign_asset_to_session`.
+- **DEC-114** (#235): mark dual-tablet race condition N/A for Hamilton.
+- **Phase 1 BLOCKER PRs** (#99, #100, #105, #122, #124): rebased clean this run; carry the deferred Stack #3 work (cash drop owner isolation + venue session PII masking) plus tip-pull schema and orphan-invoice integrity check.
+
+### Receipt printer (DEC-098) implementation status
+
+- ESC/POS pipeline scaffold landed in PR #212 (still queued, decisions_log entry on its branch).
+- Hamilton Settings fields (`receipt_printer_ip`, `receipt_printer_enabled`, `gst_hst_registration_number`) are NOT yet on `hamilton-test.localhost` — they'll appear after the next migrate window once #212 merges.
+- Production receipts must include `105204077RT0001` (DEC-097) per CRA mandatory-content rules.
+
+### Multi-venue processor map (post-DEC-107)
+
+| Venue | Terminal | Processor | Driver | Status |
+|-------|----------|-----------|--------|--------|
+| Hamilton | Clover Flex C405 (Canada) | Fiserv-direct (Canada) | Fiserv-CA driver (Phase 2) | Confirmed serial + WiFi pinned |
+| Philadelphia | Slice/Clover | Fiserv ISO (USA via Slice Merchant Services) | Fiserv-USA driver | **Built first** — drives the timeline |
+| DC | Slice/Clover | Fiserv ISO (USA via Slice) | Fiserv-USA driver (reused) | Inherits from Philly |
+| Toronto, Ottawa, Dallas | TBD | TBD | TBD | Phase 3+ |
+
+### Stack #3 status (Cash Drop / Venue Session masking — was deferred 2026-04-30)
+
+- **Cash Drop owner isolation** — PR #99 rebased clean this run. Adds `if_owner: 1` to the Hamilton Operator perm row alongside main's DEC-066 / DEC-065 / PR #168 fields.
+- **Venue Session PII masking** — PR #100 rebased clean this run. PII fields keep `permlevel: 1`; permission row adds the masked-perm rule.
+- **Comp Admission Log masking** — separate work, runtime check landed in PR #163.
+- All three intersect with the deferred "bench migrate STOP condition" — local migrate ran clean tonight on `hamilton-test.localhost`. Production migrate is Chris's manual step.
+
+### Test suite baseline
+
+Carried forward from 2026-04-30 baseline; no new categories of pre-existing failures introduced:
+- 2 failures from seed contamination (`test_environment_health.test_59_assets_exist`, `test_asset_board_api_accessible_as_administrator`).
+- 6 errors from `frappe/payments` not installed on the test bench (CI installs `payments@develop`; local does not since DEC-096 omits it from production).
+- 1 occasional flake (`test_session_number_format_matches_dec033`) — DEC-090 + DEC-091 are the formal fix path.
+
+### Files / surfaces NOT touched this run
+
+Intentionally deferred:
+- `tasks.json` — task statuses set manually for #34 + #35 since `task-master` CLI isn't installed locally; rest of queue untouched.
+- Tasks 18–21 (Asset Board browser QA) — yellow-list, needs Chris's eyes.
+- Phase 2 hardware integration (card adapter, label printer, scanner deployment).
+- `bench migrate` on production — Chris-supervised step, not autonomous.
+
+### Two-AI cross-review
+
+NOT used systematically this run because the bulk was small docs PRs and one-finding-per-PR audit drain. Recommend re-engaging ChatGPT cross-review for:
+1. The receipt-printing pipeline merge (DEC-098 / PR #212) — touches new code, queues, and ESC/POS bytes retention.
+2. Tip-pull schema + reconciliation hook (Task 34 / PR #122) — schema change with downstream calculator impact.
+3. Cash Drop owner-isolation + Venue Session PII masking (Task 25 item 7 / PRs #99 + #100) — security-critical perm changes.
+
+### Next session pickup priorities
+
+1. **Verify all open PRs landed cleanly** — `gh pr list --state open` should be empty or close to it.
+2. **Re-run local migrate** to pick up DEC-098's Hamilton Settings fields once PR #212 merges.
+3. **Production migrate window** — Chris-supervised: Frappe Cloud snapshot + Deploy click.
+4. **Address the five Chris-input items** (retail item list, backup processors, receipt tape, TM-T20III sourcing, Watch tab grouping scope) — none of these can be self-actioned.
+5. **Pre-go-live UI work** queued in `inbox.md`: timestamp date+time format pass across all Asset Board surfaces (PR #232 captures the queue note).
+6. **Tasks 18–21 browser QA** — needs Chris's session.
+7. **Phase 2 hardware integration** (card adapter for Clover Flex over WiFi; label printer; scanner deployment).
+8. **Refresh `inbox.md` "Queued" header** — currently still references stale PR #122 / PR #123 fixes that have been resolved.
+
+### End-state
+
+- ~50 open PRs, all auto-merge SQUASH armed, working through CI.
+- Local site `hamilton-test.localhost` migrated clean. Production migrate pending Chris's manual deploy.
+- Working trees: primary clean. Worktrees `/tmp/hamilton-old5-wt`, `/tmp/hamilton-drain-*-wt`, `/tmp/hamilton-checkpoint-wt` removed.
+- `decisions_log.md` carries DEC-073 through DEC-114 (some entries' PRs still queued — final main state lands when those squash-merge).
+- `claude_memory.md` (this file) refreshed with new Top of Mind + this checkpoint section.
