@@ -32,8 +32,32 @@ _IMMUTABLE_AFTER_FIRST_SAVE = (
 	"timestamp",
 )
 
+# Tip Pull negative-value warning threshold (Task 34, DEC-065).
+# Operator can record a negative tip_pull_amount (e.g. returning cash to till
+# after a mis-pull) but values more negative than this trigger an at-submit
+# warning to catch typos like -$200 when -$2.00 was intended. The warning
+# does NOT block submit — manager will see it on reconciliation.
+_TIP_PULL_NEGATIVE_WARN_THRESHOLD = -50.0
+
 
 class CashDrop(Document):
+	def before_insert(self):
+		"""Resolve tip_pull_currency from the venue's per-venue config.
+
+		Multi-venue feature flag `frappe.conf.anvil_currency` is the canonical
+		per-venue currency identifier (per docs/venue_rollout_playbook.md
+		Phase B + DEC-064). Resolution order:
+		1. Caller passed an explicit value → keep it.
+		2. `frappe.conf.anvil_currency` is set → use that.
+		3. Otherwise → fall back to "CAD" (Hamilton's currency).
+
+		No JSON `default` is set on this field, because Frappe applies static
+		JSON defaults during Document.__init__ — that would shadow this hook
+		and pin the field to "CAD" before we ever read the conf.
+		"""
+		if not self.tip_pull_currency:
+			self.tip_pull_currency = frappe.conf.get("anvil_currency") or "CAD"
+
 	def validate(self):
 		self._set_timestamp()
 		self._validate_declared_amount()
@@ -43,6 +67,8 @@ class CashDrop(Document):
 		self._validate_operator_matches_shift()
 		self._validate_immutable_after_first_save()
 		self._validate_immutable_after_reconciliation()
+		self._compute_tip_pull_difference()
+		self._warn_on_large_negative_tip_pull()
 
 	def _set_timestamp(self):
 		if not self.timestamp:
@@ -204,3 +230,34 @@ class CashDrop(Document):
 				"detected in {1}. Use Hamilton Board Correction (DEC-066) "
 				"if a legitimate correction is needed."
 			).format(self.name, ", ".join(fieldnames)))
+
+	def _compute_tip_pull_difference(self):
+		"""Calculated field: tip_pull_amount - tip_settled_via_processor_amount.
+
+		Phase 1: tip_settled_via_processor_amount stays 0 (Phase 2 settlement-
+		pairing job populates it), so the difference equals tip_pull_amount in
+		Phase 1. The calculation is wired now so Phase 2 doesn't need to add it.
+		"""
+		self.tip_pull_difference = flt(self.tip_pull_amount or 0) - flt(
+			self.tip_settled_via_processor_amount or 0
+		)
+
+	def _warn_on_large_negative_tip_pull(self):
+		"""Surface a non-blocking warning when tip_pull_amount is unusually negative.
+
+		Negative tip_pull_amount is allowed (e.g. operator returned cash to the
+		till after a mis-pull) but values past _TIP_PULL_NEGATIVE_WARN_THRESHOLD
+		are likely typos (e.g. -200 when -2.00 was meant) and warrant a sanity
+		check. The warning is informational; submit still succeeds. Manager
+		sees the value on reconciliation regardless.
+		"""
+		amt = flt(self.tip_pull_amount or 0)
+		if amt < _TIP_PULL_NEGATIVE_WARN_THRESHOLD:
+			frappe.msgprint(
+				_("Tip Pull Amount is unusually negative ({0}). "
+				  "If this is a typo (e.g. -200 instead of -2.00), correct it before submitting. "
+				  "If intentional, manager will review on reconciliation.").format(amt),
+				title=_("Confirm Tip Pull Amount"),
+				indicator="orange",
+				alert=True,
+			)

@@ -140,13 +140,34 @@ class CashReconciliation(Document):
 	def _calculate_system_expected(self):
 		"""Calculate system_expected from POS transactions.
 
-		Phase 3 implementation.  The system expected total is the sum of
-		all cash payment entries against Sales Invoices submitted during the
-		shift period covered by this cash drop.
+		Phase 3 implementation.  The full calculation will be:
+		    system_expected = sum_of_cash_sales
+		                    - sum_of_cash_refunds  (Phase 2 — Task 31)
+		                    - tip_pull_amount      (Phase 1 schema, hook below)
+
+		The tip-pull subtraction is wired NOW (Task 34, DEC-065) so that when
+		Phase 3 lands the real sum_of_cash_sales calculation, tip-pull handling
+		is automatic — no separate Phase 3 follow-up needed for tip handling.
+		Today, sum_of_cash_sales is the placeholder 0; the subtraction is
+		mathematically -tip_pull_amount (0 - 0 - tip_pull) but the WIRING is in
+		place. R-011 in docs/risk_register.md tracks this placeholder state.
 		"""
-		# Placeholder — Phase 3 wires up the real calculation.
+		# Placeholder — Phase 3 wires up the real sum_of_cash_sales calculation.
 		# The field is set to 0 here so the schema is valid, not left null.
-		self.system_expected = flt(0)
+		sum_of_cash_sales = flt(0)
+		sum_of_cash_refunds = flt(0)  # Phase 2 — Task 31
+
+		# Tip-pull subtraction hook (Task 34 / DEC-065 — wired in Phase 1 schema).
+		# Reads tip_pull_amount from the linked Cash Drop. Stays at 0 until an
+		# operator records an actual tip pull. When Phase 3 lands the real
+		# sum_of_cash_sales, this subtraction makes recon correct automatically.
+		tip_pull_amount = flt(0)
+		if self.cash_drop:
+			tip_pull_amount = flt(
+				frappe.db.get_value("Cash Drop", self.cash_drop, "tip_pull_amount") or 0
+			)
+
+		self.system_expected = sum_of_cash_sales - sum_of_cash_refunds - tip_pull_amount
 
 	def _set_variance_flag(self):
 		"""T0-2 Path B / DEC-069: classification short-circuited until Phase 3.

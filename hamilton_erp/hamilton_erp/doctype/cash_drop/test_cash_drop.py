@@ -196,3 +196,106 @@ class TestCashDrop(IntegrationTestCase):
 			frappe.flags.allow_cash_drop_correction = False
 		drop.reload()
 		self.assertEqual(float(drop.declared_amount), 195.0)
+
+
+class TestCashDropTipPullSchema(IntegrationTestCase):
+	"""Task 34 / DEC-065 — tip pull schema fields on Cash Drop.
+
+	Phase 1 BLOCKER: schema must exist so the FIRST tip-pull event at Hamilton
+	doesn't contaminate blind-cash reconciliation as phantom theft. Full
+	operator UX (rounding, 'take exactly $X' instruction) ships in Phase 2.
+	See docs/design/tip_pull_phase2.md for the Phase 2 design intent.
+	"""
+
+	def tearDown(self):
+		frappe.db.rollback()
+
+	def _make_shift(self, operator: str = "Administrator") -> object:
+		"""Create an Open Shift Record. Cash Drop validates shift_record presence
+		(T1-4) so every drop in this class needs one — same pattern as
+		TestCashDrop._make_shift above."""
+		return frappe.get_doc(
+			{
+				"doctype": "Shift Record",
+				"operator": operator,
+				"shift_date": today(),
+				"status": "Open",
+				"shift_start": now_datetime(),
+				"float_expected": 300,
+			}
+		).insert(ignore_permissions=True)
+
+	def _make_drop(self, **overrides):
+		operator = overrides.get("operator", "Administrator")
+		shift_record = overrides.pop("shift_record", None) or self._make_shift(operator=operator).name
+		base = {
+			"doctype": "Cash Drop",
+			"operator": operator,
+			"shift_record": shift_record,
+			"shift_date": today(),
+			"shift_identifier": "Evening",
+			"drop_type": "Mid-Shift",
+			"drop_number": 1,
+			"declared_amount": 100.0,
+			"timestamp": now_datetime(),
+		}
+		base.update(overrides)
+		return frappe.get_doc(base).insert(ignore_permissions=True)
+
+	def test_tip_pull_amount_defaults_to_zero(self):
+		drop = self._make_drop()
+		self.assertEqual(drop.tip_pull_amount, 0)
+
+	def test_tip_pull_currency_defaults_to_cad_when_anvil_currency_unset(self):
+		drop = self._make_drop()
+		self.assertEqual(drop.tip_pull_currency, "CAD")
+
+	def test_tip_settled_via_processor_amount_defaults_to_zero(self):
+		drop = self._make_drop()
+		self.assertEqual(drop.tip_settled_via_processor_amount, 0)
+
+	def test_tip_pull_amount_writable(self):
+		drop = self._make_drop(tip_pull_amount=12.70)
+		self.assertEqual(drop.tip_pull_amount, 12.70)
+
+	def test_tip_pull_difference_calculated_from_pull_minus_processor(self):
+		"""Phase 1 stays at processor=0, so difference = tip_pull_amount.
+		Phase 2 will populate tip_settled_via_processor_amount via the
+		settlement-pairing job; the calculation hook is wired now.
+		"""
+		drop = self._make_drop(tip_pull_amount=12.70, tip_settled_via_processor_amount=12.67)
+		self.assertAlmostEqual(drop.tip_pull_difference, 0.03, places=2)
+
+	def test_tip_pull_difference_zero_when_both_fields_zero(self):
+		drop = self._make_drop()
+		self.assertEqual(drop.tip_pull_difference, 0)
+
+	def test_negative_tip_pull_amount_allowed(self):
+		"""Negative values are legal (e.g. operator returned cash to till
+		after a mis-pull). Submit succeeds; warning fires only past the
+		-$50 threshold.
+		"""
+		drop = self._make_drop(tip_pull_amount=-5.00)
+		self.assertEqual(drop.tip_pull_amount, -5.00)
+
+	def test_large_negative_tip_pull_does_not_block_submit(self):
+		"""Past the -$50 warning threshold: msgprint fires (operator-facing
+		warning) but the submit still succeeds. This catches typos like
+		-200 instead of -2.00 without forcing a hard error path."""
+		drop = self._make_drop(tip_pull_amount=-200.00)
+		self.assertEqual(drop.tip_pull_amount, -200.00)
+
+	def test_tip_pull_currency_inherits_from_anvil_currency_conf(self):
+		"""Multi-venue: when frappe.conf.anvil_currency is set (e.g. USD for
+		Philadelphia/DC/Dallas), tip_pull_currency picks it up at insert.
+		Avoids a schema migration when US venues roll out (DEC-064 + DEC-065)."""
+		original = frappe.conf.get("anvil_currency")
+		try:
+			frappe.conf["anvil_currency"] = "USD"
+			drop = self._make_drop()
+			self.assertEqual(drop.tip_pull_currency, "USD")
+		finally:
+			if original is None:
+				frappe.conf.pop("anvil_currency", None)
+			else:
+				frappe.conf["anvil_currency"] = original

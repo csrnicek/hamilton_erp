@@ -113,6 +113,7 @@ This file is **not** a lessons-learned log. The lessons file (`docs/lessons_lear
   - Phase 3 implementation kickoff (Task 25 successor or new task) MUST include the real `system_expected` calculator as the first deliverable, before any other Phase 3 cash recon work.
   - If manager attrition replaces the trained-to-ignore manager with a new manager unaware of the workaround, the false-alarm pattern reactivates; this is a process risk, not a code risk.
 - **Linked work:** Phase 3 redesign captured in `docs/design/cash_reconciliation_phase3.md` (PR #108). Gap #4 Cash Reconciliation field masking (deferred to Phase 3 alongside variance redesign per 2026-05-01 directive — Item 7 ships as 4 of 5 gaps complete).
+- **Update 2026-05-01 (Task 34 / DEC-065 ship):** the `_calculate_system_expected` placeholder is unchanged in spirit (R-011 remains OPEN until Phase 3), but **the tip-pull subtraction hook is now wired** in the calculator. Concrete mathematical state today: `system_expected = 0 - 0 - tip_pull_amount`. When Phase 3 lands the real `sum_of_cash_sales` calculation, tip-pull handling works automatically — no separate Phase 3 follow-up needed for tip handling. This is one specific piece less work for Phase 3. The R-011 false-alarm pattern is otherwise unchanged: managers must still ignore the variance flag until Phase 3 wires up the real `sum_of_cash_sales`. See `docs/decisions_log.md` DEC-065 for the schema decision.
 
 ## R-012 — Cash Drop envelope label print pipeline unbuilt (PRE-GO-LIVE BLOCKER)
 

@@ -2,7 +2,7 @@
 
 **Status:** LOCKED. Decisions on this page are FINAL and must not be re-opened without an explicit discussion and documented reversal.
 
-**Last updated:** 2026-05-01 (DEC-062 standard-merchant classification + DEC-063 per-venue processor choice + DEC-064 primary+backup processor architecture)
+**Last updated:** 2026-05-01 (DEC-062 standard-merchant classification + DEC-063 per-venue processor choice + DEC-064 primary+backup processor architecture + DEC-065 tip-pull as first-class Cash Drop field)
 **Source-of-truth mockup:** `docs/design/V10_CANONICAL_MOCKUP.html` (V10 body is byte-identical to V9; the bump bookkeeps the V9.1 retail amendment. V9 archived at `docs/design/archive/V9_CANONICAL_MOCKUP.html`.)
 **PR:** #8 on branch `feature/asset-board-ui-rebuild`
 **Mockup interactive tests:** 59 automated tests, all passing (pulse visibility, tile sizing, state transitions, modal flows, tab configuration, countdown behaviour)
@@ -617,6 +617,59 @@ Philadelphia, DC, and Dallas inherit the same standard-merchant baseline. Proces
 - `docs/risk_register.md` R-008 — Single-acquirer SPOF (downgraded but not eliminated)
 - `docs/risk_register.md` R-009 — MATCH list 1% chargeback threshold (one of the termination triggers DEC-064 defends against)
 - `docs/inbox.md` 2026-04-30 Phase 2 hardware backlog — original "Merchant abstraction" spec; DEC-064 confirms it must support primary + backup, not just primary
+
+## DEC-065 — Tip pull is a first-class field on Cash Drop, not a freeform note
+
+**Locked:** 2026-05-01 (Task 34 ship)
+**Phase placement:** Phase 1 BLOCKER for the schema; full UX is Phase 2 (separate task)
+**Source:** Task 34 — "Tip-pull schema present" in `.taskmaster/tasks/tasks.json`
+
+### The decision
+
+Card tip cash that an operator pulls from the till at end of shift is recorded on the Cash Drop record using **four dedicated fields**, NOT a freeform notes field, NOT a "miscellaneous adjustments" lump:
+
+| Field | Type | Default | Purpose |
+|---|---|---|---|
+| `tip_pull_amount` | Currency | 0 | Cash the operator pulled for their card tips |
+| `tip_pull_currency` | Link → Currency | `CAD` (or `frappe.conf.anvil_currency` if set) | Per-venue currency for the pull (Hamilton CAD; Philadelphia/DC/Dallas USD) |
+| `tip_settled_via_processor_amount` | Currency, read-only | 0 | What the processor actually paid the venue for tips at T+1 settlement (Phase 2 settlement-pairing job populates this) |
+| `tip_pull_difference` | Currency, read-only, calculated | 0 | `tip_pull_amount − tip_settled_via_processor_amount` — the rounding loss venue absorbs as operating cost |
+
+### Why a first-class field, not freeform
+
+1. **Reconciliation correctness.** The Cash Reconciliation `_calculate_system_expected` calculator must subtract tip pull from expected cash, otherwise the till runs short and recon flags theft (false positive). A freeform note field cannot be subtracted programmatically.
+2. **Tax accounting separation.** Tip pull is a TIMING OFFSET, not venue revenue. Recording it as a first-class amount lets Phase 2 / Phase 3 accounting route it to a "Tips Payable to Staff" liability account (NOT revenue) for sales-tax / income-tax correctness. A freeform note can't be wired to GL.
+3. **Settlement reconciliation.** Phase 2 will pair `tip_settled_via_processor_amount` against the Fiserv/Clover T+1 settlement deposit. That pairing requires a typed Currency field, not text.
+4. **Multi-venue forward compatibility.** All four fields exist NOW so Philadelphia/DC/Dallas don't need a schema migration when their first tip-pull event lands. The `tip_pull_currency` field reads from `frappe.conf.anvil_currency` per DEC-064's per-venue feature-flag pattern.
+
+### Why "schema only" at Phase 1
+
+Hamilton cannot wait for the full Phase 2 UX (Clover Connect API integration, system-enforced rounding, tax-correct accounting) before launching. But the very first night Hamilton runs with operators pulling card tips, this becomes a recon false-flag if the schema isn't in place. Phase 1 BLOCKER scope:
+
+- 4 fields on Cash Drop (above)
+- One subtraction line in `cash_reconciliation.py::_calculate_system_expected` (the calculator stays placeholder-stubbed at 0 per R-011, but the subtraction hook is wired so when Phase 3 lands real `sum_of_cash_sales`, tip-pull subtraction works automatically)
+- Bare-minimum form rendering (operator manually types the rounded amount they took; no system rounding logic)
+
+What's deferred to **Phase 2** (separate future task — see `docs/design/tip_pull_phase2.md`):
+
+- System-enforced rounding (Canada nickel: round up to $0.05)
+- "Take exactly $X from drawer" UX
+- Settlement reconciliation pairing job
+- Tax accounting routing (Tips Payable liability)
+- Multi-jurisdiction rounding rules (Canada nickel vs US penny)
+
+### Validation rules
+
+Open question Q2 from the Task 34 design walkthrough resolved in this DEC: **negative `tip_pull_amount` is allowed** (e.g. operator returned cash to till after a mis-pull). Values past `-$50` trigger a non-blocking `frappe.msgprint` warning to catch typos like `-200` instead of `-2.00`. The submit still succeeds — the warning is informational; manager will see the value on reconciliation regardless.
+
+### References
+
+- Task 34 in Taskmaster (originally framed as "schema only; full UX Phase 2")
+- `docs/design/tip_pull_phase2.md` — Phase 2 design intent doc (review-pending)
+- `docs/design/cash_reconciliation_phase3.md` §2 (PR #108) — the canonical "card tips paid from till" design intent that DEC-065 makes operational
+- `docs/risk_register.md` R-011 — Cash Reconciliation variance non-functional at Phase 1 (the placeholder calculator that DEC-065's subtraction hook is wired into; updated post-DEC-065 ship)
+- DEC-005 — Blind Cash Drop (the anti-theft invariant DEC-065 protects from false flags)
+- DEC-064 — per-venue primary+backup processor architecture (the source of `frappe.conf.anvil_currency` that `tip_pull_currency` defaults from)
 
 ---
 
