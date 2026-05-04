@@ -119,10 +119,18 @@
 
 .hamilton-tab-watch:hover { background: #201500; }
 
+/* Bug #3 (2026-05-03): the prior amber-on-amber active state
+   (`background: #2a1a00; color: #fbbf24;`) was visually almost identical
+   to the non-active state (`background: #1a1000; color: #d97706;`), so
+   operators couldn't tell when Watch was selected. Other tabs invert
+   from muted-grey-on-dark to bright-white-on-medium-grey. Mirror that
+   contrast jump with an amber-on-amber inversion: bright amber fill
+   with near-black text. The shared `.hamilton-tab.active` rule still
+   contributes `font-weight: 700` and the bottom-border overlap. */
 .hamilton-tab-watch.active {
-	border-color: #f59e0b;
-	background: #2a1a00;
-	color: #fbbf24;
+	border-color: #fbbf24;
+	background: #f59e0b;
+	color: #1a0a00;
 }
 
 /* Tab badges */
