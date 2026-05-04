@@ -1256,6 +1256,22 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 			"asset_board.js missing hamilton-retail-oos grey state class.",
 		)
 
+	def test_js_out_of_stock_tile_click_opens_restock_or_manager_alert(self):
+		"""DEC-100 (restock overlay): the OOS retail tile click no longer
+		shows a passive 'Out of stock' toast. Manager+ users see the
+		restock overlay; everyone else sees a 'Manager required to
+		restock' alert. Pin the new contract."""
+		with open(self._js_path()) as f:
+			src = f.read()
+		self.assertIn(
+			"show_restock_overlay", src,
+			"_bind_tile_events doesn't open the DEC-100 restock overlay.",
+		)
+		self.assertIn(
+			'__("Manager required to restock")', src,
+			"_bind_tile_events doesn't fall back to the manager-required alert.",
+		)
+
 	def test_js_defines_render_and_bind_for_drawer(self):
 		with open(self._js_path()) as f:
 			src = f.read()
