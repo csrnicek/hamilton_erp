@@ -1228,12 +1228,19 @@ class TestV91RetailCartUXStub(IntegrationTestCase):
 		self.assertIn("hamilton-retail-incart", src)
 		self.assertIn("_cart_qty_for", src)
 
-	def test_js_out_of_stock_tile_click_shows_alert_not_add(self):
+	def test_js_out_of_stock_tile_renders_grey_label(self):
+		"""Per finding #2 (retail OOS tile grey label): the toast alert
+		was replaced by an in-tile OUT OF STOCK label so the operator
+		sees stock state at a glance, not after a click."""
 		with open(self._js_path()) as f:
 			src = f.read()
 		self.assertIn(
-			'__("Out of stock")', src,
-			"_bind_tile_events doesn't show Out-of-stock alert for stock<=0.",
+			'__("OUT OF STOCK")', src,
+			"asset_board.js doesn't render OUT OF STOCK label on the tile.",
+		)
+		self.assertIn(
+			"hamilton-retail-oos", src,
+			"asset_board.js missing hamilton-retail-oos grey state class.",
 		)
 
 	def test_js_defines_render_and_bind_for_drawer(self):
