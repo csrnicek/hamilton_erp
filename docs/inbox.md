@@ -1893,7 +1893,10 @@ When building this report (future session):
 - **Data capture:** Must show manager-recorded amounts from reconciliation
 - **Column addition:** Add "Shift End" column alongside "Shift Start" 
 - **Security:** Rows hidden from ALL roles until reconciliation is submitted (permlevel or query filter)
+- **Cash variance posting:** All cash variances post to "Reconciliation Discrepancies" expense account
+- **Accounting truth:** Manager-approved cash amount is the accounting truth (overrides system expected or operator declared)
+- **Three-figure visibility:** All three figures (operator declared, manager counted, system expected) visible only after all shifts reconciled and manager submits final approval
 
-Rationale: Blind-count integrity — operators must not see reconciliation data before manager completes blind count and submits the reconciliation document.
+Rationale: Blind-count integrity — operators must not see reconciliation data before manager completes blind count and submits the reconciliation document. Cash variances represent the difference between system-expected and manager-counted amounts; the manager's count determines the actual cash deposited.
 
 ---
