@@ -1,10 +1,12 @@
-"""HST Remittance Report for CRA Filing (Form GST34-2/GST62)
+"""HST Remittance Report for CRA Filing (Form GST62)
 
-Generates summary and detail reports matching QuickBooks GST/HST format.
-Maps ERPNext transactions to CRA form lines.
+Generates summary and detail reports matching CRA NETFILE confirmation format.
+Maps ERPNext transactions to GST62 form lines for 1742279 Ont Inc.
 
-Summary view: CRA form lines with totals
-Detail view: Transaction-level breakdown
+Summary view: GST62 form lines with totals (Lines 101-113C)
+Detail view: Transaction-level breakdown with running balance
+
+GST/HST Registration: 105204077RT0001
 """
 
 import frappe
@@ -125,30 +127,30 @@ def calculate_cra_lines(filters):
 	# Line 113C: Final balance
 	line_113c = line_113a + line_113b
 
-	# Build summary rows matching CRA form structure
+	# Build summary rows matching GST62 form structure (exact CRA wording)
 	data = [
-		{"line_number": "Line 101", "description": "Sales and other revenue", "amount": line_101},
-		{"line_number": "Line 103", "description": "GST/HST collected or collectible", "amount": line_103},
-		{"line_number": "Line 104", "description": "Adjustments (Sales)", "amount": line_104},
-		{"line_number": "LINE 105", "description": "TOTAL GST/HST AND ADJUSTMENTS FOR PERIOD", "amount": line_105},
+		{"line_number": "Line 101", "description": "Sales and other revenue.", "amount": line_101},
+		{"line_number": "Line 103", "description": "GST/HST collected or collectible.", "amount": line_103},
+		{"line_number": "Line 104", "description": "Adjustments (Sales).", "amount": line_104},
+		{"line_number": "LINE 105", "description": "Total GST/HST and adjustments for period.", "amount": line_105},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "Line 106", "description": "Input tax credits (ITCs)", "amount": line_106},
-		{"line_number": "Line 107", "description": "Adjustments (Purchases)", "amount": line_107},
-		{"line_number": "LINE 108", "description": "TOTAL ITCS AND ADJUSTMENTS", "amount": line_108},
+		{"line_number": "Line 106", "description": "Input tax credits (ITCs).", "amount": line_106},
+		{"line_number": "Line 107", "description": "Adjustments (Purchases).", "amount": line_107},
+		{"line_number": "LINE 108", "description": "Total ITCs and adjustments.", "amount": line_108},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "LINE 109", "description": "NET TAX", "amount": line_109},
+		{"line_number": "LINE 109", "description": "Net Tax.", "amount": line_109},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "Line 110", "description": "Instalments and other annual filer payments", "amount": line_110},
-		{"line_number": "Line 111", "description": "Rebates", "amount": line_111},
-		{"line_number": "LINE 112", "description": "TOTAL OTHER CREDITS", "amount": line_112},
+		{"line_number": "Line 110", "description": "Instalments and other annual filer payments.", "amount": line_110},
+		{"line_number": "Line 111", "description": "Rebates.", "amount": line_111},
+		{"line_number": "LINE 112", "description": "Total other credits.", "amount": line_112},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "LINE 113A", "description": "BALANCE", "amount": line_113a},
+		{"line_number": "LINE 113A", "description": "Balance.", "amount": line_113a},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "Line 205", "description": "GST/HST due on acquisition of taxable real property", "amount": line_205},
-		{"line_number": "Line 405", "description": "Other GST/HST to be self-assessed", "amount": line_405},
-		{"line_number": "LINE 113B", "description": "TOTAL OTHER DEBITS", "amount": line_113b},
+		{"line_number": "Line 205", "description": "GST/HST due on acquisition of taxable real property.", "amount": line_205},
+		{"line_number": "Line 405", "description": "Other GST/HST to be self-assessed.", "amount": line_405},
+		{"line_number": "LINE 113B", "description": "Total other debits.", "amount": line_113b},
 		{"line_number": "", "description": "", "amount": None},  # Blank row
-		{"line_number": "LINE 113C", "description": "BALANCE", "amount": line_113c},
+		{"line_number": "LINE 113C", "description": "Balance.", "amount": line_113c},
 	]
 
 	return data
