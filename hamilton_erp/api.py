@@ -485,6 +485,19 @@ def _is_admin_user() -> bool:
 	return "System Manager" in roles or "Hamilton Admin" in roles
 
 
+def _is_manager_or_admin_user() -> bool:
+	"""Hamilton Manager, Hamilton Admin, or System Manager.
+
+	Wider than ``_is_admin_user`` — adds Hamilton Manager so the
+	front-desk lead can authorize manager-tier actions (comp admission,
+	restock overlay) without needing the full admin role.
+	"""
+	roles = set(frappe.get_roles())
+	return bool(
+		roles & {"System Manager", "Hamilton Admin", "Hamilton Manager"}
+	)
+
+
 # Frappe fieldtypes that need numeric coercion before being assigned
 # to a Document field. Whitelisted endpoints receive everything as
 # strings on the wire; downstream validators do numeric comparisons
