@@ -1280,7 +1280,19 @@ Adapter reads `anvil_venue_id`, looks up region, instantiates `FiservCanadaDrive
 The new contract:
 
 1. **Render failures still throw.** Blank `gst_hst_registration_number`, malformed Sales Invoice data, missing Hamilton Settings — these are programmer / configuration errors, not transient hardware faults. They propagate `ValidationError` out of `submit_retail_sale` and roll back the sale. The CRA paper-trail integrity rule still applies: a sale cannot commit with malformed receipt data.
-2. **Dispatch failures soft-fail.** Network unreachable, printer offline, paper out, ECONNRESET on port 9100 — `print_cash_receipt` catches the exception, writes an Error Log entry titled `"Receipt Print Retry Queue"` (the Phase-1 retry queue), and returns `{"status": "queued_for_retry", "reason": "<error>", "ip": "<ip>"}`. `submit_retail_sale` commits the sale normally and returns its usual envelope.
+2. **Dispatch failures soft-fail.** Network unreachable, printer offline, paper out, ECONNRESET on port 9100 — `print_cash_receipt` catches the exception, writes an Error Log entry titled `"Receipt Print Retry Queue"` (the Phase-1 retry queue), and returns `{"status": "queued_for_retry", "reason": "<error>", "ip": "<ip>", "operator": "<user>", "sales_invoice": "<si>"}`. `submit_retail_sale` commits the sale normally and returns its usual envelope.
+
+   **Audit fields logged on every failed attempt** (manager audit requirement):
+   - `timestamp` — explicit `YYYY-MM-DD HH:MM:SS` of the failure moment. (Error Log's `creation` captures this too; the duplication makes the message self-contained when exported, copied into a ticket, or surfaced in a UI that doesn't show `.creation`.)
+   - `operator` — `frappe.session.user` (the operator who rang the sale).
+   - `operator_name` — full name resolved from User doctype (human-readable without a lookup).
+   - `sales_invoice` — Sales Invoice the receipt was for.
+   - `reason` — `str(exception)` or exception class name if the message is empty.
+   - `printer_ip` — printer that failed (operations debugging).
+   - `rendered_bytes_len` — sanity check that the render side succeeded before dispatch.
+
+   Manager audit path: Desk → Error Log → filter `error = "Receipt Print Retry Queue"`, sort by `creation desc` for newest first. Each row contains the seven audit fields above plus the framework-provided `creation` (server timestamp) and `owner` (the user whose session triggered the log) columns.
+
 3. **Phase-2 retry worker** polls the Receipt Print Retry Queue Error Log entries, replays each failed dispatch when the printer reconnects, and removes the entry on success. Not built in this PR — the queue itself is the Phase-1 commitment.
 4. **Phase-2 persistent operator warning** — UI surface that reads the retry queue and shows "Receipt for SI-XXXX is queued for retry" until the entry is cleared. Not built in this PR.
 

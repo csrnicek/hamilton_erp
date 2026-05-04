@@ -146,12 +146,24 @@ class TestPrintCashReceiptValidation(IntegrationTestCase):
 					result = print_cash_receipt("SI-DISPATCH-FAILURE-TEST")
 		self.assertEqual(result["status"], "queued_for_retry")
 		self.assertIn("dispatch failed", result["reason"])
+		self.assertEqual(result["sales_invoice"], "SI-DISPATCH-FAILURE-TEST")
+		self.assertTrue(result["operator"])
 		# Pin the retry-queue Error Log title so the Phase-2 worker can
 		# query for it.
 		log_mock.assert_called_once()
 		_, kwargs = log_mock.call_args
 		self.assertEqual(kwargs["title"], "Receipt Print Retry Queue")
-		self.assertIn("SI-DISPATCH-FAILURE-TEST", kwargs["message"])
+		# Manager audit requirement: every queued failure logs operator,
+		# operator_name, timestamp, sales_invoice, and reason. Pin the
+		# fields so the audit format doesn't drift silently.
+		message = kwargs["message"]
+		self.assertIn("SI-DISPATCH-FAILURE-TEST", message)
+		self.assertIn("operator=", message)
+		self.assertIn("operator_name=", message)
+		self.assertIn("timestamp=", message)
+		self.assertIn("sales_invoice=", message)
+		self.assertIn("reason=", message)
+		self.assertIn("printer_ip=", message)
 
 
 class TestReprintEndpointRoleGate(IntegrationTestCase):

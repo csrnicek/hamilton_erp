@@ -207,20 +207,52 @@ def print_cash_receipt(sales_invoice_name: str) -> dict:
 		_dispatch_to_printer(rendered, ip)
 	except Exception as exc:  # noqa: BLE001 — soft-fail per DEC-098 Option B
 		reason = str(exc) or exc.__class__.__name__
-		# Error Log entry serves as the Phase-1 retry queue. Title is
-		# stable so the Phase-2 retry worker can query
-		# `frappe.get_all("Error Log", filters={"method": "Receipt Print Retry Queue"})`
+		# Error Log entry serves as the Phase-1 retry queue AND the
+		# manager-facing audit trail. Title is stable so the Phase-2
+		# retry worker can query
+		# `frappe.get_all("Error Log", filters={"error": "Receipt Print Retry Queue"})`
 		# and replay each failed dispatch.
+		#
+		# Audit fields per DEC-098 Option B (manager audit requirement):
+		#   1. timestamp      — explicit timestamp string for the failure
+		#                       moment. (Error Log.creation captures this
+		#                       automatically too — duplication is intentional
+		#                       so the audit message is self-contained even
+		#                       if exported, copied to a ticket, or shown
+		#                       in a UI that doesn't surface .creation.)
+		#   2. operator       — frappe.session.user (the operator who
+		#                       rang the sale; required for manager audit).
+		#   3. operator_name  — full name resolved via frappe.db.get_value
+		#                       (so the audit log is human-readable without
+		#                       a lookup).
+		#   4. sales_invoice  — Sales Invoice the receipt was for.
+		#   5. reason         — failure cause (str(exc) or exc class name).
+		#   6. printer_ip     — printer that failed (operations debugging).
+		#   7. rendered_bytes_len — sanity check that render succeeded.
+		operator = frappe.session.user or "Guest"
+		operator_name = (
+			frappe.db.get_value("User", operator, "full_name") or operator
+		)
+		timestamp = frappe.utils.now_datetime().strftime("%Y-%m-%d %H:%M:%S")
 		frappe.log_error(
 			title="Receipt Print Retry Queue",
 			message=(
+				f"timestamp={timestamp}\n"
+				f"operator={operator}\n"
+				f"operator_name={operator_name}\n"
 				f"sales_invoice={sales_invoice_name}\n"
 				f"printer_ip={ip}\n"
 				f"reason={reason}\n"
 				f"rendered_bytes_len={len(rendered)}"
 			),
 		)
-		return {"status": "queued_for_retry", "reason": reason, "ip": ip}
+		return {
+			"status": "queued_for_retry",
+			"reason": reason,
+			"ip": ip,
+			"operator": operator,
+			"sales_invoice": sales_invoice_name,
+		}
 
 	return {"status": "printed", "ip": ip}
 
