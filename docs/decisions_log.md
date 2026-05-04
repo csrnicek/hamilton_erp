@@ -1186,6 +1186,15 @@ The two surfaces are belt-and-suspenders. Either firing shows the banner; both m
 **What changed.** Documentation only — DEC-082 added pinning the design. The Phase-1.5 follow-up PR will land the DocType JSON, controller, fixtures, hook into `submit_retail_sale`, and `bench migrate` window.
 
 **References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.2; DEC-005 (blind cash); DEC-066 (Hamilton Board Correction pattern); DEC-077 (db_set on owner accept); skill `frappe-syntax-doctypes`.
+## Amendment 2026-05-04 — DEC-083: Accept realtime payload trust boundary (audit S3.3)
+
+**Decision.** The Asset Board JS continues to consume `hamilton_asset_status_changed` payloads as ground truth for tile re-render. We do not add a per-event DB re-fetch (audit Option 1) because the threat requires existing server-side code execution and the blast radius is bounded (operator UI de-sync only; DB state remains correct). The polled `get_asset_board_data` refresh that runs every ~30s is the integrity backstop.
+
+**Why.** The audit's S3.3 recommends a `frappe.db.get_value` re-fetch on every realtime event before re-render. At Hamilton's volume that is hundreds of extra round trips per shift per terminal. The threat (spoofed event from a rogue Server Script / compromised cron) is bounded — server-side state is untouched, the next polled refresh heals the divergence, and the Asset Status Log captures the canonical transition history. Option 2 (HMAC nonce) is not in Frappe core and would require a custom signing primitive. We accept the trust boundary and rely on the polled refresh + Asset Status Log audit trail. If a real spoofing incident ever occurs, revisit and implement Option 1.
+
+**What changed.** Documentation only. The existing version-monotonicity guard in `apply_status_change` (`payload.version <= local.version` → ignore) already discards any spoofed event with a stale or missing version, so the practical exploit surface is narrower than the audit framed.
+
+**References.** Audit `docs/audits/security_hardening_audit_2026-05-04.md` § S3.3; DEC-019 (three-layer locking — asset status truth lives in DB); skill `frappe-impl-ui-components` (realtime patterns).
 ## Amendment 2026-05-04 — DEC-087: Accept `app_include_css` for the Asset Board CSS (audit F3.1)
 
 **Decision.** `asset_board.css` continues to load via `app_include_css` in `hooks.py`. We do not move it to `page_css` (per the existing inline comment in hooks.py: page-level CSS includes were removed in v15) or to `doctype_js` (the Asset Board is a Frappe Page, not a DocType view). The CSS is selector-scoped to `.hamilton-asset-board` / `.hamilton-loading`, so it does not bleed into other pages.
